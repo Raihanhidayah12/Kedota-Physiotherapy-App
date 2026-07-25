@@ -6,10 +6,16 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'supabase_api_client.dart';
 
-const String _supabasePublishableKey =
-    'sb_publishable_UgW9oHNC_Fzc7fUEFyecoQ_DUUqM25k';
+String get _supabasePublishableKey =>
+    dotenv.env['SUPABASE_ANON_KEY'] ??
+    const String.fromEnvironment(
+      'SUPABASE_ANON_KEY',
+      defaultValue: 'sb_publishable_UgW9oHNC_Fzc7fUEFyecoQ_DUUqM25k',
+    );
 
 class SupabaseAuthService {
   SupabaseClient? _client;
