@@ -36,7 +36,12 @@ class SupabaseAuthService {
     final dio = Dio();
     dio.options.headers['apikey'] = _supabasePublishableKey;
     dio.options.headers['Content-Type'] = 'application/json';
-    return SupabaseApiClient(dio);
+    final supabaseUrl = dotenv.env['SUPABASE_URL'] ??
+        const String.fromEnvironment(
+          'SUPABASE_URL',
+          defaultValue: 'https://wwmctqhbqpsbkyxkeaqv.supabase.co',
+        );
+    return SupabaseApiClient(dio, baseUrl: '$supabaseUrl/rest/v1');
   }
 
   String buildEmailFromPhone(String phone) {

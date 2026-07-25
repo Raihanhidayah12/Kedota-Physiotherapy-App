@@ -3,7 +3,7 @@ import 'package:retrofit/retrofit.dart';
 
 part 'supabase_api_client.g.dart';
 
-@RestApi(baseUrl: 'https://wwmctqhbqpsbkyxkeaqv.supabase.co/rest/v1')
+@RestApi()
 abstract class SupabaseApiClient {
   factory SupabaseApiClient(Dio dio, {String? baseUrl}) = _SupabaseApiClient;
 
