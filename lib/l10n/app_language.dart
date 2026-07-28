@@ -188,6 +188,9 @@ const _translations = {
     'profileCompletedSubtitle': 'Welcome! Your Google account is ready to use.',
     'resetPinFailed': 'Failed to reset PIN. Please try again.',
     'saveProfileFailed': 'Failed to save profile. Please try again.',
+    'successfullyLoggedIn': 'You have successfully logged in!',
+    'googleVerifiedEnterPin': 'Google verified. Please enter your PIN.',
+    'googleSignInFailed': 'Google sign-in failed',
   },
   AppLanguage.id: {
     'language': 'Bahasa',
@@ -337,5 +340,8 @@ const _translations = {
     'profileCompletedSubtitle': 'Selamat datang! Akun Google Anda telah siap digunakan.',
     'resetPinFailed': 'Gagal mereset PIN. Silakan coba lagi.',
     'saveProfileFailed': 'Gagal menyimpan profil. Silakan coba lagi.',
+    'successfullyLoggedIn': 'Anda berhasil login!',
+    'googleVerifiedEnterPin': 'Google terverifikasi. Masukkan PIN Anda.',
+    'googleSignInFailed': 'Google sign-in gagal',
   },
 };

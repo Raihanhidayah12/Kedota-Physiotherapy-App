@@ -211,7 +211,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             ),
                           ),
                         ),
-                        const LanguageButton(onDarkBackground: true),
+                        const SizedBox.shrink(), // Language button hidden - will be in settings
                         TextButton(
                           onPressed: () {
                             _completeOnboardingAndNavigate();

@@ -28,15 +28,22 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
     final digits = input.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return false;
 
-    if (digits.startsWith('62')) {
+    // Format: 628xxxxxxxxx (11-13 digits after 62)
+    if (digits.startsWith('628')) {
+      return digits.length >= 12 && digits.length <= 14;
+    }
+
+    // Format: 08xxxxxxxxx (10-12 digits)
+    if (digits.startsWith('08')) {
       return digits.length >= 11 && digits.length <= 13;
     }
 
-    if (digits.startsWith('0')) {
-      return digits.length >= 11 && digits.length <= 13;
+    // Format: 8xxxxxxxxx (9-11 digits without 0 or country code)
+    if (digits.startsWith('8')) {
+      return digits.length >= 10 && digits.length <= 12;
     }
 
-    return digits.length >= 10 && digits.length <= 13 && digits.startsWith('8');
+    return false;
   }
 
   @override
@@ -283,7 +290,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
                                           ),
                                         ),
                                       ),
-                                      const LanguageButton(),
+                                      const SizedBox.shrink(), // Language button hidden - will be in settings
                                     ],
                                   ),
                                   const SizedBox(height: 20),
@@ -661,7 +668,7 @@ class _BirthDateVerificationScreenState
                                     ),
                                   ),
                                 ),
-                                const LanguageButton(),
+                                const SizedBox.shrink(), // Language button hidden - will be in settings
                               ],
                             ),
                             const SizedBox(height: 20),
@@ -1067,7 +1074,7 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
                                     ),
                                   ),
                                 ),
-                                const LanguageButton(),
+                                const SizedBox.shrink(), // Language button hidden - will be in settings
                               ],
                             ),
                             const SizedBox(height: 16),

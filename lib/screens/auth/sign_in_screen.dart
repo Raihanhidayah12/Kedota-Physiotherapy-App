@@ -71,7 +71,7 @@ class _SignInScreenState extends State<SignInScreen>
           ),
         );
       } else {
-        _showModernSnackBar('Google terverifikasi. Masukkan PIN Anda.');
+        _showModernSnackBar(t(context, 'googleVerifiedEnterPin'));
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => PinVerificationScreen(
@@ -89,15 +89,21 @@ class _SignInScreenState extends State<SignInScreen>
     final digits = input.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return false;
 
+    // Format: 628xxxxxxxxx (11-13 digits after 62)
     if (digits.startsWith('628')) {
-      return digits.length >= 10 && digits.length <= 15;
+      return digits.length >= 12 && digits.length <= 14;
     }
+
+    // Format: 08xxxxxxxxx (10-12 digits)
     if (digits.startsWith('08')) {
-      return digits.length >= 10 && digits.length <= 14;
+      return digits.length >= 11 && digits.length <= 13;
     }
+
+    // Format: 8xxxxxxxxx (9-11 digits without 0 or country code)
     if (digits.startsWith('8')) {
-      return digits.length >= 9 && digits.length <= 13;
+      return digits.length >= 10 && digits.length <= 12;
     }
+
     return false;
   }
 
@@ -277,7 +283,7 @@ class _SignInScreenState extends State<SignInScreen>
       }
     } catch (e) {
       if (!mounted) return;
-      _showModernSnackBar('Google sign-in failed: $e', isError: true);
+      _showModernSnackBar('${t(context, 'googleSignInFailed')}: $e', isError: true);
     }
   }
 
@@ -379,10 +385,7 @@ class _SignInScreenState extends State<SignInScreen>
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Align(
-                                alignment: Alignment.centerRight,
-                                child: LanguageButton(),
-                              ),
+                              const SizedBox.shrink(), // Language button hidden - will be in settings
                               const SizedBox(height: 12),
                               Container(
                                 width: 94,
@@ -697,7 +700,7 @@ class _SignInScreenState extends State<SignInScreen>
                                           MaterialPageRoute(
                                             builder: (_) =>
                                                 const OtpVerificationScreen(
-                                                  phoneNumber: 'Apple Sign In',
+                                                  phoneNumber: 'Apple Sign-In',
                                                 ),
                                           ),
                                         );

@@ -55,7 +55,7 @@ class _OtpRateLimitScreenState extends State<OtpRateLimitScreen> {
       title: t(context, 'otpLimitTitle'),
       subtitle: t(context, 'otpLimitSubtitle'),
       isError: true,
-      topAction: const LanguageButton(),
+      topAction: const SizedBox.shrink(), // Language button hidden - will be in settings
       customAction: SizedBox(
         width: double.infinity,
         child: Container(

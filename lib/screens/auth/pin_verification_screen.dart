@@ -242,7 +242,7 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
                                     ),
                                   ),
                                 ),
-                                const LanguageButton(),
+                                const SizedBox.shrink(), // Language button hidden - will be in settings
                               ],
                             ),
                             const SizedBox(height: 16),

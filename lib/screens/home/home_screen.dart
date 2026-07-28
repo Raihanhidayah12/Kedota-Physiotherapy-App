@@ -24,7 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Anda berhasil login!',
+              t(context, 'successfullyLoggedIn'),
               style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
           ],

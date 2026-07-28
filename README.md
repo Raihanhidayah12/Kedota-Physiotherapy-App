@@ -13,6 +13,7 @@
 | 🌐 Google Sign-In & Profile Completion | 🟢 Finished | Autentikasi Google + Kelengkapan Profil & Gender |
 | 📩 Verifikasi OTP Dummy | 🟢 Finished | Terkunci khusus kode `1234`, `5555`, `0000`, `9999` |
 | 🛡️ Security & Dormant Account Flow | 🟢 Finished | Proteksi rate limit 3x salah & akun >60 hari |
+| 🚀 Persistent Onboarding Flow | 🟢 Finished | SplashScreen `has_seen_onboarding` flag & navigasi cerdas |
 | 📝 Sign Up Flow | 🟡 **ON PROGRESS** | **Dalam Tahap Pengaktifan & Pengembangan Aktif** |
 
 ---
@@ -55,6 +56,11 @@
 ### 7. 🎨 Estetika & UI/UX Premium
 - Desain *Glassmorphism*, gradien warna lembut, dan *Border Radius 32px*.
 - Sistem umpan balik interaktif dengan `CustomBottomSheet` (Sukses, Peringatan, & Error).
+
+### 8. 🚀 Persistent Onboarding Experience
+- Alur *onboarding* interaktif yang hanya muncul pada peluncuran pertama aplikasi.
+- Status `has_seen_onboarding` disimpan secara lokal menggunakan `SharedPreferences`.
+- `SplashScreen` cerdas yang secara otomatis merutekan pengguna ke *Onboarding*, *Sign In*, atau langsung ke *Home Dashboard* berdasarkan status sesi autentikasi dan *flag* onboarding.
 
 ---
 

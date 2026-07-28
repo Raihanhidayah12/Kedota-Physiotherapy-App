@@ -7,6 +7,7 @@ import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/language_button.dart';
 import '../home/home_screen.dart';
+import 'google_create_pin_screen.dart';
 
 class GoogleProfileCompletionScreen extends StatefulWidget {
   final String email;
@@ -31,8 +32,6 @@ class _GoogleProfileCompletionScreenState
     extends State<GoogleProfileCompletionScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
-  late final TextEditingController _pinController;
-  late final TextEditingController _confirmPinController;
 
   DateTime? _selectedBirthDate;
   String _gender = 'Laki-laki';
@@ -43,8 +42,6 @@ class _GoogleProfileCompletionScreenState
     super.initState();
     _nameController = TextEditingController(text: widget.initialFullName);
     _phoneController = TextEditingController(text: widget.initialPhone);
-    _pinController = TextEditingController();
-    _confirmPinController = TextEditingController();
 
     if (widget.initialBirthDateStr.isNotEmpty) {
       _selectedBirthDate = DateTime.tryParse(widget.initialBirthDateStr);
@@ -55,8 +52,6 @@ class _GoogleProfileCompletionScreenState
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _pinController.dispose();
-    _confirmPinController.dispose();
     super.dispose();
   }
 
@@ -110,6 +105,28 @@ class _GoogleProfileCompletionScreenState
     return '+62$digits';
   }
 
+  bool _isValidIndonesianPhone(String input) {
+    final digits = input.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return false;
+
+    // Format: 628xxxxxxxxx (11-13 digits after 62)
+    if (digits.startsWith('628')) {
+      return digits.length >= 12 && digits.length <= 14;
+    }
+
+    // Format: 08xxxxxxxxx (10-12 digits)
+    if (digits.startsWith('08')) {
+      return digits.length >= 11 && digits.length <= 13;
+    }
+
+    // Format: 8xxxxxxxxx (9-11 digits without 0 or country code)
+    if (digits.startsWith('8')) {
+      return digits.length >= 10 && digits.length <= 12;
+    }
+
+    return false;
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -138,8 +155,6 @@ class _GoogleProfileCompletionScreenState
   Future<void> _submitProfile() async {
     final name = _nameController.text.trim();
     final phoneInput = _phoneController.text.trim();
-    final pin = _pinController.text.trim();
-    final confirmPin = _confirmPinController.text.trim();
 
     if (name.isEmpty) {
       _showModernSnackBar(t(context, 'fullNameRequired'), isError: true);
@@ -151,60 +166,30 @@ class _GoogleProfileCompletionScreenState
       return;
     }
 
+    if (!_isValidIndonesianPhone(phoneInput)) {
+      _showModernSnackBar(t(context, 'validPhoneError'), isError: true);
+      return;
+    }
+
     if (_selectedBirthDate == null) {
       _showModernSnackBar(t(context, 'selectBirthDateError'), isError: true);
       return;
     }
 
-    if (pin.length != 6 || !RegExp(r'^\d{6}$').hasMatch(pin)) {
-      _showModernSnackBar(t(context, 'pinSixDigits'), isError: true);
-      return;
-    }
+    final normalizedPhone = _normalizePhoneNumber(phoneInput);
 
-    if (pin != confirmPin) {
-      _showModernSnackBar(t(context, 'confirmPinMismatchError'), isError: true);
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final normalizedPhone = _normalizePhoneNumber(phoneInput);
-
-      await SupabaseAuthService().completeSocialProfile(
-        provider: 'google',
-        phone: normalizedPhone,
-        fullName: name,
-        birthDate: _selectedBirthDate!,
-        gender: _gender,
-        pin: pin,
-        email: widget.email,
-      );
-
-      if (!mounted) return;
-
-      CustomBottomSheet.show(
-        context,
-        type: BottomSheetType.success,
-        title: t(context, 'profileCompletedTitle'),
-        subtitle: t(context, 'profileCompletedSubtitle'),
-        singleButtonText: t(context, 'continueText'),
-        isDismissible: false,
-        onSinglePressed: () {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-            (route) => false,
-          );
-        },
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _showModernSnackBar(t(context, 'saveProfileFailed'), isError: true);
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+    // Navigate to PIN creation screen
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GoogleCreatePinScreen(
+          phone: normalizedPhone,
+          fullName: name,
+          email: widget.email,
+          birthDate: _selectedBirthDate!,
+          gender: _gender,
+        ),
+      ),
+    );
   }
 
   @override
@@ -303,7 +288,7 @@ class _GoogleProfileCompletionScreenState
                                     ],
                                   ),
                                 ),
-                                const LanguageButton(),
+                                const SizedBox.shrink(), // Language button hidden - will be in settings
                               ],
                             ),
                             const SizedBox(height: 20),
@@ -543,109 +528,6 @@ class _GoogleProfileCompletionScreenState
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            // PIN & Confirm PIN
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        t(context, 'pin'),
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF17324D),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextField(
-                                        controller: _pinController,
-                                        obscureText: true,
-                                        keyboardType: TextInputType.number,
-                                        maxLength: 6,
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter.digitsOnly
-                                        ],
-                                        decoration: InputDecoration(
-                                          counterText: '',
-                                          hintText: '••••••',
-                                          filled: true,
-                                          fillColor: Colors.white.withValues(alpha: 0.72),
-                                          contentPadding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 14,
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                            borderSide: BorderSide(
-                                              color: Colors.white.withValues(alpha: 0.9),
-                                            ),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                            borderSide: const BorderSide(
-                                              color: Color(0xFF00A79D),
-                                              width: 1.8,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        t(context, 'confirmNewPin'),
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF17324D),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextField(
-                                        controller: _confirmPinController,
-                                        obscureText: true,
-                                        keyboardType: TextInputType.number,
-                                        maxLength: 6,
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter.digitsOnly
-                                        ],
-                                        decoration: InputDecoration(
-                                          counterText: '',
-                                          hintText: '••••••',
-                                          filled: true,
-                                          fillColor: Colors.white.withValues(alpha: 0.72),
-                                          contentPadding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 14,
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                            borderSide: BorderSide(
-                                              color: Colors.white.withValues(alpha: 0.9),
-                                            ),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                            borderSide: const BorderSide(
-                                              color: Color(0xFF00A79D),
-                                              width: 1.8,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
                             const SizedBox(height: 28),
                             SizedBox(
                               width: double.infinity,
@@ -670,7 +552,7 @@ class _GoogleProfileCompletionScreenState
                                         ),
                                       )
                                     : Text(
-                                        t(context, 'saveAndContinue'),
+                                        t(context, 'continue'),
                                         style: const TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w700,

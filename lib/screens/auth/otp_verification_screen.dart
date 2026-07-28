@@ -245,7 +245,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                     ),
                                   ),
                                 ),
-                                LanguageButton(),
+                                const SizedBox.shrink(), // Language button hidden - will be in settings
                               ],
                             ),
                             const SizedBox(height: 16),

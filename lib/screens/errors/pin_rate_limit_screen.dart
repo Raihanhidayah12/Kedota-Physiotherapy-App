@@ -55,7 +55,7 @@ class _PinRateLimitScreenState extends State<PinRateLimitScreen> {
       title: t(context, 'pinLimitTitle'),
       subtitle: t(context, 'pinLimitSubtitle'),
       isError: true,
-      topAction: const LanguageButton(),
+      topAction: const SizedBox.shrink(), // Language button hidden - will be in settings
       customAction: SizedBox(
         width: double.infinity,
         child: Container(
