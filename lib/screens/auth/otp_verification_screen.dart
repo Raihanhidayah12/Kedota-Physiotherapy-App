@@ -3,11 +3,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../l10n/app_language.dart';
-import '../../widgets/language_button.dart';
+import '../../services/supabase_auth_service.dart';
 import '../../widgets/language_button.dart';
 import '../home/home_screen.dart';
 import '../errors/otp_rate_limit_screen.dart';
 import 'pin_verification_screen.dart';
+import 'phone_profile_completion_screen.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -89,23 +90,54 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   static const _validDummyOtps = {'1234', '5555', '0000', '9999'};
 
-  void _verifyOtp() {
+  Future<void> _verifyOtp() async {
     final otp = _otpController.text.trim();
     // Accept strictly only the 4 specified dummy OTP codes: 1234, 5555, 0000, 9999
     if (_validDummyOtps.contains(otp)) {
       if (widget.onVerified != null) {
         widget.onVerified!.call();
       } else {
-        // Auto-submit and navigate to Pin Screen
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => PinVerificationScreen(phoneNumber: widget.phoneNumber),
-              ),
-            );
-          }
-        });
+        // NEW FLOW: Check if user is registered
+        try {
+          final accountResult = await SupabaseAuthService().checkAccountStatus(
+            widget.phoneNumber.replaceAll(RegExp(r'\D'), '')
+          );
+
+          if (!mounted) return;
+
+          // Auto-submit and navigate based on registration status
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              if (accountResult.isRegistered) {
+                // Sudah terdaftar -> ke PIN Verification
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => PinVerificationScreen(phoneNumber: widget.phoneNumber),
+                  ),
+                );
+              } else {
+                // Belum terdaftar -> ke Profile Completion
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => PhoneProfileCompletionScreen(phoneNumber: widget.phoneNumber),
+                  ),
+                );
+              }
+            }
+          });
+        } catch (e) {
+          debugPrint('Error checking account status: $e');
+          // Default to profile completion if error
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => PhoneProfileCompletionScreen(phoneNumber: widget.phoneNumber),
+                ),
+              );
+            }
+          });
+        }
       }
       return;
     }
@@ -286,45 +318,55 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               },
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 24),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: List.generate(4, (index) {
-                                    final isActive = index == _otpController.text.length;
-                                    final char = _otpController.text.length > index
-                                        ? _otpController.text[index]
-                                        : "";
-                                    return AnimatedContainer(
-                                      duration: const Duration(milliseconds: 200),
-                                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                                      width: 56,
-                                      height: 64,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: _isError
-                                            ? Colors.red.withValues(alpha: 0.1)
-                                            : Colors.white,
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(
-                                          color: _isError
-                                              ? Colors.red
-                                              : (isActive
-                                                  ? const Color(0xFF00A79D)
-                                                  : const Color(0xFFDCE7F5)),
-                                          width: isActive || _isError ? 2 : 1,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        char,
-                                        style: TextStyle(
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.bold,
-                                          color: _isError
-                                              ? Colors.red
-                                              : const Color(0xFF17324D),
-                                        ),
-                                      ),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    // Fit 4 boxes with horizontal margins into available width
+                                    final totalMargin = 4 * 16.0; // 8px each side × 4
+                                    final boxSize = ((constraints.maxWidth - totalMargin) / 4)
+                                        .clamp(40.0, 56.0);
+                                    final boxHeight = boxSize * (64.0 / 56.0);
+
+                                    return Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: List.generate(4, (index) {
+                                        final isActive = index == _otpController.text.length;
+                                        final char = _otpController.text.length > index
+                                            ? _otpController.text[index]
+                                            : "";
+                                        return AnimatedContainer(
+                                          duration: const Duration(milliseconds: 200),
+                                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                                          width: boxSize,
+                                          height: boxHeight,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: _isError
+                                                ? Colors.red.withValues(alpha: 0.1)
+                                                : Colors.white,
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(
+                                              color: _isError
+                                                  ? Colors.red
+                                                  : (isActive
+                                                      ? const Color(0xFF00A79D)
+                                                      : const Color(0xFFDCE7F5)),
+                                              width: isActive || _isError ? 2 : 1,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            char,
+                                            style: TextStyle(
+                                              fontSize: boxSize * 0.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: _isError
+                                                  ? Colors.red
+                                                  : const Color(0xFF17324D),
+                                            ),
+                                          ),
+                                        );
+                                      }),
                                     );
-                                  }),
+                                  },
                                 ),
                               ),
                             ),

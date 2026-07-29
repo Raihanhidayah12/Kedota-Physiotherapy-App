@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum BottomSheetType { success, error }
+enum BottomSheetType { success, error, info }
 
 class CustomBottomSheet extends StatelessWidget {
   final BottomSheetType type;
@@ -65,9 +65,22 @@ class CustomBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isError = type == BottomSheetType.error;
-    final mainColor = isError ? const Color(0xFFC62828) : const Color(0xFF00A79D);
-    final lightColor = isError ? Colors.red.withAlpha(25) : const Color(0xFF00A79D).withAlpha(25);
-    final icon = isError ? Icons.sentiment_dissatisfied_rounded : Icons.check_rounded;
+    final isInfo = type == BottomSheetType.info;
+    final mainColor = isError
+        ? const Color(0xFFC62828)
+        : isInfo
+            ? const Color(0xFF1565C0)
+            : const Color(0xFF00A79D);
+    final lightColor = isError
+        ? Colors.red.withAlpha(25)
+        : isInfo
+            ? const Color(0xFF1565C0).withAlpha(25)
+            : const Color(0xFF00A79D).withAlpha(25);
+    final icon = isError
+        ? Icons.sentiment_dissatisfied_rounded
+        : isInfo
+            ? Icons.info_outline_rounded
+            : Icons.check_rounded;
 
     return Container(
       decoration: const BoxDecoration(

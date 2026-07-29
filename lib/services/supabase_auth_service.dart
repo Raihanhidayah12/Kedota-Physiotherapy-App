@@ -66,12 +66,33 @@ class SupabaseAuthService {
 
   String _formatSupabaseError(Object error) {
     if (error is AuthException) {
+      // Handle specific auth errors
+      if (error.message.contains('User already registered')) {
+        return 'Email atau nomor telepon sudah terdaftar. Silakan login.';
+      }
+      if (error.message.contains('Invalid email')) {
+        return 'Format email tidak valid. Silakan gunakan email yang valid.';
+      }
+      if (error.message.contains('Email rate limit exceeded') || 
+          error.message.contains('rate limit')) {
+        return 'Terlalu banyak percobaan. Silakan tunggu beberapa menit dan coba lagi.';
+      }
+      if (error.message.contains('already been registered') ||
+          error.message.contains('already registered')) {
+        return 'Akun dengan email ini sudah terdaftar. Silakan login atau gunakan email lain.';
+      }
       return error.message;
     }
 
     final message = error.toString();
     if (message.contains('Database error saving new user')) {
-      return 'Supabase rejected the sign-up request because the project auth database could not create the user. Please verify the Supabase project/auth configuration.';
+      return 'Gagal membuat akun. Silakan coba lagi atau hubungi support.';
+    }
+    if (message.contains('Email address') && message.contains('is invalid')) {
+      return 'Format email tidak valid. Silakan gunakan email yang benar.';
+    }
+    if (message.contains('rate limit')) {
+      return 'Terlalu banyak percobaan. Silakan tunggu beberapa menit dan coba lagi.';
     }
 
     return message;
@@ -197,21 +218,34 @@ class SupabaseAuthService {
     try {
       final normalizedPhone = phone.replaceAll(RegExp(r'\D'), '');
       
-      // Look up the email associated with this phone number
+      // Look up the profile by phone number (get auth_email if exists)
       final profile = await client
           .from('profiles')
-          .select('email')
+          .select('id, email, auth_email, pin_hash')
           .eq('phone', normalizedPhone)
           .maybeSingle();
 
-      if (profile == null || profile['email'] == null) {
+      if (profile == null) {
         throw Exception('phoneNotRegisteredOrIncomplete');
       }
 
-      final email = profile['email'] as String;
+      // Verify PIN against stored hash
+      final storedHash = profile['pin_hash'] as String?;
+      final inputHash = hashPin(pin);
+      
+      if (storedHash == null || storedHash != inputHash) {
+        throw Exception('Invalid PIN');
+      }
 
+      // Get auth email (could be different from display email)
+      // Use auth_email if exists, otherwise fallback to email field or generated
+      String authEmail = profile['auth_email'] as String? ?? 
+                         profile['email'] as String? ?? 
+                         buildEmailFromPhone(phone);
+
+      // Sign in with Supabase Auth
       final response = await client.auth.signInWithPassword(
-        email: email,
+        email: authEmail,
         password: pin,
       );
 
@@ -220,9 +254,10 @@ class SupabaseAuthService {
         throw Exception('Invalid phone or PIN.');
       }
 
+      // Update last login timestamp
       await _persistProfile(
         userId: user.id,
-        email: email,
+        email: authEmail,
         password: pin,
         isUpdate: true,
         profileData: {
@@ -232,7 +267,7 @@ class SupabaseAuthService {
 
       return AuthResult(
         userId: user.id,
-        email: email,
+        email: authEmail,
         supabaseUser: user,
       );
     } catch (error, stackTrace) {
@@ -342,6 +377,217 @@ class SupabaseAuthService {
       debugPrint('Supabase completeSocialProfile failed: $error');
       debugPrint(stackTrace.toString());
       throw Exception(_formatSupabaseError(error));
+    }
+  }
+
+  /// Create profile for phone sign up (after OTP verification).
+  ///
+  /// Uses the user's real email as the Supabase auth identity so that
+  /// a later Google sign-in with the same email can be linked to this account
+  /// via manual linking.  "Confirm email" must be disabled in the Supabase
+  /// dashboard (Authentication → Sign in / Providers) for this to work without
+  /// hitting the email send rate limit.
+  ///
+  /// Falls back to a generated `phone@kedota.local` email only when the user
+  /// did not supply a valid email address.
+  Future<AuthResult> createPhoneProfile({
+    required String phone,
+    required String fullName,
+    required String email,
+    required DateTime birthDate,
+    required String gender,
+    required String pin,
+  }) async {
+    final normalizedPhone = phone.replaceAll(RegExp(r'\D'), '');
+
+    // Use the real email as auth identity so Google linking works later.
+    // Fall back to generated email only if user didn't provide a valid one.
+    final hasRealEmail = email.trim().isNotEmpty && _isValidEmail(email.trim());
+    final authEmail = hasRealEmail ? email.trim() : buildEmailFromPhone(phone);
+    final displayEmail = authEmail;
+
+    // --- Step 1: try to sign in — the user may already have a partial auth record ---
+    try {
+      final signInResponse = await client.auth.signInWithPassword(
+        email: authEmail,
+        password: pin,
+      );
+      final existingUser = signInResponse.user;
+      if (existingUser != null) {
+        // Auth user exists; upsert the profile and return.
+        debugPrint('createPhoneProfile: existing auth user found, upserting profile');
+        await _upsertPhoneProfile(
+          userId: existingUser.id,
+          authEmail: authEmail,
+          displayEmail: displayEmail,
+          normalizedPhone: normalizedPhone,
+          fullName: fullName,
+          birthDate: birthDate,
+          gender: gender,
+          pin: pin,
+        );
+        return AuthResult(
+            userId: existingUser.id,
+            email: authEmail,
+            supabaseUser: existingUser);
+      }
+    } on AuthException catch (signInErr) {
+      // Expected for new users — "Invalid login credentials" means no account yet.
+      // Any other error (e.g. network) is ignored so we fall through to signUp.
+      debugPrint('createPhoneProfile: signIn pre-check: ${signInErr.message}');
+    } catch (_) {
+      // Non-auth error — continue to signUp.
+    }
+
+    // --- Step 2: sign up (creates the Supabase Auth user) ---
+    try {
+      final response = await client.auth.signUp(
+        email: authEmail,
+        password: pin,
+        data: {
+          'phone': normalizedPhone,
+          'full_name': fullName,
+          'signup_method': 'phone',
+        },
+        emailRedirectTo: null,
+      );
+
+      final user = response.user;
+      if (user == null) {
+        throw Exception('Unable to create Supabase account.');
+      }
+
+      await _upsertPhoneProfile(
+        userId: user.id,
+        authEmail: authEmail,
+        displayEmail: displayEmail,
+        normalizedPhone: normalizedPhone,
+        fullName: fullName,
+        birthDate: birthDate,
+        gender: gender,
+        pin: pin,
+      );
+
+      return AuthResult(userId: user.id, email: authEmail, supabaseUser: user);
+    } on AuthException catch (authError) {
+      debugPrint('createPhoneProfile signUp error: $authError');
+
+      if (authError.message.toLowerCase().contains('rate limit') ||
+          authError.statusCode == '429') {
+        // Surface immediately — do NOT retry.
+        throw Exception(
+            'Terlalu banyak percobaan pendaftaran. Silakan tunggu beberapa menit dan coba lagi.');
+      }
+
+      if (authError.message.contains('already registered') ||
+          authError.message.contains('User already registered')) {
+        // Race condition: account was created between our signIn check and signUp.
+        // Try signing in one more time.
+        try {
+          final retrySignIn = await client.auth.signInWithPassword(
+            email: authEmail,
+            password: pin,
+          );
+          final retryUser = retrySignIn.user;
+          if (retryUser != null) {
+            await _upsertPhoneProfile(
+              userId: retryUser.id,
+              authEmail: authEmail,
+              displayEmail: displayEmail,
+              normalizedPhone: normalizedPhone,
+              fullName: fullName,
+              birthDate: birthDate,
+              gender: gender,
+              pin: pin,
+            );
+            return AuthResult(
+                userId: retryUser.id,
+                email: authEmail,
+                supabaseUser: retryUser);
+          }
+        } catch (retryErr) {
+          debugPrint('createPhoneProfile retry signIn failed: $retryErr');
+        }
+      }
+
+      throw Exception(_formatSupabaseError(authError));
+    } catch (error, stackTrace) {
+      debugPrint('Supabase createPhoneProfile failed: $error');
+      debugPrint(stackTrace.toString());
+      throw Exception(_formatSupabaseError(error));
+    }
+  }
+
+  /// Upserts a phone-signup profile row. Used by [createPhoneProfile].
+  Future<void> _upsertPhoneProfile({
+    required String userId,
+    required String authEmail,
+    required String displayEmail,
+    required String normalizedPhone,
+    required String fullName,
+    required DateTime birthDate,
+    required String gender,
+    required String pin,
+  }) async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    try {
+      await client.from('profiles').upsert({
+        'id': userId,
+        'phone': normalizedPhone,
+        'full_name': fullName,
+        'email': displayEmail,
+        'auth_email': authEmail,
+        'birth_date': birthDate.toIso8601String().split('T').first,
+        'gender': gender,
+        'signup_method': 'phone',
+        'pin_hash': hashPin(pin),
+        'is_profile_complete': true,
+        'created_at': now,
+        'updated_at': now,
+      });
+    } catch (upsertErr) {
+      debugPrint('_upsertPhoneProfile upsert failed, trying _persistProfile: $upsertErr');
+      await _persistProfile(
+        userId: userId,
+        email: authEmail,
+        password: pin,
+        profileData: {
+          'id': userId,
+          'phone': normalizedPhone,
+          'full_name': fullName,
+          'email': displayEmail,
+          'auth_email': authEmail,
+          'birth_date': birthDate.toIso8601String().split('T').first,
+          'gender': gender,
+          'signup_method': 'phone',
+          'pin_hash': hashPin(pin),
+          'is_profile_complete': true,
+          'created_at': now,
+          'updated_at': now,
+        },
+      );
+    }
+  }
+
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$').hasMatch(email);
+  }
+
+  /// Check if email already exists in profiles table
+  Future<bool> checkEmailExists(String email) async {
+    if (email.trim().isEmpty) return false;
+    
+    try {
+      final result = await client
+          .from('profiles')
+          .select('email')
+          .eq('email', email.trim())
+          .maybeSingle();
+      
+      return result != null; // If result exists, email is taken
+    } catch (e) {
+      debugPrint('Error checking email: $e');
+      return false; // On error, allow user to proceed (will catch on signup)
     }
   }
 

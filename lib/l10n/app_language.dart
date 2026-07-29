@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 enum AppLanguage { en, id }
 
-final appLanguageNotifier = ValueNotifier<AppLanguage>(AppLanguage.en);
+final appLanguageNotifier = ValueNotifier<AppLanguage>(AppLanguage.id);
 
 class AppLanguageScope extends InheritedNotifier<ValueNotifier<AppLanguage>> {
   const AppLanguageScope({
@@ -16,7 +16,7 @@ class AppLanguageScope extends InheritedNotifier<ValueNotifier<AppLanguage>> {
             .dependOnInheritedWidgetOfExactType<AppLanguageScope>()
             ?.notifier
             ?.value ??
-        AppLanguage.en;
+        AppLanguage.id;
   }
 
   static void toggle(BuildContext context) {
@@ -33,7 +33,7 @@ class AppLanguageScope extends InheritedNotifier<ValueNotifier<AppLanguage>> {
 String t(BuildContext context, String key) {
   final language = AppLanguageScope.current(context);
   return _translations[language]?[key] ??
-      _translations[AppLanguage.en]![key] ??
+      _translations[AppLanguage.id]![key] ??
       key;
 }
 
@@ -44,18 +44,18 @@ const _translations = {
     'back': 'Back',
     'next': 'Next',
     'getStarted': 'Get Started',
-    'welcomeTo': 'Welcome to',
-    'kedotaPhysiotherapy': 'Kedota Physiotherapy',
+    'welcomeTo': 'Pesan Jadwal',
+    'kedotaPhysiotherapy': 'Tanpa Ribet!',
     'onboardingWelcomeDesc':
-        'Experience comfortable, professional, and personalized care designed just for you.',
-    'recoveryWith': 'Recovery with',
-    'guidance': 'Guidance',
+        'Schedule your consultation easily and efficiently, anytime you need it.',
+    'recoveryWith': 'Pantau Kesehatan',
+    'guidance': 'Lebih Mudah',
     'onboardingRecoveryDesc':
-        'Follow personalized exercises and trusted therapy plans for faster, confident recovery.',
-    'startYour': 'Start Your',
-    'journey': 'Journey',
+        'Monitor your vital health progress in real-time, right from your phone.',
+    'startYour': 'Perawatan Medis',
+    'journey': 'Dirumah Anda',
     'onboardingJourneyDesc':
-        'Move better, feel better, and recover with the support of our expert team.',
+        'Schedule home medical care sessions easily and comfortably.',
     'tagline': 'Your comfort, our care',
     'splashTitle': 'Kedota',
     'splashSubtitle': 'Physiotherapy',
@@ -191,6 +191,17 @@ const _translations = {
     'successfullyLoggedIn': 'You have successfully logged in!',
     'googleVerifiedEnterPin': 'Google verified. Please enter your PIN.',
     'googleSignInFailed': 'Google sign-in failed',
+    'phoneVerified': 'Phone Verified',
+    'completeYourProfile': 'Complete Your Profile',
+    'phoneProfileDesc': 'Your phone has been verified. Now please complete your profile information.',
+    'fullNameExample': 'e.g., John Doe',
+    'emailRequired': 'Email is required.',
+    'validEmailError': 'Please enter a valid email address.',
+    'accountCreatedTitle': 'Account Created Successfully',
+    'accountCreatedSubtitle': 'Welcome! Your account is ready to use.',
+    'emailAlreadyRegistered': 'This email is already registered. Please use a different email or sign in.',
+    'accountExistsTitle': 'Account Already Exists',
+    'accountExistsByPhone': 'This email is already linked to an account registered via phone number {phone}. Please log in with your phone number first.',
   },
   AppLanguage.id: {
     'language': 'Bahasa',
@@ -198,18 +209,18 @@ const _translations = {
     'back': 'Kembali',
     'next': 'Lanjut',
     'getStarted': 'Mulai',
-    'welcomeTo': 'Selamat datang di',
-    'kedotaPhysiotherapy': 'Kedota Physiotherapy',
+    'welcomeTo': 'Pesan Jadwal',
+    'kedotaPhysiotherapy': 'Tanpa Ribet!',
     'onboardingWelcomeDesc':
-        'Nikmati perawatan yang nyaman, profesional, dan personal khusus untuk Anda.',
-    'recoveryWith': 'Pemulihan dengan',
-    'guidance': 'Panduan',
+        'Atur jadwal konsultasi dengan gampang dan efisien!',
+    'recoveryWith': 'Pantau Kesehatan',
+    'guidance': 'Lebih Mudah',
     'onboardingRecoveryDesc':
-        'Ikuti latihan personal dan rencana terapi terpercaya agar pemulihan lebih cepat dan percaya diri.',
-    'startYour': 'Mulai',
-    'journey': 'Perjalanan Anda',
+        'Monitor perkembangan vital-mu secara real-time.',
+    'startYour': 'Perawatan Medis',
+    'journey': 'Dirumah Anda',
     'onboardingJourneyDesc':
-        'Bergerak lebih baik, merasa lebih baik, dan pulih dengan dukungan tim ahli kami.',
+        'Atur jadwal untuk melakukan perawatan medis dirumah.',
     'tagline': 'Kenyamanan Anda, kepedulian kami',
     'splashTitle': 'Kedota',
     'splashSubtitle': 'Physiotherapy',
@@ -343,5 +354,19 @@ const _translations = {
     'successfullyLoggedIn': 'Anda berhasil login!',
     'googleVerifiedEnterPin': 'Google terverifikasi. Masukkan PIN Anda.',
     'googleSignInFailed': 'Google sign-in gagal',
+    'phoneVerified': 'Telepon Terverifikasi',
+    'completeYourProfile': 'Lengkapi Profil Anda',
+    'phoneProfileDesc': 'Nomor telepon Anda telah terverifikasi. Sekarang lengkapi informasi profil Anda.',
+    'fullNameExample': 'Contoh: Budi Santoso',
+    'emailRequired': 'Email wajib diisi.',
+    'validEmailError': 'Silakan masukkan alamat email yang valid.',
+    'accountCreatedTitle': 'Akun Berhasil Dibuat',
+    'accountCreatedSubtitle': 'Selamat datang! Akun Anda telah siap digunakan.',
+    'emailAlreadyRegistered': 'Email ini sudah terdaftar. Silakan gunakan email lain atau login.',
+    'emailAlreadyUsedTitle': 'Email Sudah Terdaftar',
+    'emailAlreadyUsedByPhone': 'Email ini sudah digunakan untuk akun yang terdaftar via nomor telepon. Silakan login menggunakan nomor telepon Anda.',
+    'loginWithPhone': 'Login dengan Nomor Telepon',
+    'accountExistsTitle': 'Akun Sudah Ada',
+    'accountExistsByPhone': 'Email ini sudah terhubung dengan akun yang terdaftar via nomor telepon {phone}. Silakan login dengan nomor telepon Anda terlebih dahulu.',
   },
 };

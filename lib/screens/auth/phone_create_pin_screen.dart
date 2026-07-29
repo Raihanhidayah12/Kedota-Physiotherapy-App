@@ -4,16 +4,16 @@ import 'package:flutter/services.dart';
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_bottom_sheet.dart';
-import '../home/home_screen.dart';
+import 'account_created_screen.dart';
 
-class GoogleCreatePinScreen extends StatefulWidget {
+class PhoneCreatePinScreen extends StatefulWidget {
   final String phone;
   final String fullName;
   final String email;
   final DateTime birthDate;
   final String gender;
 
-  const GoogleCreatePinScreen({
+  const PhoneCreatePinScreen({
     super.key,
     required this.phone,
     required this.fullName,
@@ -23,54 +23,16 @@ class GoogleCreatePinScreen extends StatefulWidget {
   });
 
   @override
-  State<GoogleCreatePinScreen> createState() => _GoogleCreatePinScreenState();
+  State<PhoneCreatePinScreen> createState() => _PhoneCreatePinScreenState();
 }
 
-class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
+class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
   String _firstPin = '';
   String _confirmPin = '';
   bool _isConfirming = false;
   bool _isLoading = false;
 
-  void _showModernSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white.withValues(alpha: 0.96),
-        elevation: 10,
-        duration: const Duration(seconds: 2),
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00A79D).withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isError ? Icons.info_outline_rounded : Icons.check_circle_outline_rounded,
-                color: const Color(0xFF00A79D),
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Color(0xFF17324D),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   void _onNumberPressed(String val) {
     HapticFeedback.selectionClick();
@@ -121,7 +83,14 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
 
   Future<void> _handlePinSubmission() async {
     if (_firstPin != _confirmPin) {
-      _showModernSnackBar(t(context, 'confirmPinMismatchError'), isError: true);
+      CustomBottomSheet.show(
+        context,
+        type: BottomSheetType.error,
+        title: 'Error',
+        subtitle: t(context, 'confirmPinMismatchError'),
+        singleButtonText: t(context, 'close') ?? 'Tutup',
+        onSinglePressed: () => Navigator.of(context).pop(),
+      );
       setState(() {
         _firstPin = '';
         _confirmPin = '';
@@ -133,36 +102,42 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await SupabaseAuthService().completeSocialProfile(
-        provider: 'google',
+      // Create new profile for phone sign up
+      await SupabaseAuthService().createPhoneProfile(
         phone: widget.phone,
         fullName: widget.fullName,
+        email: widget.email,
         birthDate: widget.birthDate,
         gender: widget.gender,
         pin: _firstPin,
-        email: widget.email,
       );
 
       if (!mounted) return;
 
-      CustomBottomSheet.show(
-        context,
-        type: BottomSheetType.success,
-        title: t(context, 'profileCompletedTitle'),
-        subtitle: t(context, 'profileCompletedSubtitle'),
-        singleButtonText: t(context, 'continueText'),
-        isDismissible: false,
-        onSinglePressed: () {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-            (route) => false,
-          );
-        },
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const AccountCreatedScreen(),
+        ),
+        (route) => false,
       );
     } catch (e) {
       if (!mounted) return;
-      debugPrint('Google profile completion error: $e');
-      _showModernSnackBar(t(context, 'saveProfileFailed'), isError: true);
+      debugPrint('Phone profile creation error: $e');
+      
+      String errorMessage = e.toString();
+      if (errorMessage.startsWith('Exception: ')) {
+        errorMessage = errorMessage.substring(11);
+      }
+      
+      CustomBottomSheet.show(
+        context,
+        type: BottomSheetType.error,
+        title: 'Error',
+        subtitle: errorMessage,
+        singleButtonText: t(context, 'close') ?? 'Tutup',
+        onSinglePressed: () => Navigator.of(context).pop(),
+      );
+      
       setState(() {
         _firstPin = '';
         _confirmPin = '';

@@ -42,6 +42,57 @@ class _SignInScreenState extends State<SignInScreen>
 
     try {
       final service = SupabaseAuthService();
+      final currentUser = service.client.auth.currentUser;
+      
+      if (currentUser == null) return;
+      
+      final googleEmail = currentUser.email ?? '';
+      
+      // Check if this Google email is already registered via phone signup
+      if (googleEmail.isNotEmpty) {
+        final existingProfile = await service.client
+            .from('profiles')
+            .select('id, email, auth_email, signup_method, phone, pin_hash')
+            .eq('email', googleEmail)
+            .maybeSingle();
+        
+        if (!mounted) return;
+        
+        // Email exists and was registered via phone →
+        // sign out the Google session, then send user through OTP on that phone number.
+        // After OTP passes, go straight to PinVerificationScreen (not profile completion).
+        if (existingProfile != null &&
+            existingProfile['signup_method'] == 'phone') {
+          
+          final phone = (existingProfile['phone'] ?? '').toString();
+
+          // Sign out the Google-only session — we'll authenticate as the phone user.
+          await service.signOut();
+
+          if (!mounted) return;
+
+          // Go to OTP screen; on success jump straight to PIN (skip profile completion).
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => OtpVerificationScreen(
+                phoneNumber: phone,
+                // onVerified fires after OTP is accepted — go directly to PIN.
+                onVerified: () {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (_) => PinVerificationScreen(phoneNumber: phone),
+                    ),
+                    (route) => route.isFirst, // keep SignInScreen at bottom
+                  );
+                },
+              ),
+            ),
+          );
+          return;
+        }
+      }
+      
+      // Continue with normal Google OAuth flow
       final profileExists = await service.checkUserProfileExists();
       if (!mounted) return;
 
@@ -53,9 +104,8 @@ class _SignInScreenState extends State<SignInScreen>
       final isProfileComplete = phone.isNotEmpty && (isCompleteFlag || pinHash.isNotEmpty);
 
       if (!isProfileComplete) {
-        final currentUser = service.client.auth.currentUser;
-        final metadata = currentUser?.userMetadata ?? {};
-        final email = currentUser?.email ?? profileExists?['email'] as String? ?? '';
+        final metadata = currentUser.userMetadata ?? {};
+        final email = currentUser.email ?? profileExists?['email'] as String? ?? '';
         final fullName = metadata['full_name'] ?? metadata['name'] ?? profileExists?['full_name'] ?? '';
         final initialPhone = (metadata['phone_number'] ?? metadata['phone'] ?? phone).toString().trim();
         final birthDateStr = metadata['birth_date'] ?? metadata['birthday'] ?? profileExists?['birth_date'] ?? '';
@@ -150,7 +200,11 @@ class _SignInScreenState extends State<SignInScreen>
 
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
       if (data.event == AuthChangeEvent.signedIn && data.session?.user != null) {
-        await _handleGoogleSignInResult();
+        // Only handle Google OAuth sign-in, not phone signup or other methods
+        final provider = data.session?.user.appMetadata['provider'] as String?;
+        if (provider == 'google' && mounted) {
+          await _handleGoogleSignInResult();
+        }
       }
     });
   }
@@ -238,6 +292,12 @@ class _SignInScreenState extends State<SignInScreen>
       return '${name[0]}*@$domain';
     }
     return '${name[0]}${'*' * (name.length - 2)}${name[name.length - 1]}@$domain';
+  }
+
+  String _maskPhone(String phone) {
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 6) return phone;
+    return '${digits.substring(0, 4)}${'*' * (digits.length - 7)}${digits.substring(digits.length - 3)}';
   }
 
   void _showDormantAccountDialog({
@@ -557,42 +617,14 @@ class _SignInScreenState extends State<SignInScreen>
                                             return;
                                           }
 
-                                          setState(() {
-                                            _isLoading = true;
-                                          });
-
-                                          try {
-                                            final accountResult = await SupabaseAuthService().checkAccountStatus(phone);
-
-                                            if (!mounted) return;
-
-                                            if (!accountResult.isRegistered) {
-                                              _showUnregisteredDialog();
-                                              return;
-                                            }
-
-                                            if (accountResult.isDormant) {
-                                              _showDormantAccountDialog(
+                                          // NEW FLOW: Langsung ke OTP tanpa cek terdaftar
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => OtpVerificationScreen(
                                                 phoneNumber: _normalizePhoneNumber(phone),
-                                                email: accountResult.email ?? SupabaseAuthService().buildEmailFromPhone(phone),
-                                              );
-                                              return;
-                                            }
-
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (_) => OtpVerificationScreen(
-                                                  phoneNumber: _normalizePhoneNumber(phone),
-                                                ),
                                               ),
-                                            );
-                                          } finally {
-                                            if (mounted) {
-                                              setState(() {
-                                                _isLoading = false;
-                                              });
-                                            }
-                                          }
+                                            ),
+                                          );
                                         },
                                   style: FilledButton.styleFrom(
                                     backgroundColor: const Color(0xFF00A79D),
@@ -750,34 +782,8 @@ class _SignInScreenState extends State<SignInScreen>
                                 ],
                               ),
                               const SizedBox(height: 20),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    t(context, 'dontHaveAccount'),
-                                    style: const TextStyle(
-                                      color: Color(0xFF64748B),
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) => const SignUpScreen(),
-                                        ),
-                                      );
-                                    },
-                                    child: Text(
-                                      t(context, 'signUp'),
-                                      style: const TextStyle(
-                                        color: Color(0xFF00A79D),
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              // Sign Up link hidden - registration only via Google
+                              const SizedBox.shrink(),
                             ],
                           ),
                         ),
