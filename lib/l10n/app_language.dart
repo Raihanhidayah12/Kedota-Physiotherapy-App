@@ -94,6 +94,8 @@ const _translations = {
     'phoneRequiredPeriod': 'Please enter your phone number.',
     'invalidPhoneFormat': 'Invalid phone number format.',
     'phoneAlreadyRegistered': 'This phone number is already registered.',
+    'phoneAlreadyRegisteredDesc':
+        'This number is linked to another account. Please use a different number or sign in with the registered account.',
     'signInOrUseAnother':
         'Please sign in to your account or use another number.',
     'useAnotherNumber': 'Use Another Number',
@@ -123,6 +125,7 @@ const _translations = {
     'createPin': 'Create PIN',
     'createPinDesc':
         'Create a 6-digit PIN to protect your account. This PIN will be used as an additional security layer.',
+    'confirmPinDesc': 'Re-enter the 6-digit PIN you just created.',
     'pin': 'PIN',
     'confirmPin': 'Confirm PIN',
     'savePin': 'Save PIN',
@@ -140,16 +143,21 @@ const _translations = {
     'verifyOtp': 'Verify OTP',
     'otpResent': 'OTP resent successfully.',
     'resendOtp': 'Resend OTP',
+    'sendOtp': 'Send OTP',
     'forgotPin': 'Forgot PIN',
     'forgotPinDesc': 'Enter your phone number to reset your PIN.',
     'resetPin': 'Reset PIN',
     'pinResetSent': 'PIN reset instructions sent to your phone.',
     'welcome': 'Welcome',
-    'unregisteredDialogContent': 'This phone number is not registered. Would you like to sign up now?',
-    'googleAccountNotRegistered': 'This Google account is not registered. Please sign up first.',
-    'googleUnregisteredDialogContent': 'This Google account is not registered. Would you like to sign up now?',
+    'unregisteredDialogContent':
+        'This phone number is not registered. Would you like to sign up now?',
+    'googleAccountNotRegistered':
+        'This Google account is not registered. Please sign up first.',
+    'googleUnregisteredDialogContent':
+        'This Google account is not registered. Would you like to sign up now?',
     'continueSignUp': 'Continue to Sign Up',
-    'phoneNotRegisteredOrIncomplete': 'Phone number not registered or profile incomplete.',
+    'phoneNotRegisteredOrIncomplete':
+        'Phone number not registered or profile incomplete.',
     'wrongPinOrSignInFailed': 'Wrong PIN or Sign in failed.',
     'enterPinDesc': 'Please enter your 6-digit PIN to sign in.',
     'signedInSuccessfully': 'Signed in successfully',
@@ -158,27 +166,35 @@ const _translations = {
     'otpLimitTitle': 'OTP Request Limit!',
     'otpLimitSubtitle': 'Wait 1 hour before sending another OTP code!',
     'verificationLimitTitle': 'Verification Rate Limit',
-    'verificationLimitSubtitle': 'Wait 30 seconds before sending another verification',
+    'verificationLimitSubtitle':
+        'Wait 30 seconds before sending another verification',
     'pinLimitTitle': 'PIN Request Limit.',
     'pinLimitSubtitle': 'Please wait 30 seconds to enter your PIN.',
     'dormantAccountTitle': 'Account Inactive > 60 Days',
-    'dormantAccountSubtitle': 'Your account has been inactive for more than 60 days. For security reasons, OTP will be sent to your registered email.',
+    'dormantAccountSubtitle':
+        'Your account has been inactive for more than 60 days. For security reasons, OTP will be sent to your registered email.',
     'sentEmailCode': 'We sent a 4-digit code to email {email}.',
     'continueEmail': 'Continue to Email OTP',
     'createNewPin': 'Create New PIN',
     'createNewPinDesc': 'Enter a new 6-digit PIN for your account.',
     'confirmNewPin': 'Confirm New PIN',
     'pinUpdatedSuccessTitle': 'PIN Updated Successfully',
-    'pinUpdatedSuccessDesc': 'Your PIN has been updated. Please sign in using your new PIN.',
+    'pinUpdatedSuccessDesc':
+        'Your PIN has been updated. Please sign in using your new PIN.',
     'wait30Seconds': 'Wait {seconds} seconds...',
     'verifyBirthDateTitle': 'Verify Birth Date',
-    'verifyBirthDateDesc': 'Please select your birth date to verify account identity.',
+    'verifyBirthDateDesc':
+        'Please select your birth date to verify account identity.',
     'selectBirthDateHint': 'Select Birth Date (DD/MM/YYYY)',
     'selectBirthDateError': 'Please select your birth date first.',
-    'birthDateMismatchError': 'Birth date does not match. Please wait 3 seconds to try again.',
-    'confirmPinMismatchError': 'Confirmation PIN does not match. Please recreate.',
+    'birthDateMismatchError':
+        'Birth date does not match. Please wait 3 seconds to try again.',
+    'confirmPinMismatchError':
+        'Confirmation PIN does not match. Please recreate.',
+    'sameAsOldPinError': 'New PIN cannot be the same as your old PIN.',
     'googleProfileTitle': 'Complete Google Profile',
-    'googleProfileDesc': 'Your Google details have been auto-filled. You can review or edit them and set your 6-digit PIN.',
+    'googleProfileDesc':
+        'Your Google details have been auto-filled. You can review or edit them and set your 6-digit PIN.',
     'saveAndContinue': 'Save & Continue',
     'googleAccount': 'Google Account',
     'cancel': 'Cancel',
@@ -193,15 +209,18 @@ const _translations = {
     'googleSignInFailed': 'Google sign-in failed',
     'phoneVerified': 'Phone Verified',
     'completeYourProfile': 'Complete Your Profile',
-    'phoneProfileDesc': 'Your phone has been verified. Now please complete your profile information.',
+    'phoneProfileDesc':
+        'Your phone has been verified. Now please complete your profile information.',
     'fullNameExample': 'e.g., John Doe',
     'emailRequired': 'Email is required.',
     'validEmailError': 'Please enter a valid email address.',
     'accountCreatedTitle': 'Account Created Successfully',
     'accountCreatedSubtitle': 'Welcome! Your account is ready to use.',
-    'emailAlreadyRegistered': 'This email is already registered. Please use a different email or sign in.',
+    'emailAlreadyRegistered':
+        'This email is already registered. Please use a different email or sign in.',
     'accountExistsTitle': 'Account Already Exists',
-    'accountExistsByPhone': 'This email is already linked to an account registered via phone number {phone}. Please log in with your phone number first.',
+    'accountExistsByPhone':
+        'This email is already linked to an account registered via phone number {phone}. Please log in with your phone number first.',
   },
   AppLanguage.id: {
     'language': 'Bahasa',
@@ -215,8 +234,7 @@ const _translations = {
         'Atur jadwal konsultasi dengan gampang dan efisien!',
     'recoveryWith': 'Pantau Kesehatan',
     'guidance': 'Lebih Mudah',
-    'onboardingRecoveryDesc':
-        'Monitor perkembangan vital-mu secara real-time.',
+    'onboardingRecoveryDesc': 'Monitor perkembangan vital-mu secara real-time.',
     'startYour': 'Perawatan Medis',
     'journey': 'Dirumah Anda',
     'onboardingJourneyDesc':
@@ -258,6 +276,8 @@ const _translations = {
     'phoneRequiredPeriod': 'Masukkan nomor telepon Anda.',
     'invalidPhoneFormat': 'Format nomor telepon tidak valid.',
     'phoneAlreadyRegistered': 'Nomor telepon ini sudah terdaftar.',
+    'phoneAlreadyRegisteredDesc':
+        'Nomor ini sudah terhubung ke akun lain. Gunakan nomor lain atau masuk dengan akun yang sudah terdaftar.',
     'signInOrUseAnother': 'Silakan masuk ke akun Anda atau gunakan nomor lain.',
     'useAnotherNumber': 'Gunakan Nomor Lain',
     'socialSignInSuccess':
@@ -286,6 +306,7 @@ const _translations = {
     'createPin': 'Buat PIN',
     'createPinDesc':
         'Buat PIN 6 digit untuk melindungi akun Anda. PIN ini akan digunakan sebagai lapisan keamanan tambahan.',
+    'confirmPinDesc': 'Masukkan kembali 6 digit PIN yang baru saja Anda buat.',
     'pin': 'PIN',
     'confirmPin': 'Konfirmasi PIN',
     'savePin': 'Simpan PIN',
@@ -303,16 +324,23 @@ const _translations = {
     'verifyOtp': 'Verifikasi OTP',
     'otpResent': 'OTP berhasil dikirim ulang.',
     'resendOtp': 'Kirim Ulang OTP',
+    'sendOtp': 'Kirim OTP',
     'forgotPin': 'Lupa PIN',
-    'forgotPinDesc': 'Masukkan nomor telepon Anda untuk mereset PIN.',
+    'enterPhoneNumberTitle': 'Masukkan No. Telepon',
+    'forgotPinDesc':
+        'Kami akan mengirimkan kode OTP ke nomor Anda untuk verifikasi sebelum membuat PIN baru.',
     'resetPin': 'Reset PIN',
     'pinResetSent': 'Petunjuk reset PIN telah dikirim ke telepon Anda.',
     'welcome': 'Selamat Datang',
-    'unregisteredDialogContent': 'Nomor telepon ini belum terdaftar. Apakah Anda ingin mendaftar sekarang?',
-    'googleAccountNotRegistered': 'Akun Google ini belum terdaftar. Silakan daftar dulu.',
-    'googleUnregisteredDialogContent': 'Akun Google ini belum terdaftar. Apakah Anda ingin mendaftar sekarang?',
+    'unregisteredDialogContent':
+        'Nomor telepon ini belum terdaftar. Apakah Anda ingin mendaftar sekarang?',
+    'googleAccountNotRegistered':
+        'Akun Google ini belum terdaftar. Silakan daftar dulu.',
+    'googleUnregisteredDialogContent':
+        'Akun Google ini belum terdaftar. Apakah Anda ingin mendaftar sekarang?',
     'continueSignUp': 'Lanjut Daftar',
-    'phoneNotRegisteredOrIncomplete': 'Nomor belum terdaftar atau belum melengkapi profil.',
+    'phoneNotRegisteredOrIncomplete':
+        'Nomor belum terdaftar atau belum melengkapi profil.',
     'wrongPinOrSignInFailed': 'PIN salah atau gagal masuk.',
     'enterPinDesc': 'Silakan masukkan PIN 6 digit Anda untuk masuk.',
     'signedInSuccessfully': 'Berhasil masuk',
@@ -321,34 +349,43 @@ const _translations = {
     'otpLimitTitle': 'Batas Permintaan OTP!',
     'otpLimitSubtitle': 'Mohon tunggu 1 jam sebelum meminta kode OTP kembali.',
     'verificationLimitTitle': 'Batas Verifikasi',
-    'verificationLimitSubtitle': 'Mohon tunggu 30 detik sebelum mencoba verifikasi kembali.',
+    'verificationLimitSubtitle':
+        'Mohon tunggu 30 detik sebelum mencoba verifikasi kembali.',
     'pinLimitTitle': 'Batas Memasukkan PIN.',
     'pinLimitSubtitle': 'Mohon tunggu 30 detik untuk memasukkan PIN.',
     'dormantAccountTitle': 'Akun Tidak Aktif > 60 Hari',
-    'dormantAccountSubtitle': 'Akun Anda telah tidak aktif lebih dari 60 hari. Demi keamanan, OTP akan dikirimkan ke email terdaftar Anda.',
+    'dormantAccountSubtitle':
+        'Akun Anda telah tidak aktif lebih dari 60 hari. Demi keamanan, OTP akan dikirimkan ke email terdaftar Anda.',
     'sentEmailCode': 'Kami mengirim kode 4 digit ke email {email}.',
     'continueEmail': 'Lanjut ke OTP Email',
     'createNewPin': 'Buat PIN Baru',
     'createNewPinDesc': 'Masukkan 6 digit PIN baru untuk akun Anda.',
     'confirmNewPin': 'Konfirmasi PIN Baru',
     'pinUpdatedSuccessTitle': 'PIN Berhasil Diperbarui',
-    'pinUpdatedSuccessDesc': 'PIN Anda telah berhasil diperbarui. Silakan masuk menggunakan PIN baru Anda.',
+    'pinUpdatedSuccessDesc':
+        'PIN Anda telah berhasil diperbarui. Silakan masuk menggunakan PIN baru Anda.',
     'wait30Seconds': 'Tunggu {seconds} detik...',
     'verifyBirthDateTitle': 'Verifikasi Tanggal Lahir',
-    'verifyBirthDateDesc': 'Silakan pilih tanggal lahir Anda untuk memverifikasi identitas akun.',
+    'verifyBirthDateDesc':
+        'Silakan pilih tanggal lahir Anda untuk memverifikasi identitas akun.',
     'selectBirthDateHint': 'Pilih Tanggal Lahir (DD/MM/YYYY)',
     'selectBirthDateError': 'Silakan pilih tanggal lahir Anda terlebih dahulu.',
-    'birthDateMismatchError': 'Tanggal lahir tidak sesuai. Silakan tunggu 3 detik untuk mencoba lagi.',
-    'confirmPinMismatchError': 'PIN konfirmasi tidak cocok. Silakan buat ulang.',
+    'birthDateMismatchError':
+        'Tanggal lahir tidak sesuai. Silakan tunggu 3 detik untuk mencoba lagi.',
+    'confirmPinMismatchError':
+        'PIN konfirmasi tidak cocok. Silakan buat ulang.',
+    'sameAsOldPinError': 'PIN baru tidak boleh sama dengan PIN lama.',
     'googleProfileTitle': 'Lengkapi Profil Google',
-    'googleProfileDesc': 'Data akun Google Anda terisi otomatis. Silakan periksa atau ubah, lalu buat PIN 6-digit Anda.',
+    'googleProfileDesc':
+        'Data akun Google Anda terisi otomatis. Silakan periksa atau ubah, lalu buat PIN 6-digit Anda.',
     'saveAndContinue': 'Simpan & Masuk',
     'googleAccount': 'Akun Google',
     'cancel': 'Batal',
     'continueText': 'Lanjut',
     'pleaseSignUpFirst': 'Silakan melakukan pendaftaran terlebih dahulu.',
     'profileCompletedTitle': 'Profil Berhasil Dilengkapi',
-    'profileCompletedSubtitle': 'Selamat datang! Akun Google Anda telah siap digunakan.',
+    'profileCompletedSubtitle':
+        'Selamat datang! Akun Google Anda telah siap digunakan.',
     'resetPinFailed': 'Gagal mereset PIN. Silakan coba lagi.',
     'saveProfileFailed': 'Gagal menyimpan profil. Silakan coba lagi.',
     'successfullyLoggedIn': 'Anda berhasil login!',
@@ -356,17 +393,21 @@ const _translations = {
     'googleSignInFailed': 'Google sign-in gagal',
     'phoneVerified': 'Telepon Terverifikasi',
     'completeYourProfile': 'Lengkapi Profil Anda',
-    'phoneProfileDesc': 'Nomor telepon Anda telah terverifikasi. Sekarang lengkapi informasi profil Anda.',
+    'phoneProfileDesc':
+        'Nomor telepon Anda telah terverifikasi. Sekarang lengkapi informasi profil Anda.',
     'fullNameExample': 'Contoh: Budi Santoso',
     'emailRequired': 'Email wajib diisi.',
     'validEmailError': 'Silakan masukkan alamat email yang valid.',
     'accountCreatedTitle': 'Akun Berhasil Dibuat',
     'accountCreatedSubtitle': 'Selamat datang! Akun Anda telah siap digunakan.',
-    'emailAlreadyRegistered': 'Email ini sudah terdaftar. Silakan gunakan email lain atau login.',
+    'emailAlreadyRegistered':
+        'Email ini sudah terdaftar. Silakan gunakan email lain atau login.',
     'emailAlreadyUsedTitle': 'Email Sudah Terdaftar',
-    'emailAlreadyUsedByPhone': 'Email ini sudah digunakan untuk akun yang terdaftar via nomor telepon. Silakan login menggunakan nomor telepon Anda.',
+    'emailAlreadyUsedByPhone':
+        'Email ini sudah digunakan untuk akun yang terdaftar via nomor telepon. Silakan login menggunakan nomor telepon Anda.',
     'loginWithPhone': 'Login dengan Nomor Telepon',
     'accountExistsTitle': 'Akun Sudah Ada',
-    'accountExistsByPhone': 'Email ini sudah terhubung dengan akun yang terdaftar via nomor telepon {phone}. Silakan login dengan nomor telepon Anda terlebih dahulu.',
+    'accountExistsByPhone':
+        'Email ini sudah terhubung dengan akun yang terdaftar via nomor telepon {phone}. Silakan login dengan nomor telepon Anda terlebih dahulu.',
   },
 };

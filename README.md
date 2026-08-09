@@ -4,205 +4,275 @@
 
 ---
 
-## 📌 Status Proyek (Project Status)
+## 📌 Status Proyek
 
 | Fitur / Modul | Status | Keterangan |
 | :--- | :---: | :--- |
-| 🌐 Multi-Language (EN) | 🟢 Finished | Full support Bahasa Inggris (default), ID tersedia |
-| 🔑 Sign In & PIN Verification | 🟢 Finished | Login HP, SHA-256 PIN Hashing, & Rate Limiting |
-| 🌐 Google Sign-In & Profile Completion | 🟢 Finished | Autentikasi Google + Kelengkapan Profil (2 halaman) |
-| 📩 Verifikasi OTP Dummy | 🟢 Finished | Terkunci khusus kode `1234`, `5555`, `0000`, `9999` |
-| 🛡️ Security & Dormant Account Flow | 🟢 Finished | Proteksi rate limit 3x salah & akun >60 hari |
-| 🚀 Persistent Onboarding Flow | 🟢 Finished | SplashScreen `has_seen_onboarding` flag & navigasi cerdas |
-| 🔒 Forgot PIN Flow | 🟢 Finished | Verifikasi tanggal lahir & reset PIN dengan OTP |
-| 📱 Indonesian Phone Validation | 🟢 Finished | Validasi nomor HP Indonesia (08xx, 628xx, 8xx) |
-| 📝 Sign Up Flow | ⚪ Hidden | Pendaftaran hanya via Google Sign-In |
+| 🌐 Multi-Language (ID / EN) | 🟢 Selesai | Bahasa Indonesia & Inggris, toggle di Settings |
+| 🚀 Onboarding Screen | 🟢 Selesai | Tampil sekali saat pertama buka, 3 slide interaktif |
+| 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home |
+| 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil → Buat PIN → Akun Berhasil Dibuat |
+| 🌐 Google Sign-In | 🟢 Selesai | OAuth Google → Pilih Akun → Lengkapi Profil → OTP → Buat PIN → Home |
+| 🍎 Apple Sign-In | ⚪ Placeholder | UI tersedia, belum aktif |
+| 📩 Verifikasi OTP Dummy | 🟢 Selesai | Kode valid: `123456`, `555555`, `000000`, `999999` |
+| 🔓 Lupa PIN | 🟢 Selesai | OTP → Verifikasi Tanggal Lahir → PIN Baru (boleh sama dengan lama) |
+| 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → redirect |
+| 💤 Dormant Account | 🟢 Selesai | Akun >60 hari tidak aktif → verifikasi via email |
+| 🏠 Home Screen | ⏳ Dalam Pengembangan | Placeholder tersedia |
+| 📅 Reservasi & Jadwal | ⏳ Dalam Pengembangan | — |
+| 📋 Riwayat Medis | ⏳ Dalam Pengembangan | — |
+| ⚙️ Settings | ⏳ Dalam Pengembangan | Termasuk language toggle & profil |
 
 ---
 
-## ✨ Fitur Utama (Features Implemented)
+## ✨ Fitur Utama
 
-### 1. 🌐 Internationalization & Multi-Language Support
-- **Default: Bahasa Inggris**
-- Dukungan Bahasa Indonesia tersedia
-- Button bahasa disembunyikan (akan ditambahkan di Settings nanti)
-- Seluruh teks menggunakan translation system `t(context, 'key')`
-- Siap untuk multi-bahasa dengan hanya toggle button
-
-### 2. 🔐 Google Sign-In dengan Flow 2 Halaman
-**Flow Authentication:**
-```
-1. Sign In with Google
-2. Pilih akun Google
-3. Halaman 1: Isi Profil
-   - Nama (auto-fill dari Google)
-   - Email (auto-fill dari Google)
-   - Nomor HP (input manual)
-   - Tanggal Lahir (date picker)
-   - Gender (dropdown)
-4. Halaman 2: Create PIN
-   - Input PIN 6-digit (number pad)
-   - Konfirmasi PIN
-5. Submit → Home Screen
-```
-
-**Keunggulan:**
-- ✅ Auto-fill nama & email dari Google
-- ✅ PIN terpisah di halaman dedicated dengan number pad
-- ✅ Validasi nomor HP Indonesia
-- ✅ UX yang clean dan step-by-step
-
-### 3. 📱 Indonesian Phone Number Validation
-**Format yang didukung:**
-- `08xxxxxxxxx` (11-13 digit)
-- `628xxxxxxxxx` (12-14 digit dengan kode negara)
-- `8xxxxxxxxx` (10-12 digit tanpa 0 atau kode negara)
-
-**Normalisasi otomatis:**
-- Semua format dinormalisasi ke `+628xxxxxxxxx`
-- Konsisten di semua screen (Sign In, Sign Up, Forgot PIN, Google Profile)
-
-### 4. 🔑 Verifikasi PIN & Keamanan (SHA-256 PIN Hashing)
-- Enkripsi PIN 6-digit menggunakan **SHA-256 PIN Hashing**
-- Numpad kustom dengan umpan balik haptik (vibration feedback)
-- Visual feedback dengan animated PIN dots
-
-### 5. 📩 Verifikasi OTP Dummy Terkontrol
-**Phone OTP (4-digit):**
-- `1234`, `5555`, `0000`, `9999`
-
-**Email OTP (6-digit) - untuk future use:**
-- `123456`, `000000`
-
-### 6. 🛡️ Keamanan & Anti-Bruteforce (Rate Limiting)
-- **PIN Rate Limit**: Mengunci akses selama 5 menit jika gagal 3 kali berturut-turut
-- **OTP Rate Limit**: Proteksi percobaan ulang OTP jika gagal 3 kali
-- **Dormant Account Protection**: Pengalihan verifikasi ke email jika akun tidak aktif >60 hari
-
-### 7. 🔒 Forgot PIN Flow
-**Complete flow untuk reset PIN:**
-```
-1. Input nomor HP
-2. Verifikasi dengan OTP
-3. Verifikasi tanggal lahir
-4. Create new PIN (number pad)
-5. Konfirmasi PIN
-6. Success → Redirect ke Sign In
-```
-
-### 8. 🎨 Estetika & UI/UX Premium
-- Desain *Glassmorphism*, gradien warna lembut
-- Sistem umpan balik interaktif dengan `CustomBottomSheet` (Sukses, Peringatan, & Error)
-- Consistent color scheme: `#00A79D` (primary), `#17324D` (text)
-- Number pad dengan haptic feedback
-
-### 9. 🚀 Persistent Onboarding Experience
-- Alur *onboarding* interaktif yang hanya muncul pada peluncuran pertama
-- Status `has_seen_onboarding` disimpan secara lokal menggunakan `SharedPreferences`
-- `SplashScreen` cerdas yang auto-routing berdasarkan status sesi
+### 1. 🚀 Onboarding
+- 3 slide interaktif dengan animasi page transition
+- Hanya muncul sekali saat pertama kali membuka aplikasi
+- Status disimpan secara lokal menggunakan `SharedPreferences`
+- Konten slide:
+  1. **Pesan Jadwal Tanpa Ribet!** — Atur jadwal konsultasi dengan gampang dan efisien
+  2. **Pantau Kesehatan Lebih Mudah** — Monitor perkembangan vital-mu secara real-time
+  3. **Perawatan Medis Dirumah Anda** — Atur jadwal untuk melakukan perawatan medis dirumah
 
 ---
 
-## 🚧 Modul Dalam Pengembangan (On Progress)
+### 2. 🔑 Sign In & Registrasi via Nomor HP
 
-- ⏳ **Dashboard & Reservation Services**: Pemesanan sesi terapi fisik & manajemen jadwal pasien
-- ⏳ **Medical History**: Catatan perkembangan terapi dan riwayat medis pasien
-- ⏳ **Settings**: Language toggle, profile settings, logout
+**Alur nomor sudah terdaftar:**
+```
+Sign In → Input Nomor HP
+  → OTP Verification (123456 / 555555 / 000000 / 999999)
+  → PIN Verification (6-digit)
+  → Home Screen
+```
+
+**Alur nomor belum terdaftar:**
+```
+Sign In → Input Nomor HP
+  → OTP Verification
+  → Lengkapi Profil (Nama, Email, Tanggal Lahir, Gender)
+  → Buat PIN (6-digit) → Konfirmasi PIN
+  → Account Created Screen (animasi ✓ + countdown 5 detik)
+  → Home Screen
+```
+
+**Validasi nomor HP Indonesia:**
+| Format Input | Contoh | Hasil Normalisasi |
+|---|---|---|
+| `08xxxxxxxxx` | `081234567890` | `+6281234567890` |
+| `628xxxxxxxxx` | `6281234567890` | `+6281234567890` |
+| `8xxxxxxxxx` | `81234567890` | `+6281234567890` |
+
+**Session persisten:** Setelah login berhasil, saat app dibuka kembali langsung ke PIN Verification tanpa OTP ulang.
 
 ---
 
-## 🛠️ Teknologi & Stack (Tech Stack)
+### 3. 🌐 Google Sign-In
 
-- **Framework**: Flutter 3.x (Dart)
-- **Backend**: Supabase (PostgreSQL Database, Auth, RLS Policies)
-- **State Management**: `ValueNotifier` & Custom `InheritedNotifier`
-- **Encryption**: SHA-256 Hashing for PIN Data
-- **UI Architecture**: Glassmorphism & Custom Bottom Sheet Design System
-- **OAuth**: Google Sign-In (Supabase OAuth)
-- **Phone Validation**: Indonesian phone number formats
+**Alur akun baru:**
+```
+Sign In → Continue with Google
+  → Pilih Akun Google (dialog picker selalu muncul)
+  → Lengkapi Profil (nama auto-fill dari Google, nomor HP & TTL isi manual)
+  → OTP Verification (verifikasi nomor HP yang diisi)
+  → Buat PIN (6-digit) → Konfirmasi PIN
+  → Account Created Screen
+  → Home Screen
+```
+
+**Alur akun sudah terdaftar:**
+```
+Sign In → Continue with Google
+  → Pilih Akun Google (dialog picker selalu muncul)
+  → PIN Verification (langsung, tanpa OTP ulang)
+  → Home Screen
+```
+
+**Edge case — email Google sama dengan akun HP:**
+```
+Sign In → Continue with Google
+  → Deteksi signup_method == 'phone'
+  → Sign out session Google
+  → OTP Verification (verifikasi nomor HP terdaftar)
+  → PIN Verification
+  → Home Screen
+```
+
+**Routing logic (setelah OAuth callback):**
+- `phone ada` && `pin_hash ada` → **PinVerificationScreen**
+- Salah satu kosong → **GoogleProfileCompletionScreen**
+- `signup_method == 'phone'` && `phone ada` → sign out → **OtpVerificationScreen**
 
 ---
 
-## 🚀 Cara Menjalankan Aplikasi (Getting Started)
+### 4. 🔓 Lupa PIN
 
-### Prasyarat
-- Flutter SDK (`>=3.19.0`)
-- Android Studio / VS Code
-- Perangkat Android (Fisik / Emulator)
-- Supabase Project (untuk backend)
+```
+PIN Verification → Lupa PIN
+  → Input Nomor HP
+  → OTP Verification
+  → Verifikasi Tanggal Lahir
+  → Buat PIN Baru (boleh sama dengan PIN lama — user sudah terverifikasi identitasnya)
+  → Konfirmasi PIN
+      ↳ PIN tidak cocok → error inline merah (dots merah)
+  → PIN Reset Success Screen (animasi ✓ + countdown 3 detik)
+  → Sign In Screen
+```
 
-### Langkah-langkah Jalankan
+---
+
+### 5. 🛡️ Keamanan
+
+| Mekanisme | Detail |
+|---|---|
+| PIN Hashing | FNV-1a Hash (tersimpan di kolom `pin_hash`) |
+| PIN Rate Limit | Salah 3x → layar kunci 5 menit |
+| OTP Rate Limit | Salah 3x → redirect ke OTP Rate Limit Screen |
+| Google Account Picker | `signOut()` sebelum `signIn()` — dialog pilih akun selalu muncul |
+| Profile Completeness Check | Hanya `phone` + `pin_hash` keduanya ada yang dianggap akun lengkap |
+| Duplicate Phone Check | Cek nomor duplikat mengecualikan akun milik user yang sedang login |
+| Dormant Account | Tidak aktif >60 hari → verifikasi via email OTP |
+| Admin PIN Update | `_updateProfileByAdmin` pakai Dio langsung dengan header `Prefer: return=representation` |
+
+---
+
+### 6. 🎨 UI / UX
+
+- **Design style**: Glassmorphism dengan backdrop blur
+- **Color scheme**: `#00A79D` (primary teal), `#17324D` (text dark)
+- **Error handling**: Semua error form menggunakan `CustomBottomSheet` (konsisten di semua screen)
+- **PIN error**: Inline dots merah khusus untuk mismatch PIN di screen PIN
+- **Success screens**: Animasi elastik icon centang + countdown otomatis
+- **Haptic feedback**: Setiap tap angka pada numpad
+
+---
+
+## 🗂️ Struktur Folder
+
+```
+lib/
+├── l10n/
+│   └── app_language.dart                    # Semua string ID & EN
+├── screens/
+│   ├── auth/
+│   │   ├── account_created_screen.dart      # Sukses registrasi + countdown 5 detik
+│   │   ├── forgot_pin_screen.dart           # Lupa PIN + verif tanggal lahir + reset PIN
+│   │   ├── google_create_pin_screen.dart    # Buat PIN setelah Google sign-in
+│   │   ├── google_profile_completion_screen.dart  # Lengkapi profil akun Google baru
+│   │   ├── otp_verification_screen.dart     # Verifikasi OTP 6-digit
+│   │   ├── phone_create_pin_screen.dart     # Buat PIN setelah registrasi HP
+│   │   ├── phone_profile_completion_screen.dart   # Lengkapi profil akun HP baru
+│   │   ├── pin_verification_screen.dart     # Input PIN saat sign in
+│   │   └── sign_in_screen.dart              # Entry point auth + Google/Apple OAuth
+│   ├── errors/
+│   │   ├── no_internet_screen.dart
+│   │   ├── otp_rate_limit_screen.dart
+│   │   ├── pin_rate_limit_screen.dart
+│   │   └── verification_rate_limit_screen.dart
+│   ├── home/
+│   │   └── home_screen.dart
+│   ├── onboarding/
+│   │   └── onboarding_screen.dart
+│   └── splash/
+│       └── splash_screen.dart               # Auto-routing berdasarkan sesi & kelengkapan profil
+├── services/
+│   ├── supabase_auth_service.dart           # Semua logika autentikasi
+│   ├── supabase_api_client.dart             # Retrofit API client (generated)
+│   └── supabase_api_client.g.dart           # Generated code — jangan diedit manual
+└── widgets/
+    ├── custom_bottom_sheet.dart             # Reusable bottom sheet (success/error/warning)
+    ├── custom_error_screen.dart
+    ├── google_logo_icon.dart
+    └── language_button.dart
+```
+
+---
+
+## 🛠️ Tech Stack
+
+| Komponen | Teknologi |
+|---|---|
+| Framework | Flutter 3.x (Dart) |
+| Backend | Supabase (PostgreSQL + Auth + RLS) |
+| OAuth | Google Sign-In via native SDK + Supabase |
+| HTTP Client | Dio + Retrofit (generated) |
+| Local Storage | `shared_preferences` |
+| PIN Security | FNV-1a Hashing |
+| UI Style | Glassmorphism + Custom Design System |
+
+---
+
+## 🚀 Cara Menjalankan
+
 ```bash
 # 1. Clone repository
 git clone https://github.com/username/kedotaapp.git
-
-# 2. Masuk ke folder project
 cd kedotaapp
 
-# 3. Setup .env file
-# Copy .env.example ke .env dan isi dengan kredensial Supabase
-
-# 4. Unduh dependencies
+# 2. Install dependencies
 flutter pub get
 
-# 5. Jalankan aplikasi di HP / Emulator
+# 3. Setup environment
+# Salin .env.example → .env, isi SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+
+# 4. Jalankan
 flutter run
 ```
 
-### Testing Credentials
-**OTP Dummy:**
-- Phone OTP: `1234`, `5555`, `0000`, `9999`
-- Email OTP: `123456`, `000000`
+### Kredensial Testing
 
-**Test Flow:**
-1. Sign In dengan nomor HP (08xxx, 628xxx, atau 8xxx)
-2. Input OTP dummy
-3. Input PIN 6-digit
-4. Atau gunakan Google Sign-In untuk registrasi baru
+**OTP Dummy (6-digit):**
+```
+123456   555555   000000   999999
+```
+
+**Format nomor HP valid:**
+```
+081234567890
+6281234567890
+81234567890
+```
 
 ---
 
-## 📝 Authentication Flow
+## 🗃️ Supabase Database
 
-### Sign In (Existing User)
-```
-Sign In Screen
-├── Input: Nomor HP
-├── Submit → OTP Verification
-├── Input: OTP (1234/5555/0000/9999)
-├── Submit → PIN Verification
-├── Input: PIN 6-digit
-└── Submit → Home Screen
-```
+### Tabel `profiles`
 
-### Google Sign-In (New User)
-```
-Sign In Screen
-├── Click: "Continue with Google"
-├── Google Account Selection
-├── Profile Form Screen
-│   ├── Auto-fill: Nama & Email
-│   ├── Input: Nomor HP (validated)
-│   ├── Select: Tanggal Lahir
-│   └── Select: Gender
-├── Submit → Create PIN Screen
-│   ├── Input: PIN 6-digit (number pad)
-│   └── Input: Confirm PIN
-└── Submit → Home Screen
-```
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| `id` | uuid | Primary key, terhubung ke `auth.users` |
+| `phone` | text | Nomor HP format `+62xxx` (dinormalisasi saat simpan) |
+| `full_name` | text | Nama lengkap |
+| `email` | text | Email display |
+| `auth_email` | text | Email yang dipakai di Supabase Auth |
+| `pin_hash` | text | Hash PIN FNV-1a |
+| `birth_date` | date | Tanggal lahir (untuk verifikasi lupa PIN) |
+| `gender` | text | `Laki-laki` / `Perempuan` / `Lainnya` |
+| `signup_method` | text | `phone` / `google` / `apple` |
+| `is_profile_complete` | bool | Flag kelengkapan profil |
+| `last_login_at` | timestamptz | Untuk deteksi akun dormant (>60 hari) |
+| `created_at` | timestamptz | — |
+| `updated_at` | timestamptz | — |
 
-### Forgot PIN
+### Logika Profile Completeness
+
+Akun dianggap **lengkap** hanya jika kolom `phone` **dan** `pin_hash` keduanya tidak kosong di tabel `profiles`. Flag `is_profile_complete` digunakan sebagai informasi tambahan, bukan penentu utama routing.
+
+---
+
+## 🔄 Alur Routing Splash Screen
+
 ```
-Sign In Screen
-├── Click: "Forgot PIN?"
-├── Forgot PIN Screen
-│   └── Input: Nomor HP
-├── Submit → OTP Verification
-├── Submit → Birth Date Verification
-├── Submit → Create New PIN Screen
-│   ├── Input: New PIN 6-digit
-│   └── Input: Confirm PIN
-└── Submit → Sign In Screen
+App dibuka
+  └─ SplashScreen
+       ├─ [session aktif]
+       │    ├─ phone ada && pin_hash ada  →  PinVerificationScreen
+       │    └─ salah satu kosong          →  GoogleProfileCompletionScreen
+       ├─ [no session] && hasSeenOnboarding  →  SignInScreen
+       └─ [no session] && belum onboarding   →  OnboardingScreen
 ```
 
 ---

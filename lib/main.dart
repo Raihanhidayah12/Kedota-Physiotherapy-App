@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'l10n/app_language.dart';
@@ -14,22 +15,11 @@ Future<void> main() async {
     debugPrint('Could not load .env file: $e');
   }
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL'] ??
-      const String.fromEnvironment(
-        'SUPABASE_URL',
-        defaultValue: 'https://wwmctqhbqpsbkyxkeaqv.supabase.co',
-      );
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
 
-  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ??
-      const String.fromEnvironment(
-        'SUPABASE_ANON_KEY',
-        defaultValue: 'sb_publishable_UgW9oHNC_Fzc7fUEFyecoQ_DUUqM25k',
-      );
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
-  await Supabase.initialize(
-    url: supabaseUrl,
-    publishableKey: supabaseAnonKey,
-  );
+  await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);
 
   runApp(const KedotaApp());
 }
@@ -50,6 +40,7 @@ class KedotaApp extends StatelessWidget {
             brightness: Brightness.light,
           ),
           useMaterial3: true,
+          textTheme: GoogleFonts.openSansTextTheme(),
         ),
         home: const SplashScreen(),
       ),

@@ -1,0 +1,841 @@
+openapi: 3.0.0
+info:
+  title: Kedota Physiotherapy App API
+  version: 1.1.0
+  description: >-
+    Spesifikasi OpenAPI untuk API produksi aplikasi Kedota Physiotherapy yang
+    berjalan di atas Supabase. Dokumen ini mencakup alur autentikasi phone dan
+    Google OAuth, manajemen profil, update PIN, verifikasi tanggal lahir,
+    CRUD data profil, update status, dan penghapusan akun.
+servers:
+  - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/rest/v1
+    description: Production Supabase REST API
+tags:
+  - name: Auth
+    description: Endpoint untuk registrasi, login, dan OAuth pengguna
+  - name: Profiles
+    description: Endpoint untuk mengambil, membuat, memperbarui, dan menghapus data profil pengguna
+  - name: PIN
+    description: Endpoint untuk update dan verifikasi PIN pengguna
+security:
+  - apiKeyAuth: []
+  - bearerAuth: []
+paths:
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Daftar akun baru via nomor HP
+      description: >-
+        Membuat akun pengguna baru di Supabase Auth menggunakan email yang
+        digenerate dari nomor HP, lalu menyimpan profil awal ke tabel profiles
+        dengan signup_method = phone.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: Akun berhasil dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Payload tidak valid atau data yang dikirim tidak lengkap.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Tidak memiliki otorisasi yang valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server saat memproses pendaftaran.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/signin:
+    post:
+      tags:
+        - Auth
+      summary: Login pengguna via nomor HP dan PIN
+      description: >-
+        Melakukan login pengguna menggunakan nomor telepon dan PIN. Di sisi
+        app, nomor HP dikonversi ke email lalu signInWithPassword dipanggil
+        ke Supabase Auth.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignInRequest'
+      responses:
+        '200':
+          description: Login berhasil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Data login tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Kredensial tidak valid, PIN salah.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server saat login.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/google:
+    post:
+      tags:
+        - Auth
+      summary: Login atau Daftar via Google OAuth
+      description: >-
+        Melakukan autentikasi menggunakan Google Sign-In. Di Android dan iOS
+        menggunakan native Google SDK dengan signInWithIdToken, di web
+        menggunakan signInWithOAuth. Routing setelah callback: jika phone dan
+        pin_hash ada di profiles maka ke PinVerificationScreen; jika salah satu
+        kosong maka ke GoogleProfileCompletionScreen; jika signup_method adalah
+        phone maka sign out Google lalu ke OTP verification.
+      responses:
+        '200':
+          description: OAuth berhasil, session Supabase dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: OAuth gagal atau user membatalkan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles:
+    get:
+      tags:
+        - Profiles
+      summary: Ambil daftar profil
+      description: >-
+        Mengambil daftar data profil pengguna dari tabel profiles.
+        Mendukung filter by id, email, atau phone via query parameter.
+      parameters:
+        - in: query
+          name: select
+          schema:
+            type: string
+            example: "id,full_name,email,phone,pin_hash,signup_method"
+          description: Kolom yang ingin diambil menggunakan PostgREST select syntax.
+        - in: query
+          name: id
+          schema:
+            type: string
+            example: "eq.123e4567-e89b-12d3-a456-426614174000"
+          description: Filter profil berdasarkan ID menggunakan format PostgREST eq.value.
+        - in: query
+          name: phone
+          schema:
+            type: string
+            example: "in.(+6281234567890,6281234567890,081234567890)"
+          description: Filter profil berdasarkan nomor telepon dengan multi-variant matching.
+        - in: query
+          name: email
+          schema:
+            type: string
+            example: "eq.budi@example.com"
+          description: Filter profil berdasarkan email.
+      responses:
+        '200':
+          description: Daftar profil berhasil diambil.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+        '401':
+          description: Token atau API key tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server saat mengambil data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Profiles
+      summary: Tambah data profil baru
+      description: >-
+        Membuat entri profil baru untuk pengguna. Dipakai saat
+        completeSocialProfile untuk Google dan createPhoneProfile untuk HP.
+        Membutuhkan header Prefer return=representation agar response
+        mengembalikan row yang dibuat.
+      parameters:
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+          description: Wajib untuk mendapatkan data profil yang baru dibuat sebagai response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProfileRequest'
+      responses:
+        '201':
+          description: Profil berhasil dibuat.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+        '400':
+          description: Payload tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Tidak memiliki otorisasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server saat membuat profil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles/{id}:
+    get:
+      tags:
+        - Profiles
+      summary: Ambil detail profil by ID
+      description: Mengambil detail profil berdasarkan ID pengguna UUID.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: UUID profil pengguna.
+      responses:
+        '200':
+          description: Detail profil berhasil diambil.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+        '401':
+          description: Token atau API key tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Profil tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Profiles
+      summary: Update profil pengguna
+      description: >-
+        Memperbarui data profil. Dipakai untuk update nama, email, TTL, gender,
+        atau pin_hash. Membutuhkan header Prefer return=representation.
+        Jika dipanggil via service-role key admin, menggunakan Dio langsung
+        dengan header Authorization Bearer service_role_key.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: UUID profil pengguna dengan format PostgREST eq.uuid.
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+          description: Wajib agar response mengembalikan row yang diupdate dan bukan null.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profil berhasil diperbarui.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+        '400':
+          description: Payload tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Akses ditolak.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Profil tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Profiles
+      summary: Hapus profil pengguna
+      description: Menghapus data profil pengguna dari tabel profiles.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: UUID profil pengguna yang akan dihapus.
+      responses:
+        '200':
+          description: Data berhasil dihapus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '401':
+          description: Akses ditolak.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Profil tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles/{id}/pin:
+    patch:
+      tags:
+        - PIN
+      summary: Update PIN pengguna
+      description: >-
+        Memperbarui pin_hash profil pengguna. Dipanggil dari alur lupa PIN
+        dengan allowSamePin true, maupun ganti PIN biasa dengan allowSamePin
+        false. Setelah update pin_hash di tabel profiles, password di Supabase
+        Auth juga disinkronkan agar login tetap bisa menggunakan PIN baru.
+        Jika user sedang login maka update dilakukan via client session,
+        jika tidak maka menggunakan service-role admin API.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: UUID profil pengguna.
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+          description: Wajib agar response tidak null.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePinRequest'
+      responses:
+        '200':
+          description: PIN berhasil diperbarui.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+        '400':
+          description: PIN baru sama dengan PIN lama saat allowSamePin false.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Akses ditolak.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Profil tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles/{id}/verify-birth-date:
+    post:
+      tags:
+        - Profiles
+      summary: Verifikasi tanggal lahir
+      description: >-
+        Memverifikasi tanggal lahir user untuk keperluan lupa PIN.
+        Membandingkan input tanggal lahir dengan yang tersimpan di kolom
+        birth_date format YYYY-MM-DD. Jika tidak cocok, diberlakukan
+        cooldown 3 detik sebelum user bisa coba lagi.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: UUID profil pengguna.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyBirthDateRequest'
+      responses:
+        '200':
+          description: Hasil verifikasi tanggal lahir.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyBirthDateResponse'
+        '401':
+          description: Akses ditolak.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Profil tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles/{id}/status:
+    patch:
+      tags:
+        - Profiles
+      summary: Update status profil
+      description: >-
+        Memperbarui flag tertentu pada profil pengguna seperti
+        is_profile_complete atau last_login_at.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: UUID profil pengguna.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStatusRequest'
+      responses:
+        '200':
+          description: Status berhasil diperbarui.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+        '400':
+          description: Payload tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Akses ditolak.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Profil tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Kesalahan internal server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: apikey
+      description: Supabase anon key atau service-role key
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase JWT session token atau service-role key
+
+  schemas:
+    SignupRequest:
+      type: object
+      required:
+        - phone
+        - pin
+        - full_name
+        - birth_date
+        - gender
+      properties:
+        phone:
+          type: string
+          description: Nomor HP format Indonesia, akan dinormalisasi ke +62xxx
+          example: "081234567890"
+        pin:
+          type: string
+          description: PIN 6-digit
+          example: "123456"
+        full_name:
+          type: string
+          example: Budi Santoso
+        email:
+          type: string
+          format: email
+          description: Email opsional. Jika tidak diisi, digenerate dari nomor HP.
+          example: budi@example.com
+        birth_date:
+          type: string
+          format: date
+          example: "1995-08-10"
+        gender:
+          type: string
+          enum:
+            - Laki-laki
+            - Perempuan
+            - Lainnya
+          example: Laki-laki
+        signup_method:
+          type: string
+          enum:
+            - phone
+            - google
+            - apple
+          default: phone
+
+    SignInRequest:
+      type: object
+      required:
+        - phone
+        - pin
+      properties:
+        phone:
+          type: string
+          description: Nomor HP format Indonesia
+          example: "081234567890"
+        pin:
+          type: string
+          description: PIN 6-digit
+          example: "123456"
+
+    AuthResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        email:
+          type: string
+          example: budi@example.com
+        access_token:
+          type: string
+          description: JWT session token Supabase
+        message:
+          type: string
+          example: Login berhasil
+
+    CreateProfileRequest:
+      type: object
+      required:
+        - id
+        - phone
+        - full_name
+        - pin_hash
+        - signup_method
+        - is_profile_complete
+      properties:
+        id:
+          type: string
+          description: UUID dari auth.users
+          example: 123e4567-e89b-12d3-a456-426614174000
+        phone:
+          type: string
+          description: Nomor HP format +62xxx
+          example: "+6281234567890"
+        full_name:
+          type: string
+          example: Budi Santoso
+        email:
+          type: string
+          format: email
+          example: budi@example.com
+        auth_email:
+          type: string
+          format: email
+          description: Email yang dipakai di Supabase Auth
+          example: budi@example.com
+        pin_hash:
+          type: string
+          description: Hash FNV-1a dari PIN 6-digit
+          example: "937377f0abcd1234"
+        birth_date:
+          type: string
+          format: date
+          example: "1995-08-10"
+        gender:
+          type: string
+          enum:
+            - Laki-laki
+            - Perempuan
+            - Lainnya
+          example: Laki-laki
+        signup_method:
+          type: string
+          enum:
+            - phone
+            - google
+            - apple
+          example: phone
+        is_profile_complete:
+          type: boolean
+          example: true
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-08-09T10:00:00Z"
+
+    UpdateProfileRequest:
+      type: object
+      description: Semua field opsional, hanya field yang dikirim yang diupdate.
+      properties:
+        full_name:
+          type: string
+          example: Budi Santoso
+        email:
+          type: string
+          format: email
+          example: budi@example.com
+        birth_date:
+          type: string
+          format: date
+          example: "1995-08-10"
+        gender:
+          type: string
+          enum:
+            - Laki-laki
+            - Perempuan
+            - Lainnya
+          example: Laki-laki
+        phone:
+          type: string
+          example: "+6281234567890"
+        is_profile_complete:
+          type: boolean
+          example: true
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-08-09T10:30:00Z"
+
+    UpdatePinRequest:
+      type: object
+      required:
+        - pin_hash
+      properties:
+        pin_hash:
+          type: string
+          description: Hash FNV-1a dari PIN baru
+          example: "a1b2c3d4e5f67890"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-08-09T10:30:00Z"
+
+    VerifyBirthDateRequest:
+      type: object
+      required:
+        - birth_date
+      properties:
+        birth_date:
+          type: string
+          format: date
+          description: Tanggal lahir input dari user format YYYY-MM-DD
+          example: "2000-01-01"
+
+    VerifyBirthDateResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          description: true jika tanggal lahir cocok dengan data di DB
+          example: true
+
+    UpdateStatusRequest:
+      type: object
+      properties:
+        is_profile_complete:
+          type: boolean
+          example: true
+        last_login_at:
+          type: string
+          format: date-time
+          example: "2026-08-09T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-08-09T10:00:00Z"
+
+    Profile:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        phone:
+          type: string
+          description: Format +62xxx
+          example: "+6281234567890"
+        full_name:
+          type: string
+          example: Budi Santoso
+        email:
+          type: string
+          example: budi@example.com
+        auth_email:
+          type: string
+          example: budi@example.com
+        pin_hash:
+          type: string
+          example: "937377f0abcd1234"
+        birth_date:
+          type: string
+          format: date
+          example: "1995-08-10"
+        gender:
+          type: string
+          example: Laki-laki
+        signup_method:
+          type: string
+          enum:
+            - phone
+            - google
+            - apple
+          example: phone
+        is_profile_complete:
+          type: boolean
+          example: true
+        last_login_at:
+          type: string
+          format: date-time
+          example: "2026-08-09T09:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-08-09T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-08-09T10:30:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Invalid request payload
+        message:
+          type: string
+          example: Silakan cek kembali data yang dikirim.
+
+    DeleteResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Data berhasil dihapus.
+        deleted:
+          type: boolean
+          example: true

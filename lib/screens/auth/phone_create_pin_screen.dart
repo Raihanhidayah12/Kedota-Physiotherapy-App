@@ -31,11 +31,23 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
   String _confirmPin = '';
   bool _isConfirming = false;
   bool _isLoading = false;
+  bool _isPinError = false;
 
-
+  void _showPinError() {
+    setState(() => _isPinError = true);
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => _isPinError = false);
+    });
+  }
 
   void _onNumberPressed(String val) {
+    if (_isLoading) return;
     HapticFeedback.selectionClick();
+
+    if (val == 'backspace') {
+      _onBackspace();
+      return;
+    }
 
     if (!_isConfirming) {
       if (_firstPin.length < 6) {
@@ -83,26 +95,17 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
 
   Future<void> _handlePinSubmission() async {
     if (_firstPin != _confirmPin) {
-      CustomBottomSheet.show(
-        context,
-        type: BottomSheetType.error,
-        title: 'Error',
-        subtitle: t(context, 'confirmPinMismatchError'),
-        singleButtonText: t(context, 'close') ?? 'Tutup',
-        onSinglePressed: () => Navigator.of(context).pop(),
-      );
       setState(() {
-        _firstPin = '';
         _confirmPin = '';
-        _isConfirming = false;
+        _isConfirming = true;
       });
+      _showPinError();
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      // Create new profile for phone sign up
       await SupabaseAuthService().createPhoneProfile(
         phone: widget.phone,
         fullName: widget.fullName,
@@ -115,20 +118,18 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => const AccountCreatedScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const AccountCreatedScreen()),
         (route) => false,
       );
     } catch (e) {
       if (!mounted) return;
       debugPrint('Phone profile creation error: $e');
-      
+
       String errorMessage = e.toString();
       if (errorMessage.startsWith('Exception: ')) {
         errorMessage = errorMessage.substring(11);
       }
-      
+
       CustomBottomSheet.show(
         context,
         type: BottomSheetType.error,
@@ -137,7 +138,7 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
         singleButtonText: t(context, 'close') ?? 'Tutup',
         onSinglePressed: () => Navigator.of(context).pop(),
       );
-      
+
       setState(() {
         _firstPin = '';
         _confirmPin = '';
@@ -150,226 +151,201 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
     }
   }
 
+  Widget _buildNumpadButton(String value) {
+    if (value.isEmpty) {
+      return const SizedBox(width: 68, height: 68);
+    }
+
+    final isBackspace = value == 'backspace';
+
+    if (isBackspace) {
+      return GestureDetector(
+        onTap: () => _onNumberPressed(value),
+        child: Container(
+          width: 68,
+          height: 52,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF00A79D), width: 2),
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.backspace_outlined,
+              color: Color(0xFF00A79D),
+              size: 24,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => _onNumberPressed(value),
+      child: Container(
+        width: 68,
+        height: 68,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentPin = _isConfirming ? _confirmPin : _firstPin;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isCompact = screenWidth < 380;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: isCompact ? 20 : 28,
-                vertical: 24,
+        child: Column(
+          children: [
+            const SizedBox(height: 36),
+
+            // LOCK ICON BADGE
+            Center(
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F6F4),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.lock_person_outlined,
+                  size: 36,
+                  color: Color(0xFF00A79D),
+                ),
               ),
+            ),
+            const SizedBox(height: 16),
+
+            // SUBTITLE TEXT
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                _isConfirming
+                    ? 'Silakan masukkan kembali 6 digit PIN Anda untuk konfirmasi.'
+                    : 'Silakan buat 6 digit PIN Anda terlebih dahulu untuk melanjutkan.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: Color(0xFF334155),
+                  height: 1.45,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // ERROR TEKS (PIN MISMATCH)
+            if (_isPinError)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'PIN tidak sesuai silakan coba lagi.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFFEF4444),
+                  ),
+                ),
+              ),
+
+            // 6 PIN DOTS INDICATOR
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(6, (index) {
+                final isFilled = index < currentPin.length;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _isPinError
+                        ? (isFilled
+                              ? const Color(0xFFEF4444)
+                              : const Color(0xFFE2E8F0))
+                        : (isFilled
+                              ? const Color(0xFF00A79D)
+                              : const Color(0xFFE2E8F0)),
+                  ),
+                );
+              }),
+            ),
+
+            const Spacer(),
+
+            // NUMERIC KEYPAD
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
-                  // Header
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      IconButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () {
-                                if (_isConfirming) {
-                                  setState(() {
-                                    _isConfirming = false;
-                                    _confirmPin = '';
-                                  });
-                                } else {
-                                  Navigator.of(context).pop();
-                                }
-                              },
-                        icon: const Icon(Icons.arrow_back_rounded),
-                        color: const Color(0xFF17324D),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.72),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox.shrink(), // Language button hidden
+                      Expanded(child: _buildNumpadButton('1')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('2')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('3')),
                     ],
                   ),
-                  const Spacer(),
-
-                  // Title & Description
-                  Text(
-                    _isConfirming
-                        ? t(context, 'confirmPin')
-                        : t(context, 'createPin'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF17324D),
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    t(context, 'createPinDesc'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF64748B),
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-
-                  // PIN Dots
+                  const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(6, (index) {
-                      final isFilled = index < currentPin.length;
-                      final dotMargin = isCompact ? 6.0 : 8.0;
-                      final dotSize = isCompact ? 12.0 : 14.0;
-                      
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOutCubic,
-                        margin: EdgeInsets.symmetric(horizontal: dotMargin),
-                        width: dotSize,
-                        height: dotSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isFilled
-                              ? const Color(0xFF00A79D)
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: isFilled
-                                ? const Color(0xFF00A79D)
-                                : const Color(0xFFCBD5E1),
-                            width: 2,
-                          ),
-                        ),
-                      );
-                    }),
+                    children: [
+                      Expanded(child: _buildNumpadButton('4')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('5')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('6')),
+                    ],
                   ),
-                  const Spacer(),
-
-                  // Number Pad
-                  if (_isLoading)
-                    const CircularProgressIndicator(
-                      color: Color(0xFF00A79D),
-                    )
-                  else
-                    _buildNumberPad(isCompact),
-
-                  SizedBox(height: isCompact ? 16 : 24),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _buildNumpadButton('7')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('8')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('9')),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _buildNumpadButton('')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('0')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('backspace')),
+                    ],
+                  ),
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildNumberPad(bool isCompact) {
-    final buttonSize = isCompact ? 72.0 : 80.0;
-    final fontSize = isCompact ? 26.0 : 28.0;
-
-    return Column(
-      children: [
-        for (int row = 0; row < 3; row++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int col = 1; col <= 3; col++)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: _buildNumberButton(
-                      '${row * 3 + col}',
-                      buttonSize,
-                      fontSize,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(width: buttonSize + 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _buildNumberButton('0', buttonSize, fontSize),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _buildBackspaceButton(buttonSize),
-            ),
+            const SizedBox(height: 36),
           ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNumberButton(String number, double size, double fontSize) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _onNumberPressed(number),
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: size,
-          height: size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFFF1F5F9),
-            border: Border.all(
-              color: const Color(0xFFE2E8F0),
-              width: 1,
-            ),
-          ),
-          child: Text(
-            number,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF17324D),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBackspaceButton(double size) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _onBackspace,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: size,
-          height: size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFFFEF2F2),
-            border: Border.all(
-              color: const Color(0xFFFECACA),
-              width: 1,
-            ),
-          ),
-          child: const Icon(
-            Icons.backspace_outlined,
-            color: Color(0xFFDC2626),
-            size: 24,
-          ),
         ),
       ),
     );

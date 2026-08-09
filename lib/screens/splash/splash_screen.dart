@@ -7,7 +7,6 @@ import '../onboarding/onboarding_screen.dart';
 import '../auth/google_profile_completion_screen.dart';
 import '../auth/pin_verification_screen.dart';
 import '../auth/sign_in_screen.dart';
-import '../home/home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -21,42 +20,32 @@ class _SplashScreenState extends State<SplashScreen>
   // Main orchestrator
   late AnimationController _masterController;
 
-  // Logo & pulse rings
+  // Logo entrance animation
   late AnimationController _logoController;
-  late AnimationController _pulseController;
 
-  // Text animations
+  // Text reveal animation
   late AnimationController _textController;
 
-  // Background gradient animation
-  late AnimationController _gradientController;
-
-  // Exit animation (logo expand + background fill)
+  // Exit animation (Zoom logo to white screen)
   late AnimationController _exitController;
 
-  // Logo animations
+  // Logo entrance animations
   late Animation<double> _logoScale;
   late Animation<double> _logoOpacity;
+
+  // Exit animations
   late Animation<double> _exitLogoScale;
-  late Animation<double> _backgroundFill;
+  late Animation<double> _whiteOverlayOpacity;
+  late Animation<double> _textExitOpacity;
 
-  // Pulse ring animations
-  late Animation<double> _pulse1Scale;
-  late Animation<double> _pulse1Opacity;
-  late Animation<double> _pulse2Scale;
-  late Animation<double> _pulse2Opacity;
-  late Animation<double> _pulse3Scale;
-  late Animation<double> _pulse3Opacity;
-
-  // Text animations (staggered reveal)
+  // Text reveal animations
   late Animation<double> _titleOpacity;
   late Animation<Offset> _titleSlide;
   late Animation<double> _subtitleOpacity;
   late Animation<Offset> _subtitleSlide;
-  late Animation<double> _taglineOpacity;
 
-  // Gradient animation
-  late Animation<double> _gradientProgress;
+  Timer? _exitTimer;
+  Timer? _navTimer;
 
   @override
   void initState() {
@@ -64,89 +53,42 @@ class _SplashScreenState extends State<SplashScreen>
 
     // Master controller for orchestration
     _masterController = AnimationController(
-      duration: const Duration(milliseconds: 2600),
+      duration: const Duration(milliseconds: 2400),
       vsync: this,
     );
 
-    // Logo entrance
+    // Logo entrance (spring pop-in curve)
     _logoController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 1100),
       vsync: this,
     );
-
-    // Pulse rings (looping, pero controlled by master)
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat();
 
     // Text reveals
     _textController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 900),
       vsync: this,
     );
 
-    // Background gradient flow
-    _gradientController = AnimationController(
-      duration: const Duration(milliseconds: 4000),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    // Exit animation (logo expand + background fill)
+    // Exit animation (Ultra smooth zoom logo to full white)
     _exitController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 750),
       vsync: this,
     );
 
-    // ===== LOGO ANIMATIONS =====
-    _logoScale = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.easeOutCubic),
+    // ===== LOGO ENTRANCE =====
+    _logoScale = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.easeOutBack),
     );
 
-    _logoOpacity = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _logoController, curve: Curves.easeIn));
-
-    // ===== PULSE RING ANIMATIONS (staggered ripples) =====
-    _pulse1Scale = Tween<double>(begin: 0.6, end: 1.8).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeOutQuad),
-    );
-
-    _pulse1Opacity = Tween<double>(begin: 0.8, end: 0.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeOutQuad),
-    );
-
-    _pulse2Scale = Tween<double>(begin: 0.6, end: 1.8).animate(
+    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _pulseController,
-        curve: const Interval(0.3, 1.0, curve: Curves.easeOutQuad),
+        parent: _logoController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeIn),
       ),
     );
 
-    _pulse2Opacity = Tween<double>(begin: 0.6, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: const Interval(0.3, 1.0, curve: Curves.easeOutQuad),
-      ),
-    );
-
-    _pulse3Scale = Tween<double>(begin: 0.6, end: 1.8).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: const Interval(0.6, 1.0, curve: Curves.easeOutQuad),
-      ),
-    );
-
-    _pulse3Opacity = Tween<double>(begin: 0.4, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: const Interval(0.6, 1.0, curve: Curves.easeOutQuad),
-      ),
-    );
-
-    // ===== TEXT ANIMATIONS (staggered slide + fade) =====
-    _titleSlide = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero)
+    // ===== TEXT REVEALS =====
+    _titleSlide = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
         .animate(
           CurvedAnimation(parent: _textController, curve: Curves.easeOutCubic),
         );
@@ -156,52 +98,48 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     _subtitleSlide =
-        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(0, 0.25), end: Offset.zero).animate(
           CurvedAnimation(
             parent: _textController,
-            curve: const Interval(0.15, 1.0, curve: Curves.easeOutCubic),
+            curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
           ),
         );
 
     _subtitleOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _textController,
-        curve: const Interval(0.15, 1.0, curve: Curves.easeInOut),
+        curve: const Interval(0.2, 1.0, curve: Curves.easeInOut),
       ),
     );
 
-    _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+    // ===== ULTRA SMOOTH EXIT (ZOOM LOGO TO FULL WHITE SCREEN) =====
+    _exitLogoScale = Tween<double>(begin: 1.0, end: 40.0).animate(
+      CurvedAnimation(parent: _exitController, curve: Curves.easeInOutCubic),
+    );
+
+    _whiteOverlayOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _textController,
-        curve: const Interval(0.4, 1.0, curve: Curves.easeInOut),
+        parent: _exitController,
+        curve: const Interval(0.35, 1.0, curve: Curves.easeInOut),
       ),
     );
 
-    // ===== BACKGROUND GRADIENT ANIMATION =====
-    _gradientProgress = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _gradientController, curve: Curves.easeInOut),
-    );
-
-    // ===== EXIT ANIMATIONS (logo expand + background fill) =====
-    _exitLogoScale = Tween<double>(begin: 1.0, end: 8.0).animate(
-      CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
-    );
-
-    _backgroundFill = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
+    _textExitOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _exitController,
+        curve: const Interval(0.0, 0.35, curve: Curves.easeOut),
+      ),
     );
 
     // ===== MASTER ORCHESTRATION =====
     _masterController.addListener(() {
       final progress = _masterController.value;
 
-      // Logo entrance at 0%
       if (progress >= 0.0 &&
           _logoController.status == AnimationStatus.dismissed) {
         _logoController.forward();
       }
 
-      // Text reveal at 25%
       if (progress >= 0.25 &&
           _textController.status == AnimationStatus.dismissed) {
         _textController.forward();
@@ -210,7 +148,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _masterController.forward();
 
-    // Trigger exit animation at 2100ms, then navigate after 600ms
+    // Trigger exit zoom after 2100ms
     unawaited(
       Future.delayed(const Duration(milliseconds: 2100), () {
         if (!mounted) return;
@@ -218,8 +156,9 @@ class _SplashScreenState extends State<SplashScreen>
       }),
     );
 
+    // Execute navigation after zoom to full white screen completes
     unawaited(
-      Future.delayed(const Duration(milliseconds: 2700), () async {
+      Future.delayed(const Duration(milliseconds: 2850), () async {
         if (!mounted) return;
 
         // Check user session and onboarding status
@@ -236,18 +175,25 @@ class _SplashScreenState extends State<SplashScreen>
                 .eq('id', session.user.id)
                 .maybeSingle();
 
-            final phone = (profile?['phone'] ?? session.user.userMetadata?['phone'] ?? '').toString().trim();
+            final phone = (profile?['phone'] ?? '').toString().trim();
             final pinHash = (profile?['pin_hash'] ?? '').toString().trim();
             final isCompleteFlag = profile?['is_profile_complete'] == true;
 
-            final isComplete = phone.isNotEmpty && (isCompleteFlag || pinHash.isNotEmpty);
+            // Hanya dianggap complete kalau phone DAN pin_hash ada di profiles table
+            // Tidak pakai userMetadata['phone'] karena Google bisa isi itu tapi
+            // user belum tentu sudah selesai registrasi di app kita
+            final isComplete = phone.isNotEmpty && pinHash.isNotEmpty;
 
             if (isComplete) {
               nextScreen = PinVerificationScreen(phoneNumber: phone);
             } else {
               final metadata = session.user.userMetadata ?? {};
-              final email = session.user.email ?? profile?['email'] as String? ?? '';
-              final fullName = metadata['full_name'] ?? metadata['name'] ?? profile?['full_name'] ?? '';
+              final email =
+                  session.user.email ?? profile?['email'] as String? ?? '';
+              final fullName = metadata['full_name'] ??
+                  metadata['name'] ??
+                  profile?['full_name'] ??
+                  '';
 
               nextScreen = GoogleProfileCompletionScreen(
                 email: email,
@@ -269,7 +215,7 @@ class _SplashScreenState extends State<SplashScreen>
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (_, _, _) => nextScreen,
-            transitionDuration: const Duration(milliseconds: 400),
+            transitionDuration: const Duration(milliseconds: 350),
             transitionsBuilder: (_, animation, _, child) {
               return FadeTransition(opacity: animation, child: child);
             },
@@ -283,9 +229,7 @@ class _SplashScreenState extends State<SplashScreen>
   void dispose() {
     _masterController.dispose();
     _logoController.dispose();
-    _pulseController.dispose();
     _textController.dispose();
-    _gradientController.dispose();
     _exitController.dispose();
     super.dispose();
   }
@@ -293,390 +237,136 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final logoSize = (size.width < 380 ? size.width * 0.30 : size.width * 0.26)
-        .clamp(108.0, 150.0);
 
-    // Responsive typography tuned for a clean splash screen on phones and tablets
-    final titleFontSize = (size.width < 380)
-        ? size.width * 0.124
-        : (size.width < 600)
-        ? size.width * 0.108
-        : size.width * 0.094;
+    // Responsive logo size
+    final logoSize = (size.width < 380 ? size.width * 0.32 : size.width * 0.28)
+        .clamp(120.0, 160.0);
 
-    final subtitleFontSize = (size.width < 380)
-        ? size.width * 0.086
-        : (size.width < 600)
-        ? size.width * 0.080
-        : size.width * 0.072;
-
-    final taglineFontSize = (size.width < 380)
-        ? size.width * 0.036
-        : (size.width < 600)
-        ? size.width * 0.034
-        : size.width * 0.030;
-
-    final titleFontSizeClamped = titleFontSize.clamp(38.0, 64.0);
-    final subtitleFontSizeClamped = subtitleFontSize.clamp(24.0, 36.0);
-    final taglineFontSizeClamped = taglineFontSize.clamp(12.0, 18.0);
-
-    // Responsive padding
-    final horizontalPadding = (size.width < 380) ? 18.0 : 24.0;
-
-    // Compact spacing that stays stable and visually tight
-    final logoToTextSpacing = (size.width < 380) ? 2.0 : 3.0;
-    final textToTextSpacing = (size.width < 380) ? 2.0 : 2.5;
-    final textToTaglineSpacing = (size.width < 380) ? 2.0 : 2.5;
+    final titleFontSize = (size.width < 380) ? 42.0 : 48.0;
+    final subtitleFontSize = (size.width < 380) ? 13.0 : 15.0;
 
     return Scaffold(
       body: Stack(
         children: [
-          // ===== ANIMATED BACKGROUND GRADIENT FLOW =====
-          AnimatedBuilder(
-            animation: _gradientProgress,
-            builder: (context, _) {
-              final progress = _gradientProgress.value;
+          // ===== MAIN BRAND GREEN BACKGROUND =====
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              color: Color(0xFF00A79D), // Pure full brand green background
+            ),
+            child: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // ===== PURE LOGO (NO SHADOW & NO WHITE OUTLINE BORDER) =====
+                      AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _logoScale,
+                          _logoOpacity,
+                          _exitLogoScale,
+                        ]),
+                        builder: (context, _) {
+                          final combinedScale =
+                              _logoScale.value * _exitLogoScale.value;
 
-              return Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color.lerp(
-                        const Color(0xFFFFFFFF),
-                        const Color(0xFFF0FFFE),
-                        progress,
-                      )!,
-                      Color.lerp(
-                        const Color(0xFFE6F8F7),
-                        const Color(0xFFDEF5F3),
-                        progress,
-                      )!,
+                          return Opacity(
+                            opacity: _logoOpacity.value,
+                            child: Transform.scale(
+                              scale: combinedScale,
+                              child: SizedBox(
+                                width: logoSize,
+                                height: logoSize,
+                                child: ClipOval(
+                                  child: Image.asset(
+                                    'assets/image/Logo.jpeg',
+                                    fit: BoxFit.cover,
+                                    alignment: Alignment.center,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // ===== BRAND TEXT =====
+                      AnimatedBuilder(
+                        animation: _textExitOpacity,
+                        builder: (context, child) {
+                          return Opacity(
+                            opacity: _textExitOpacity.value,
+                            child: child,
+                          );
+                        },
+                        child: Column(
+                          children: [
+                            // Title: "Kedota"
+                            SlideTransition(
+                              position: _titleSlide,
+                              child: FadeTransition(
+                                opacity: _titleOpacity,
+                                child: Text(
+                                  t(context, 'splashTitle'),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: titleFontSize,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    height: 1.0,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            // Subtitle: "PHYSIOTHERAPY" (With wide letter spacing)
+                            SlideTransition(
+                              position: _subtitleSlide,
+                              child: FadeTransition(
+                                opacity: _subtitleOpacity,
+                                child: Text(
+                                  t(context, 'splashSubtitle').toUpperCase(),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: subtitleFontSize,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    letterSpacing: 5.5, // Spaced letters
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              );
-            },
-          ),
-
-          // ===== EXIT OVERLAY (TEAL FILL) =====
-          AnimatedBuilder(
-            animation: _backgroundFill,
-            builder: (context, _) {
-              return Container(
-                color: const Color(
-                  0xFF00A79D,
-                ).withValues(alpha: _backgroundFill.value * 0.95),
-              );
-            },
-          ),
-
-          // ===== MAIN CONTENT =====
-          SafeArea(
-            child: Stack(
-              children: [
-                // ===== TOP DECORATIVE ACCENT =====
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: Opacity(
-                    opacity: 0.08,
-                    child: Container(
-                      width: 200,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF00A79D),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ===== MAIN CENTERED CONTENT =====
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 500),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: horizontalPadding,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // ===== LOGO WITH PULSE RINGS =====
-                          SizedBox(
-                            width: logoSize * 2.2,
-                            height: logoSize * 2.2,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Pulse Ring 1 (first ripple)
-                                AnimatedBuilder(
-                                  animation: Listenable.merge([
-                                    _pulse1Scale,
-                                    _backgroundFill,
-                                  ]),
-                                  builder: (context, _) {
-                                    return Opacity(
-                                      opacity:
-                                          (1.0 - _backgroundFill.value) * 0.6,
-                                      child: Transform.scale(
-                                        scale: _pulse1Scale.value,
-                                        child: Container(
-                                          width: logoSize,
-                                          height: logoSize,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: const Color(0xFF00A79D)
-                                                  .withValues(
-                                                    alpha:
-                                                        _pulse1Opacity.value *
-                                                        0.6,
-                                                  ),
-                                              width: 2,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                                // Pulse Ring 2 (second ripple)
-                                AnimatedBuilder(
-                                  animation: Listenable.merge([
-                                    _pulse2Scale,
-                                    _backgroundFill,
-                                  ]),
-                                  builder: (context, _) {
-                                    return Opacity(
-                                      opacity:
-                                          (1.0 - _backgroundFill.value) * 0.4,
-                                      child: Transform.scale(
-                                        scale: _pulse2Scale.value,
-                                        child: Container(
-                                          width: logoSize,
-                                          height: logoSize,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: const Color(0xFF00A79D)
-                                                  .withValues(
-                                                    alpha:
-                                                        _pulse2Opacity.value *
-                                                        0.4,
-                                                  ),
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                                // Pulse Ring 3 (third ripple)
-                                AnimatedBuilder(
-                                  animation: Listenable.merge([
-                                    _pulse3Scale,
-                                    _backgroundFill,
-                                  ]),
-                                  builder: (context, _) {
-                                    return Opacity(
-                                      opacity:
-                                          (1.0 - _backgroundFill.value) * 0.2,
-                                      child: Transform.scale(
-                                        scale: _pulse3Scale.value,
-                                        child: Container(
-                                          width: logoSize,
-                                          height: logoSize,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: const Color(0xFF00A79D)
-                                                  .withValues(
-                                                    alpha:
-                                                        _pulse3Opacity.value *
-                                                        0.2,
-                                                  ),
-                                              width: 1,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                                // Logo Image (center)
-                                AnimatedBuilder(
-                                  animation: Listenable.merge([
-                                    _logoScale,
-                                    _logoOpacity,
-                                    _exitLogoScale,
-                                  ]),
-                                  builder: (context, _) {
-                                    final baseScale = _logoScale.value;
-                                    final exitScale = _exitLogoScale.value;
-                                    final combinedScale = baseScale * exitScale;
-
-                                    return Opacity(
-                                      opacity:
-                                          _logoOpacity.value *
-                                          (1.0 - _backgroundFill.value),
-                                      child: Transform.scale(
-                                        scale: combinedScale,
-                                        child: Container(
-                                          width: logoSize,
-                                          height: logoSize,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: Colors.white,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: const Color(
-                                                  0xFF00A79D,
-                                                ).withValues(alpha: 0.25),
-                                                blurRadius: 40,
-                                                spreadRadius: 8,
-                                                offset: const Offset(0, 15),
-                                              ),
-                                              BoxShadow(
-                                                color: const Color(
-                                                  0xFF00A79D,
-                                                ).withValues(alpha: 0.12),
-                                                blurRadius: 20,
-                                                spreadRadius: 0,
-                                                offset: const Offset(0, 6),
-                                              ),
-                                            ],
-                                          ),
-                                          padding: const EdgeInsets.all(12),
-                                          child: ClipOval(
-                                            child: Image.asset(
-                                              'assets/image/Logo.jpeg',
-                                              fit: BoxFit.cover,
-                                              alignment: Alignment.center,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          SizedBox(height: logoToTextSpacing),
-
-                          // ===== TEXT CONTENT (STAGGERED REVEAL) =====
-                          AnimatedBuilder(
-                            animation: _backgroundFill,
-                            builder: (context, _) {
-                              return Opacity(
-                                opacity: 1.0 - _backgroundFill.value,
-                                child: SlideTransition(
-                                  position: _titleSlide,
-                                  child: FadeTransition(
-                                    opacity: _titleOpacity,
-                                    child: Text(
-                                      t(context, 'splashTitle'),
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: titleFontSizeClamped,
-                                        fontWeight: FontWeight.w900,
-                                        color: const Color(0xFF00A79D),
-                                        height: 0.85,
-                                        letterSpacing: -0.6,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-
-                          SizedBox(height: textToTextSpacing),
-
-                          AnimatedBuilder(
-                            animation: _backgroundFill,
-                            builder: (context, _) {
-                              return Opacity(
-                                opacity: 1.0 - _backgroundFill.value,
-                                child: SlideTransition(
-                                  position: _subtitleSlide,
-                                  child: FadeTransition(
-                                    opacity: _subtitleOpacity,
-                                    child: Transform.translate(
-                                      offset: const Offset(0, -6),
-                                      child: Text(
-                                        t(context, 'splashSubtitle'),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: subtitleFontSizeClamped,
-                                          fontWeight: FontWeight.w800,
-                                          color: const Color(0xFF333333),
-                                          letterSpacing: 0.0,
-                                          height: 0.95,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-
-                          SizedBox(height: textToTaglineSpacing),
-
-                          AnimatedBuilder(
-                            animation: _backgroundFill,
-                            builder: (context, _) {
-                              return Opacity(
-                                opacity: 1.0 - _backgroundFill.value,
-                                child: FadeTransition(
-                                  opacity: _taglineOpacity,
-                                  child: Text(
-                                    t(context, 'splashTagline'),
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: taglineFontSizeClamped,
-                                      fontWeight: FontWeight.w500,
-                                      color: const Color(0xFF667A7A),
-                                      letterSpacing: 0.15,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ===== BOTTOM DECORATIVE ACCENT =====
-                Positioned(
-                  bottom: -50,
-                  left: -80,
-                  child: Opacity(
-                    opacity: 0.06,
-                    child: Container(
-                      width: 240,
-                      height: 240,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF00A79D),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
+          ),
+
+          // ===== WHITE OVERLAY FOR FULL WHITE SCREEN AT EXIT =====
+          AnimatedBuilder(
+            animation: _whiteOverlayOpacity,
+            builder: (context, _) {
+              return IgnorePointer(
+                child: Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  color: Colors.white.withValues(alpha: _whiteOverlayOpacity.value),
+                ),
+              );
+            },
           ),
         ],
       ),

@@ -1,13 +1,42 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
-import '../../widgets/language_button.dart';
+import '../../utils/phone_validator.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import 'otp_verification_screen.dart';
 import 'sign_in_screen.dart';
+
+class StepIndicator extends StatelessWidget {
+  final int activeStep;
+  final int totalSteps;
+
+  const StepIndicator({
+    super.key,
+    required this.activeStep,
+    this.totalSteps = 4,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(totalSteps, (index) {
+        final isActive = index == activeStep - 1;
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: isActive ? 28 : 12,
+          height: 6,
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFF00A79D) : const Color(0xFFD8E4EB),
+            borderRadius: BorderRadius.circular(12),
+          ),
+        );
+      }),
+    );
+  }
+}
 
 class ForgotPinScreen extends StatefulWidget {
   const ForgotPinScreen({super.key});
@@ -23,28 +52,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
   late final Animation<double> _fadeAnimation;
   late final Animation<Offset> _slideAnimation;
   late final Animation<double> _scaleAnimation;
-
-  bool _isValidIndonesianPhone(String input) {
-    final digits = input.replaceAll(RegExp(r'\D'), '');
-    if (digits.isEmpty) return false;
-
-    // Format: 628xxxxxxxxx (11-13 digits after 62)
-    if (digits.startsWith('628')) {
-      return digits.length >= 12 && digits.length <= 14;
-    }
-
-    // Format: 08xxxxxxxxx (10-12 digits)
-    if (digits.startsWith('08')) {
-      return digits.length >= 11 && digits.length <= 13;
-    }
-
-    // Format: 8xxxxxxxxx (9-11 digits without 0 or country code)
-    if (digits.startsWith('8')) {
-      return digits.length >= 10 && digits.length <= 12;
-    }
-
-    return false;
-  }
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -77,101 +85,61 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
     super.dispose();
   }
 
-  void _showModernSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white.withValues(alpha: 0.96),
-        elevation: 10,
-        duration: const Duration(seconds: 2),
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00A79D).withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isError
-                    ? Icons.info_outline_rounded
-                    : Icons.check_circle_outline_rounded,
-                color: const Color(0xFF00A79D),
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Color(0xFF17324D),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+  void _showNotificationSheet(String message, {bool isError = false}) {
+    CustomBottomSheet.show(
+      context,
+      type: isError ? BottomSheetType.error : BottomSheetType.success,
+      title: isError ? 'Informasi' : 'Berhasil',
+      subtitle: message,
+      singleButtonText: t(context, 'close'),
+      onSinglePressed: () => Navigator.of(context).pop(),
     );
   }
 
-  String _normalizePhoneNumber(String input) {
-    final digits = input.replaceAll(RegExp(r'\D'), '');
-
-    if (digits.startsWith('62')) {
-      return '+$digits';
-    }
-
-    if (digits.startsWith('0')) {
-      return '+62${digits.substring(1)}';
-    }
-
-    if (digits.startsWith('8')) {
-      return '+62$digits';
-    }
-
-    return '+62$digits';
-  }
-
   Future<void> _resetPin() async {
+    if (_isLoading) return;
     final phone = _phoneController.text.trim();
 
     if (phone.isEmpty) {
-      _showModernSnackBar(t(context, 'enterPhoneError'), isError: true);
+      _showNotificationSheet(t(context, 'enterPhoneError'), isError: true);
       return;
     }
 
-    if (!_isValidIndonesianPhone(phone)) {
-      _showModernSnackBar(t(context, 'validPhoneError'), isError: true);
+    if (!PhoneValidator.isValidIndonesianPhone(phone)) {
+      _showNotificationSheet(t(context, 'validPhoneError'), isError: true);
       return;
     }
+
+    setState(() => _isLoading = true);
 
     try {
-      final accountResult = await SupabaseAuthService().checkAccountStatus(phone);
+      final accountResult = await SupabaseAuthService().checkAccountStatus(
+        phone,
+      );
 
       if (!mounted) return;
+      setState(() => _isLoading = false);
 
       if (!accountResult.isRegistered) {
-        _showModernSnackBar(t(context, 'numberNotRegistered'), isError: true);
+        _showNotificationSheet(
+          t(context, 'numberNotRegistered'),
+          isError: true,
+        );
         return;
       }
 
-      Navigator.of(context).push(
+      final normalizedPhone = PhoneValidator.normalizePhoneNumber(phone);
+      Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => OtpVerificationScreen(
-            phoneNumber: _normalizePhoneNumber(phone),
+            phoneNumber: normalizedPhone,
             isDormant: accountResult.isDormant,
             targetEmail: accountResult.email,
             onVerified: () {
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
-                  builder: (_) => BirthDateVerificationScreen(
-                    phoneNumber: _normalizePhoneNumber(phone),
-                  ),
+                  builder: (_) =>
+                      BirthDateVerificationScreen(phoneNumber: normalizedPhone),
                 ),
               );
             },
@@ -180,7 +148,8 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      _showModernSnackBar(t(context, 'resetPinFailed'), isError: true);
+      setState(() => _isLoading = false);
+      _showNotificationSheet(t(context, 'resetPinFailed'), isError: true);
     }
   }
 
@@ -246,193 +215,199 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
                         position: _slideAnimation,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(32),
-                          child: BackdropFilter(
-                            filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                            child: Container(
-                              padding: EdgeInsets.fromLTRB(
-                                isCompact ? 18 : 24,
-                                24,
-                                isCompact ? 18 : 24,
-                                24,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.62),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.72),
+                          child: Container(
+                            padding: EdgeInsets.fromLTRB(
+                              isCompact ? 18 : 24,
+                              24,
+                              isCompact ? 18 : 24,
+                              24,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(32),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF7F9CCB,
+                                  ).withValues(alpha: 0.12),
+                                  blurRadius: 22,
+                                  offset: const Offset(0, 14),
                                 ),
-                                borderRadius: BorderRadius.circular(32),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF7F9CCB).withValues(alpha: 0.16),
-                                    blurRadius: 24,
-                                    offset: const Offset(0, 16),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      IconButton(
-                                        onPressed: () => Navigator.of(context).pop(),
-                                        icon: const Icon(Icons.arrow_back_rounded),
-                                        color: const Color(0xFF17324D),
-                                        tooltip: t(context, 'back'),
-                                        style: IconButton.styleFrom(
-                                          backgroundColor: Colors.white.withValues(alpha: 0.72),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(14),
-                                            side: BorderSide(
-                                              color: Colors.white.withValues(alpha: 0.8),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(),
+                                      icon: const Icon(
+                                        Icons.arrow_back_rounded,
+                                      ),
+                                      color: const Color(0xFF17324D),
+                                      tooltip: t(context, 'back'),
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: Colors.white
+                                            .withValues(alpha: 0.72),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          side: BorderSide(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.8,
                                             ),
                                           ),
                                         ),
                                       ),
-                                      const SizedBox.shrink(), // Language button hidden - will be in settings
-                                    ],
-                                  ),
-                                  const SizedBox(height: 20),
-                                  Text(
-                                    t(context, 'forgotPin'),
-                                    style: const TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w800,
-                                      color: Color(0xFF17324D),
-                                      letterSpacing: -0.5,
                                     ),
+                                    Expanded(
+                                      child: Center(
+                                        child: Text(
+                                          t(context, 'forgotPin'),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF17324D),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 48),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                const StepIndicator(activeStep: 1),
+                                const SizedBox(height: 22),
+                                Text(
+                                  t(context, 'enterPhoneNumberTitle'),
+                                  style: const TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF17324D),
+                                    letterSpacing: -0.5,
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    t(context, 'forgotPinDesc'),
-                                    style: const TextStyle(
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  t(context, 'forgotPinDesc'),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Color(0xFF6B8092),
+                                    height: 1.45,
+                                  ),
+                                ),
+                                const SizedBox(height: 28),
+                                Text(
+                                  t(context, 'phoneNumber'),
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF17324D),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _phoneController,
+                                  keyboardType: TextInputType.phone,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF17324D),
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: t(context, 'phoneExample'),
+                                    hintStyle: const TextStyle(
+                                      color: Color(0xFFA0B0C0),
                                       fontSize: 14,
-                                      color: Color(0xFF6B8092),
-                                      height: 1.45,
                                     ),
-                                  ),
-                                  const SizedBox(height: 28),
-                                  Text(
-                                    t(context, 'phoneNumber'),
-                                    style: const TextStyle(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF17324D),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    controller: _phoneController,
-                                    keyboardType: TextInputType.phone,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF17324D),
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: t(context, 'phoneExample'),
-                                      hintStyle: const TextStyle(
-                                        color: Color(0xFFA0B0C0),
-                                        fontSize: 14,
+                                    prefixIcon: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
                                       ),
-                                      prefixIcon: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                                        margin: const EdgeInsets.only(right: 8),
-                                        decoration: const BoxDecoration(
-                                          border: Border(
-                                            right: BorderSide(
-                                              color: Color(0xFFE2E8F0),
-                                            ),
+                                      margin: const EdgeInsets.only(right: 8),
+                                      decoration: const BoxDecoration(
+                                        border: Border(
+                                          right: BorderSide(
+                                            color: Color(0xFFE2E8F0),
                                           ),
                                         ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              '🇮🇩',
-                                              style: TextStyle(fontSize: 18),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            '🇮🇩',
+                                            style: TextStyle(fontSize: 18),
+                                          ),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            '+62',
+                                            style: TextStyle(
+                                              fontSize: 14.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF17324D),
                                             ),
-                                            SizedBox(width: 6),
-                                            Text(
-                                              '+62',
-                                              style: TextStyle(
-                                                fontSize: 14.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: Color(0xFF17324D),
-                                              ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 16,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFE2E8F0),
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFF00A79D),
+                                        width: 1.8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 28),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 52,
+                                  child: FilledButton(
+                                    onPressed: _isLoading ? null : _resetPin,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF00A79D),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    child: _isLoading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2.4,
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                      filled: true,
-                                      fillColor: Colors.white.withValues(alpha: 0.72),
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 16,
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: BorderSide(
-                                          color: Colors.white.withValues(alpha: 0.9),
-                                        ),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFF00A79D),
-                                          width: 1.8,
-                                        ),
-                                      ),
-                                    ),
+                                          )
+                                        : Text(
+                                            t(context, 'sendOtp'),
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
                                   ),
-                                  const SizedBox(height: 28),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 52,
-                                    child: FilledButton(
-                                      onPressed: _resetPin,
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: const Color(0xFF00A79D),
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                        elevation: 0,
-                                      ),
-                                      child: Text(
-                                        t(context, 'resendOtp'),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 48,
-                                    child: OutlinedButton(
-                                      onPressed: () => Navigator.of(context).pop(),
-                                      style: OutlinedButton.styleFrom(
-                                        side: const BorderSide(color: Color(0xFF00A79D), width: 1.5),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        t(context, 'back'),
-                                        style: const TextStyle(
-                                          color: Color(0xFF00A79D),
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -466,45 +441,14 @@ class _BirthDateVerificationScreenState
   int _cooldownSeconds = 0;
   Timer? _cooldownTimer;
 
-  void _showModernSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white.withValues(alpha: 0.96),
-        elevation: 10,
-        duration: const Duration(seconds: 2),
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00A79D).withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isError
-                    ? Icons.info_outline_rounded
-                    : Icons.check_circle_outline_rounded,
-                color: const Color(0xFF00A79D),
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Color(0xFF17324D),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+  void _showNotificationSheet(String message, {bool isError = false}) {
+    CustomBottomSheet.show(
+      context,
+      type: isError ? BottomSheetType.error : BottomSheetType.success,
+      title: isError ? 'Informasi' : 'Berhasil',
+      subtitle: message,
+      singleButtonText: t(context, 'close'),
+      onSinglePressed: () => Navigator.of(context).pop(),
     );
   }
 
@@ -556,7 +500,7 @@ class _BirthDateVerificationScreenState
 
   Future<void> _verifyBirthDate() async {
     if (_selectedBirthDate == null) {
-      _showModernSnackBar(t(context, 'selectBirthDateError'), isError: true);
+      _showNotificationSheet(t(context, 'selectBirthDateError'), isError: true);
       return;
     }
 
@@ -573,18 +517,19 @@ class _BirthDateVerificationScreenState
       if (isValid) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => ResetPinFormScreen(
-              phoneNumber: widget.phoneNumber,
-            ),
+            builder: (_) => ResetPinFormScreen(phoneNumber: widget.phoneNumber),
           ),
         );
       } else {
-        _showModernSnackBar(
+        _showNotificationSheet(
           t(context, 'birthDateMismatchError'),
           isError: true,
         );
         _startCooldownTimer();
       }
+    } catch (e) {
+      if (!mounted) return;
+      _showNotificationSheet(t(context, 'resetPinFailed'), isError: true);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -596,8 +541,9 @@ class _BirthDateVerificationScreenState
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isCompact = screenWidth < 380;
+    final compactTitleSpacing = screenWidth < 360 ? 12.0 : 16.0;
 
-    String dateText = _selectedBirthDate != null
+    final dateText = _selectedBirthDate != null
         ? '${_selectedBirthDate!.day.toString().padLeft(2, '0')}/${_selectedBirthDate!.month.toString().padLeft(2, '0')}/${_selectedBirthDate!.year}'
         : t(context, 'selectBirthDateHint');
 
@@ -628,155 +574,158 @@ class _BirthDateVerificationScreenState
                   constraints: const BoxConstraints(maxWidth: 440),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(32),
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: Container(
-                        padding: EdgeInsets.fromLTRB(
-                          isCompact ? 18 : 24,
-                          24,
-                          isCompact ? 18 : 24,
-                          24,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.62),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.72),
+                    child: Container(
+                      padding: EdgeInsets.fromLTRB(
+                        isCompact ? 18 : 24,
+                        24,
+                        isCompact ? 18 : 24,
+                        24,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(32),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF7F9CCB,
+                            ).withValues(alpha: 0.12),
+                            blurRadius: 22,
+                            offset: const Offset(0, 14),
                           ),
-                          borderRadius: BorderRadius.circular(32),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF7F9CCB).withValues(alpha: 0.16),
-                              blurRadius: 24,
-                              offset: const Offset(0, 16),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                IconButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  icon: const Icon(Icons.arrow_back_rounded),
-                                  color: const Color(0xFF17324D),
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: Colors.white.withValues(alpha: 0.72),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              IconButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                icon: const Icon(Icons.arrow_back_rounded),
+                                color: const Color(0xFF17324D),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(
+                                    alpha: 0.72,
                                   ),
-                                ),
-                                const SizedBox.shrink(), // Language button hidden - will be in settings
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              t(context, 'verifyBirthDateTitle'),
-                              style: const TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF17324D),
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              t(context, 'verifyBirthDateDesc'),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Color(0xFF6B8092),
-                                height: 1.45,
-                              ),
-                            ),
-                            const SizedBox(height: 28),
-                            Text(
-                              t(context, 'birthDate'),
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF17324D),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            InkWell(
-                              onTap: _pickDate,
-                              borderRadius: BorderRadius.circular(16),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 16,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.72),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      dateText,
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: _selectedBirthDate != null
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                        color: _selectedBirthDate != null
-                                            ? const Color(0xFF17324D)
-                                            : const Color(0xFFA0B0C0),
-                                      ),
-                                    ),
-                                    const Icon(
-                                      Icons.calendar_today_rounded,
-                                      color: Color(0xFF00A79D),
-                                      size: 20,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 28),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 52,
-                              child: FilledButton(
-                                onPressed: (_isLoading || _cooldownSeconds > 0)
-                                    ? null
-                                    : _verifyBirthDate,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF00A79D),
-                                  foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
-                                  elevation: 0,
                                 ),
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : Text(
-                                        _cooldownSeconds > 0
-                                            ? 'Tunggu $_cooldownSeconds detik...'
-                                            : t(context, 'next'),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
+                              ),
+                              SizedBox(width: compactTitleSpacing),
+                              Expanded(
+                                child: Text(
+                                  t(context, 'verifyBirthDateTitle'),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF17324D),
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: compactTitleSpacing + 22),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          const StepIndicator(activeStep: 3),
+                          const SizedBox(height: 22),
+                          Text(
+                            t(context, 'verifyBirthDateDesc'),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF6B8092),
+                              height: 1.45,
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          Text(
+                            t(context, 'birthDate'),
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF17324D),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: _pickDate,
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    dateText,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: _selectedBirthDate != null
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                      color: _selectedBirthDate != null
+                                          ? const Color(0xFF17324D)
+                                          : const Color(0xFFA0B0C0),
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.calendar_today_rounded,
+                                    color: Color(0xFF00A79D),
+                                    size: 20,
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 28),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: FilledButton(
+                              onPressed: (_isLoading || _cooldownSeconds > 0)
+                                  ? null
+                                  : _verifyBirthDate,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF00A79D),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      _cooldownSeconds > 0
+                                          ? 'Tunggu $_cooldownSeconds detik...'
+                                          : t(context, 'next'),
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -804,46 +753,28 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
   String _confirmPin = '';
   bool _isConfirming = false;
   bool _isLoading = false;
+  bool _isPinError = false;
+  bool _isSameAsOldPin = false;
 
-  void _showModernSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white.withValues(alpha: 0.96),
-        elevation: 10,
-        duration: const Duration(seconds: 2),
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00A79D).withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isError
-                    ? Icons.info_outline_rounded
-                    : Icons.check_circle_outline_rounded,
-                color: const Color(0xFF00A79D),
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Color(0xFF17324D),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+  void _showPinError() {
+    setState(() {
+      _isPinError = true;
+      _isSameAsOldPin = false;
+      _confirmPin = '';
+    });
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _isPinError = false);
+    });
+  }
+
+  void _showNotificationSheet(String message, {bool isError = false}) {
+    CustomBottomSheet.show(
+      context,
+      type: isError ? BottomSheetType.error : BottomSheetType.success,
+      title: isError ? 'Informasi' : 'Berhasil',
+      subtitle: message,
+      singleButtonText: t(context, 'close'),
+      onSinglePressed: () => Navigator.of(context).pop(),
     );
   }
 
@@ -896,12 +827,7 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
 
   Future<void> _handlePinSubmission() async {
     if (_firstPin != _confirmPin) {
-      _showModernSnackBar(t(context, 'confirmPinMismatchError'), isError: true);
-      setState(() {
-        _firstPin = '';
-        _confirmPin = '';
-        _isConfirming = false;
-      });
+      _showPinError();
       return;
     }
 
@@ -911,27 +837,41 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
       final success = await SupabaseAuthService().updateUserPin(
         phone: widget.phoneNumber,
         newPin: _firstPin,
+        allowSamePin: true,
       );
 
       if (!mounted) return;
 
       if (success) {
-        CustomBottomSheet.show(
-          context,
-          type: BottomSheetType.success,
-          title: t(context, 'pinUpdatedSuccessTitle'),
-          subtitle: t(context, 'pinUpdatedSuccessDesc'),
-          singleButtonText: t(context, 'signIn'),
-          isDismissible: false,
-          onSinglePressed: () {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const SignInScreen()),
-              (route) => false,
-            );
-          },
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const PinResetSuccessScreen()),
+          (route) => false,
         );
       } else {
-        _showModernSnackBar(t(context, 'resetPinFailed'), isError: true);
+        _showNotificationSheet(t(context, 'resetPinFailed'), isError: true);
+        setState(() {
+          _firstPin = '';
+          _confirmPin = '';
+          _isConfirming = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      if (msg == 'sameAsOldPin') {
+        // Tampilkan error inline — dots merah + teks
+        setState(() {
+          _isPinError = true;
+          _isSameAsOldPin = true;
+          _firstPin = '';
+          _confirmPin = '';
+          _isConfirming = false;
+        });
+        Future.delayed(const Duration(milliseconds: 700), () {
+          if (mounted) setState(() => _isPinError = false);
+        });
+      } else {
+        _showNotificationSheet(t(context, 'resetPinFailed'), isError: true);
         setState(() {
           _firstPin = '';
           _confirmPin = '';
@@ -996,6 +936,11 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
     final currentPin = _isConfirming ? _confirmPin : _firstPin;
     final screenWidth = MediaQuery.of(context).size.width;
     final isCompact = screenWidth < 380;
+    final isVeryCompact = screenWidth < 340;
+    final dotSize = isVeryCompact ? 12.0 : 16.0;
+    final dotGap = isVeryCompact ? 6.0 : 8.0;
+    final numpadGap = isVeryCompact ? 10.0 : 16.0;
+    final titleSpacing = isVeryCompact ? 12.0 : 16.0;
 
     return Scaffold(
       body: Stack(
@@ -1024,128 +969,161 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
                   constraints: const BoxConstraints(maxWidth: 440),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(32),
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: Container(
-                        padding: EdgeInsets.fromLTRB(
-                          isCompact ? 18 : 24,
-                          24,
-                          isCompact ? 18 : 24,
-                          24,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.62),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.72),
+                    child: Container(
+                      padding: EdgeInsets.fromLTRB(
+                        isCompact ? 18 : 24,
+                        24,
+                        isCompact ? 18 : 24,
+                        24,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(32),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF7F9CCB,
+                            ).withValues(alpha: 0.12),
+                            blurRadius: 22,
+                            offset: const Offset(0, 14),
                           ),
-                          borderRadius: BorderRadius.circular(32),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF7F9CCB).withValues(alpha: 0.16),
-                              blurRadius: 24,
-                              offset: const Offset(0, 16),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                IconButton(
-                                  onPressed: () {
-                                    if (_isConfirming) {
-                                      setState(() {
-                                        _isConfirming = false;
-                                        _confirmPin = '';
-                                      });
-                                    } else {
-                                      Navigator.of(context).pop();
-                                    }
-                                  },
-                                  icon: const Icon(Icons.arrow_back_rounded),
-                                  color: const Color(0xFF17324D),
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: Colors.white.withValues(alpha: 0.72),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Row(
+                            children: [
+                              IconButton(
+                                onPressed: () {
+                                  if (_isConfirming) {
+                                    setState(() {
+                                      _isConfirming = false;
+                                      _confirmPin = '';
+                                    });
+                                  } else {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
+                                icon: const Icon(Icons.arrow_back_rounded),
+                                color: const Color(0xFF17324D),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(
+                                    alpha: 0.72,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
                                 ),
-                                const SizedBox.shrink(), // Language button hidden - will be in settings
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _isConfirming
-                                  ? t(context, 'confirmNewPin')
-                                  : t(context, 'createNewPin'),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF17324D),
-                                letterSpacing: -0.5,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              t(context, 'createNewPinDesc'),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                color: Color(0xFF6B8092),
-                                height: 1.45,
-                              ),
-                            ),
-                            const SizedBox(height: 28),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(6, (index) {
-                                final isFilled = index < currentPin.length;
-                                return AnimatedContainer(
-                                  duration: const Duration(milliseconds: 180),
-                                  margin: const EdgeInsets.symmetric(horizontal: 8),
-                                  width: 16,
-                                  height: 16,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isFilled
-                                        ? const Color(0xFF00A79D)
-                                        : Colors.white.withValues(alpha: 0.8),
-                                    border: Border.all(
-                                      color: isFilled
-                                          ? const Color(0xFF00A79D)
-                                          : const Color(0xFFC0D0E0),
-                                      width: 2,
-                                    ),
+                              SizedBox(width: titleSpacing),
+                              Expanded(
+                                child: Text(
+                                  _isConfirming
+                                      ? t(context, 'confirmNewPin')
+                                      : t(context, 'createNewPin'),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF17324D),
+                                    letterSpacing: -0.5,
                                   ),
-                                );
-                              }),
-                            ),
-                            const SizedBox(height: 32),
-                            GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                childAspectRatio: 1.35,
-                                crossAxisSpacing: 16,
-                                mainAxisSpacing: 16,
+                                ),
                               ),
-                              itemCount: 12,
-                              itemBuilder: (context, index) {
-                                if (index == 9) return _buildNumpadButton('');
-                                if (index == 10) return _buildNumpadButton('0');
-                                if (index == 11) return _buildNumpadButton('back');
-                                return _buildNumpadButton('${index + 1}');
-                              },
+                              SizedBox(width: titleSpacing + 22),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          const StepIndicator(activeStep: 4),
+                          const SizedBox(height: 18),
+                          Text(
+                            _isConfirming
+                                ? t(context, 'confirmPinDesc')
+                                : t(context, 'createNewPinDesc'),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              color: Color(0xFF6B8092),
+                              height: 1.45,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(6, (index) {
+                              final isFilled = index < currentPin.length;
+                              return AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                margin: EdgeInsets.symmetric(
+                                  horizontal: dotGap,
+                                ),
+                                width: dotSize,
+                                height: dotSize,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isFilled
+                                      ? (_isPinError
+                                            ? Colors.red.shade400
+                                            : const Color(0xFF00A79D))
+                                      : Colors.white.withValues(alpha: 0.8),
+                                  border: Border.all(
+                                    color: isFilled
+                                        ? (_isPinError
+                                              ? Colors.red.shade400
+                                              : const Color(0xFF00A79D))
+                                        : const Color(0xFFC0D0E0),
+                                    width: 2,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                          AnimatedOpacity(
+                            opacity: _isPinError ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: Text(
+                                _isSameAsOldPin
+                                    ? t(context, 'sameAsOldPinError')
+                                    : t(context, 'confirmPinMismatchError'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  childAspectRatio: isVeryCompact ? 1.28 : 1.35,
+                                  crossAxisSpacing: numpadGap,
+                                  mainAxisSpacing: 14,
+                                ),
+                            itemCount: 12,
+                            itemBuilder: (context, index) {
+                              if (index == 9) {
+                                return _buildNumpadButton('');
+                              }
+                              if (index == 10) {
+                                return _buildNumpadButton('0');
+                              }
+                              if (index == 11) {
+                                return _buildNumpadButton('back');
+                              }
+                              return _buildNumpadButton('${index + 1}');
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1154,6 +1132,242 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class PinResetSuccessScreen extends StatefulWidget {
+  const PinResetSuccessScreen({super.key});
+
+  @override
+  State<PinResetSuccessScreen> createState() => _PinResetSuccessScreenState();
+}
+
+class _PinResetSuccessScreenState extends State<PinResetSuccessScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _checkController;
+  late final AnimationController _fadeController;
+  late final Animation<double> _checkScale;
+  late final Animation<double> _checkOpacity;
+  late final Animation<double> _fadeIn;
+
+  int _countdown = 3;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _checkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _checkScale = CurvedAnimation(
+      parent: _checkController,
+      curve: Curves.elasticOut,
+    );
+    _checkOpacity = CurvedAnimation(
+      parent: _checkController,
+      curve: Curves.easeIn,
+    );
+    _fadeIn = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+
+    _checkController.forward();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _fadeController.forward();
+    });
+
+    // Countdown 3 detik lalu ke SignInScreen
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _countdown--);
+      if (_countdown <= 0) {
+        timer.cancel();
+        _goToSignIn();
+      }
+    });
+  }
+
+  void _goToSignIn() {
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const SignInScreen()),
+      (route) => false,
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _checkController.dispose();
+    _fadeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 360;
+
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFEAF7F4), Color(0xFFF8FBFF), Color(0xFFF5EFFF)],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -70,
+              left: -40,
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF86D8C8).withValues(alpha: 0.24),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -80,
+              right: -30,
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF8AA8FF).withValues(alpha: 0.2),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isCompact ? 20 : 32,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ScaleTransition(
+                        scale: _checkScale,
+                        child: FadeTransition(
+                          opacity: _checkOpacity,
+                          child: Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(
+                                0xFF00A79D,
+                              ).withValues(alpha: 0.12),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFF00A79D,
+                                ).withValues(alpha: 0.3),
+                                width: 2,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.check_circle_rounded,
+                              color: Color(0xFF00A79D),
+                              size: 72,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      FadeTransition(
+                        opacity: _fadeIn,
+                        child: Column(
+                          children: [
+                            Text(
+                              t(context, 'pinUpdatedSuccessTitle'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: isCompact ? 22 : 24,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF00A79D),
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            SizedBox(height: isCompact ? 10 : 12),
+                            RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: TextStyle(
+                                  fontSize: isCompact ? 13 : 14,
+                                  color: const Color(0xFF64748B),
+                                  height: 1.6,
+                                ),
+                                children: [
+                                  const TextSpan(
+                                    text:
+                                        'Anda akan diarahkan ke halaman login dalam ',
+                                  ),
+                                  TextSpan(
+                                    text: '$_countdown detik',
+                                    style: const TextStyle(
+                                      color: Color(0xFF00A79D),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const TextSpan(
+                                    text: '\nuntuk mencoba PIN Anda!',
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 32),
+                            // Progress indicator countdown
+                            SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  CircularProgressIndicator(
+                                    value: _countdown / 3,
+                                    strokeWidth: 3.5,
+                                    backgroundColor: const Color(0xFFE2E8F0),
+                                    color: const Color(0xFF00A79D),
+                                  ),
+                                  Text(
+                                    '$_countdown',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF00A79D),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
