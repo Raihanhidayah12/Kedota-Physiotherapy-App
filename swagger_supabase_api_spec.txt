@@ -319,12 +319,12 @@ paths:
       summary: Update profil pengguna
       description: >-
         Memperbarui data profil. Dipakai untuk update nama, email, TTL, gender,
-        atau pin_hash. Membutuhkan header Prefer: return=representation.
+        last_login_at, atau is_profile_complete. Membutuhkan header
+        Prefer: return=representation.
 
-        Jika user sedang login, update menggunakan Retrofit client dengan
-        Bearer session token. Jika tidak ada session aktif (misalnya reset PIN
-        dari alur lupa PIN), update dilakukan via Dio langsung menggunakan
-        service-role key (admin mode).
+        Selalu menggunakan Bearer session token dari user yang sedang login.
+        Untuk update pin_hash tanpa session (forgot PIN), gunakan Edge Function
+        /functions/v1/update-pin.
       parameters:
         - in: path
           name: id
