@@ -23,6 +23,7 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen>
     with SingleTickerProviderStateMixin {
   final _phoneController = TextEditingController();
+  bool _isPhoneError = false;
   static const Color _accentGreen = Color(0xFF00A79D);
 
   late final AnimationController _entranceController;
@@ -54,6 +55,12 @@ class _SignInScreenState extends State<SignInScreen>
         .animate(_entranceController);
 
     _entranceController.forward();
+
+    _phoneController.addListener(() {
+      if (_isPhoneError && _phoneController.text.isNotEmpty) {
+        setState(() => _isPhoneError = false);
+      }
+    });
 
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
       data,
@@ -172,29 +179,21 @@ class _SignInScreenState extends State<SignInScreen>
 
   void _validateAndSubmitPhone() {
     final phone = _phoneController.text.trim();
-    if (phone.isEmpty) {
+    if (phone.isEmpty || !PhoneValidator.isValidIndonesianPhone(phone)) {
+      setState(() => _isPhoneError = true);
       CustomBottomSheet.show(
         context,
         type: BottomSheetType.error,
         title: 'Informasi',
-        subtitle: t(context, 'enterPhoneError'),
+        subtitle: phone.isEmpty
+            ? t(context, 'enterPhoneError')
+            : t(context, 'validPhoneError'),
         singleButtonText: t(context, 'close'),
         onSinglePressed: () => Navigator.of(context).pop(),
       );
       return;
     }
-
-    if (!PhoneValidator.isValidIndonesianPhone(phone)) {
-      CustomBottomSheet.show(
-        context,
-        type: BottomSheetType.error,
-        title: 'Informasi',
-        subtitle: t(context, 'validPhoneError'),
-        singleButtonText: t(context, 'close'),
-        onSinglePressed: () => Navigator.of(context).pop(),
-      );
-      return;
-    }
+    setState(() => _isPhoneError = false);
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -367,7 +366,10 @@ class _SignInScreenState extends State<SignInScreen>
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: const Color(0xFFE2E8F0),
+                          color: _isPhoneError
+                              ? const Color(0xFFEF4444)
+                              : const Color(0xFFE2E8F0),
+                          width: _isPhoneError ? 1.5 : 1.0,
                         ),
                       ),
                       padding: const EdgeInsets.symmetric(

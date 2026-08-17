@@ -69,31 +69,7 @@ class SupabaseAuthService {
     return buildEmailFromPhone(phone);
   }
 
-  List<String> _resolveAuthEmailCandidates(
-    Map<String, dynamic> profile,
-    String phone,
-  ) {
-    final candidates = <String>[];
-    final authEmail = (profile['auth_email'] as String?)?.trim();
-    final profileEmail = (profile['email'] as String?)?.trim();
-    final generatedEmail = buildEmailFromPhone(phone);
-
-    void addCandidate(String? value) {
-      if (value == null || value.isEmpty) return;
-      if (!candidates.contains(value)) {
-        candidates.add(value);
-      }
-    }
-
-    addCandidate(authEmail);
-    addCandidate(profileEmail);
-    addCandidate(generatedEmail);
-
-    return candidates;
-  }
-
-  String hashPin(String pin) {
-    final bytes = utf8.encode(pin);
+  String hashPin(String pin) {    final bytes = utf8.encode(pin);
     final digest = crypto.sha256.convert(bytes);
     return digest.toString();
   }
@@ -157,128 +133,6 @@ class SupabaseAuthService {
     }
 
     return '';
-  }
-
-  String get _supabaseServiceRoleKey =>
-      dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ??
-      const String.fromEnvironment(
-        'SUPABASE_SERVICE_ROLE_KEY',
-        defaultValue: '',
-      );
-
-  bool get _hasServiceRoleKey => _supabaseServiceRoleKey.isNotEmpty;
-
-  Future<List<Map<String, dynamic>>> _updateProfileByAdmin({
-    required String userId,
-    required Map<String, dynamic> body,
-  }) async {
-    if (!_hasServiceRoleKey) {
-      throw Exception('Service role key not configured.');
-    }
-
-    final supabaseUrl =
-        dotenv.env['SUPABASE_URL'] ??
-        const String.fromEnvironment(
-          'SUPABASE_URL',
-          defaultValue: 'https://wwmctqhbqpsbkyxkeaqv.supabase.co',
-        );
-
-    final dio = Dio();
-    try {
-      final response = await dio.patch(
-        '$supabaseUrl/rest/v1/profiles',
-        queryParameters: {'id': 'eq.$userId'},
-        data: body,
-        options: Options(
-          headers: {
-            'apikey': _supabaseServiceRoleKey,
-            'Authorization': 'Bearer $_supabaseServiceRoleKey',
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation',
-          },
-        ),
-      );
-      final data = response.data;
-      if (data == null) return [];
-      if (data is List) {
-        return data.map((e) => e as Map<String, dynamic>).toList();
-      }
-      return [data as Map<String, dynamic>];
-    } on DioException catch (error, stackTrace) {
-      debugPrint('Failed to update profile via admin key: $error');
-      debugPrint(stackTrace.toString());
-      if (error.response != null) {
-        debugPrint(
-          'Profile admin update status: ${error.response?.statusCode}',
-        );
-        debugPrint('Profile admin update body: ${error.response?.data}');
-      }
-      throw Exception('Unable to update profile via service-role key.');
-    } catch (error, stackTrace) {
-      debugPrint('Failed to update profile via admin key: $error');
-      debugPrint(stackTrace.toString());
-      throw Exception('Unable to update profile via service-role key.');
-    }
-  }
-
-  Future<void> _updateAuthPasswordByAdmin({
-    required String userId,
-    required String newPassword,
-  }) async {
-    if (!_hasServiceRoleKey) {
-      throw Exception('Service role key not configured.');
-    }
-
-    final supabaseUrl =
-        dotenv.env['SUPABASE_URL'] ??
-        const String.fromEnvironment(
-          'SUPABASE_URL',
-          defaultValue: 'https://wwmctqhbqpsbkyxkeaqv.supabase.co',
-        );
-    final encodedUserId = Uri.encodeComponent(userId);
-    final adminUrl = '$supabaseUrl/auth/v1/admin/users/$encodedUserId';
-    try {
-      final dio = Dio();
-      dio.options.headers['apikey'] = _supabaseServiceRoleKey;
-      dio.options.headers['Authorization'] = 'Bearer $_supabaseServiceRoleKey';
-      dio.options.headers['Content-Type'] = 'application/json';
-
-      try {
-        debugPrint('Admin API request: PUT $adminUrl');
-        await dio.put(adminUrl, data: {'password': newPassword});
-        debugPrint('Admin API PUT success');
-      } on DioException catch (error) {
-        if (error.response?.statusCode == 404 ||
-            error.response?.statusCode == 405) {
-          debugPrint(
-            'Admin user update with PUT not supported, retrying with PATCH. status=${error.response?.statusCode}',
-          );
-          debugPrint('Admin API request: PATCH $adminUrl');
-          await dio.patch(adminUrl, data: {'password': newPassword});
-          debugPrint('Admin API PATCH success');
-          return;
-        }
-        rethrow;
-      }
-    } on DioException catch (error, stackTrace) {
-      debugPrint(
-        'Failed to sync auth password via admin API: ${error.message}',
-      );
-      if (error.response != null) {
-        debugPrint('Admin API status: ${error.response?.statusCode}');
-        debugPrint('Admin API body: ${error.response?.data}');
-      }
-      debugPrint(stackTrace.toString());
-      final status = error.response?.statusCode;
-      final body = error.response?.data;
-      throw Exception(
-        'Unable to sync PIN to Supabase auth password (${status ?? 'unknown'}): $body',
-      );
-    } catch (error, stackTrace) {
-      debugPrint('Failed to sync auth password via admin API: $error');
-      debugPrint(stackTrace.toString());
-      throw Exception('Unable to sync PIN to Supabase auth password.');
-    }
   }
 
   Future<void> _persistProfile({
@@ -1039,7 +893,29 @@ class SupabaseAuthService {
     }
   }
 
-  /// Update the user's PIN in Supabase profiles table
+  /// URL Supabase Edge Function untuk update PIN.
+  /// Semua operasi yang butuh service-role key (update profiles + sync auth
+  /// password) dilakukan di server — Flutter hanya kirim JWT + PIN hash.
+  String get _updatePinFunctionUrl {
+    final url =
+        dotenv.env['SUPABASE_URL'] ??
+        const String.fromEnvironment(
+          'SUPABASE_URL',
+          defaultValue: 'https://wwmctqhbqpsbkyxkeaqv.supabase.co',
+        );
+    return '$url/functions/v1/update-pin';
+  }
+
+  /// Update PIN user via Supabase Edge Function.
+  ///
+  /// Alur:
+  /// 1. Cari profil by phone → dapat profile_id dan pin_hash lama
+  /// 2. Validasi allowSamePin
+  /// 3. Kirim ke Edge Function: { profile_id, new_pin_hash, new_pin }
+  ///    dengan Authorization: Bearer `anon_key_or_session_token`
+  /// 4. Edge Function menggunakan service-role key di sisi server untuk:
+  ///    - Update pin_hash di tabel profiles
+  ///    - Sync password di Supabase Auth via admin.updateUserById
   Future<bool> updateUserPin({
     required String phone,
     required String newPin,
@@ -1052,7 +928,8 @@ class SupabaseAuthService {
       final newPinHash = hashPin(newPin);
       final oldPinHash = (profile['pin_hash'] ?? '').toString();
       debugPrint(
-        'updateUserPin: oldPinHash=${oldPinHash.isNotEmpty ? oldPinHash.substring(0, 8) : 'empty'}... newPinHash=${newPinHash.substring(0, 8)}...',
+        'updateUserPin: oldPinHash=${oldPinHash.isNotEmpty ? oldPinHash.substring(0, 8) : 'empty'}... '
+        'newPinHash=${newPinHash.substring(0, 8)}...',
       );
 
       // Tolak jika PIN baru sama dengan PIN lama (kecuali dari alur lupa PIN)
@@ -1062,137 +939,68 @@ class SupabaseAuthService {
 
       final profileId = profile['id'].toString();
       final currentUser = client.auth.currentUser;
-
       debugPrint(
-        'updateUserPin: updating profile pin_hash for profileId=$profileId',
+        'updateUserPin: profileId=$profileId currentUser=${currentUser?.id}',
       );
-      final List<Map<String, dynamic>> updateResponse;
+
+      // Jika user punya session aktif dan itu miliknya sendiri,
+      // update langsung tanpa Edge Function (lebih cepat, tidak perlu network hop)
       if (currentUser != null && currentUser.id == profileId) {
-        updateResponse = await client
+        debugPrint('updateUserPin: using current session for direct update');
+
+        await client
             .from('profiles')
             .update({
               'pin_hash': newPinHash,
               'updated_at': DateTime.now().toIso8601String(),
             })
-            .eq('id', profileId)
-            .select();
-      } else if (_hasServiceRoleKey) {
-        updateResponse = await _updateProfileByAdmin(
-          userId: profileId,
-          body: {
-            'pin_hash': newPinHash,
-            'updated_at': DateTime.now().toIso8601String(),
+            .eq('id', profileId);
+
+        await client.auth.updateUser(UserAttributes(password: newPin));
+        debugPrint('updateUserPin: direct session update successful');
+        return true;
+      }
+
+      // Tidak ada session aktif (alur lupa PIN) — delegasikan ke Edge Function
+      debugPrint('updateUserPin: no active session, calling Edge Function');
+
+      // Token untuk autentikasi ke Edge Function:
+      // Gunakan session token jika ada, fallback ke anon key
+      final token =
+          client.auth.currentSession?.accessToken ?? _supabasePublishableKey;
+
+      final dio = Dio();
+      final response = await dio.post(
+        _updatePinFunctionUrl,
+        data: {
+          'profile_id': profileId,
+          'new_pin_hash': newPinHash,
+          'new_pin': newPin,
+        },
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
           },
-        );
-      } else {
-        throw Exception(
-          'Unable to update profile pin hash; no privileged session available.',
-        );
-      }
-
-      debugPrint('updateUserPin: profile update response=$updateResponse');
-      if (updateResponse.isEmpty) {
-        throw Exception(
-          'Profile PIN hash update returned no rows. Check table policies.',
-        );
-      }
-
-      final updatedProfile = updateResponse.first;
-      debugPrint(
-        'updateUserPin: verified profile pin_hash=${(updatedProfile['pin_hash'] ?? '').toString().substring(0, 8)}...',
+        ),
       );
 
-      // Keep Supabase Auth password in sync with the PIN used for phone login.
-      // The app authenticates with email + password using the same 6-digit PIN,
-      // so updating the profile hash alone makes the new PIN unusable.
       debugPrint(
-        'updateUserPin: currentUser=${currentUser?.id}, profileId=$profileId, hasServiceRoleKey=$_hasServiceRoleKey',
+        'updateUserPin: Edge Function response status=${response.statusCode} data=${response.data}',
       );
-      bool verifiedAuthPassword = false;
-      try {
-        if (currentUser != null && currentUser.id == profileId) {
-          debugPrint(
-            'updateUserPin: syncing password via current session user',
-          );
-          await client.auth.updateUser(UserAttributes(password: newPin));
-          debugPrint('updateUserPin: current session password sync successful');
-          verifiedAuthPassword = true;
-        } else if (_hasServiceRoleKey) {
-          debugPrint(
-            'updateUserPin: syncing password via service-role admin API',
-          );
-          await _updateAuthPasswordByAdmin(
-            userId: profileId,
-            newPassword: newPin,
-          );
-          debugPrint('updateUserPin: service-role password sync successful');
-        } else {
-          throw Exception('Service role key not available to sync PIN.');
-        }
 
-        if (!verifiedAuthPassword) {
-          final authPhone = profile['phone']?.toString() ?? phone;
-          final candidates = _resolveAuthEmailCandidates(profile, authPhone);
-          debugPrint(
-            'updateUserPin: verifying auth password with email candidates=$candidates',
-          );
-
-          Object? lastSignInError;
-          User? verifiedUser;
-          for (final candidate in candidates) {
-            try {
-              final signInResponse = await client.auth.signInWithPassword(
-                email: candidate,
-                password: newPin,
-              );
-              if (signInResponse.user != null) {
-                verifiedUser = signInResponse.user;
-                debugPrint(
-                  'updateUserPin: auth verification succeeded for $candidate',
-                );
-                break;
-              }
-            } catch (signInError) {
-              debugPrint(
-                'updateUserPin: auth verification failed for $candidate: $signInError',
-              );
-              lastSignInError = signInError;
-            }
-          }
-
-          if (verifiedUser == null) {
-            throw Exception(
-              'Unable to verify auth password after PIN update. '
-              '${lastSignInError?.toString() ?? 'No sign-in candidate succeeded.'}',
-            );
-          }
-
-          if (currentUser == null) {
-            await client.auth.signOut();
-          }
-        }
-      } catch (passwordSyncError, stackTrace) {
-        debugPrint(
-          'Failed to sync new PIN to Supabase auth password: $passwordSyncError',
-        );
-        debugPrint(stackTrace.toString());
-
-        try {
-          await client
-              .from('profiles')
-              .update({
-                'pin_hash': oldPinHash,
-                'updated_at': DateTime.now().toIso8601String(),
-              })
-              .eq('id', profileId);
-        } catch (rollbackError) {
-          debugPrint('Failed to rollback profile PIN hash: $rollbackError');
-        }
-
-        throw Exception('Unable to sync PIN to Supabase auth password.');
+      if (response.statusCode == 200) {
+        return true;
       }
 
-      return true;
+      throw Exception(
+        'Edge Function returned ${response.statusCode}: ${response.data}',
+      );
+    } on DioException catch (e, st) {
+      debugPrint('updateUserPin DioException: ${e.response?.data}');
+      debugPrint(st.toString());
+      final detail = e.response?.data?['error'] ?? e.message ?? 'Unknown error';
+      throw Exception('Unable to update PIN: $detail');
     } catch (error) {
       debugPrint('Error updating user PIN: $error');
       rethrow;

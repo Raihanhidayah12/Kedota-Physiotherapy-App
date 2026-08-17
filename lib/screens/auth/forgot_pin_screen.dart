@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
@@ -155,269 +156,237 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isCompact = screenWidth < 380;
-
-    return Scaffold(
-      body: Stack(
+    final content = SafeArea(
+      bottom: false,
+      child: Column(
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFEAF7F4),
-                  Color(0xFFF8FBFF),
-                  Color(0xFFF5EFFF),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            top: -70,
-            left: -40,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF86D8C8).withValues(alpha: 0.24),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -80,
-            right: -30,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF8AA8FF).withValues(alpha: 0.2),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isCompact ? 16 : 24,
-                  vertical: 24,
+          // Header teal — sama persis dengan sign_in_screen
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Column(
+              children: [
+                Image.asset(
+                  'assets/image/logo 2.png',
+                  height: 56,
+                  fit: BoxFit.contain,
                 ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: SlideTransition(
-                        position: _slideAnimation,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(32),
-                          child: Container(
-                            padding: EdgeInsets.fromLTRB(
-                              isCompact ? 18 : 24,
-                              24,
-                              isCompact ? 18 : 24,
-                              24,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(32),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF7F9CCB,
-                                  ).withValues(alpha: 0.12),
-                                  blurRadius: 22,
-                                  offset: const Offset(0, 14),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(),
-                                      icon: const Icon(
-                                        Icons.arrow_back_rounded,
-                                      ),
-                                      color: const Color(0xFF17324D),
-                                      tooltip: t(context, 'back'),
-                                      style: IconButton.styleFrom(
-                                        backgroundColor: Colors.white
-                                            .withValues(alpha: 0.72),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          side: BorderSide(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.8,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Center(
-                                        child: Text(
-                                          t(context, 'forgotPin'),
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700,
-                                            color: Color(0xFF17324D),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 48),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                const StepIndicator(activeStep: 1),
-                                const SizedBox(height: 22),
-                                Text(
-                                  t(context, 'enterPhoneNumberTitle'),
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF17324D),
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  t(context, 'forgotPinDesc'),
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Color(0xFF6B8092),
-                                    height: 1.45,
-                                  ),
-                                ),
-                                const SizedBox(height: 28),
-                                Text(
-                                  t(context, 'phoneNumber'),
-                                  style: const TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF17324D),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: _phoneController,
-                                  keyboardType: TextInputType.phone,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF17324D),
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: t(context, 'phoneExample'),
-                                    hintStyle: const TextStyle(
-                                      color: Color(0xFFA0B0C0),
-                                      fontSize: 14,
-                                    ),
-                                    prefixIcon: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      margin: const EdgeInsets.only(right: 8),
-                                      decoration: const BoxDecoration(
-                                        border: Border(
-                                          right: BorderSide(
-                                            color: Color(0xFFE2E8F0),
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            '🇮🇩',
-                                            style: TextStyle(fontSize: 18),
-                                          ),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            '+62',
-                                            style: TextStyle(
-                                              fontSize: 14.5,
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFF17324D),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 16,
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFE2E8F0),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF00A79D),
-                                        width: 1.8,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 28),
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 52,
-                                  child: FilledButton(
-                                    onPressed: _isLoading ? null : _resetPin,
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: const Color(0xFF00A79D),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      elevation: 0,
-                                    ),
-                                    child: _isLoading
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2.4,
-                                            ),
-                                          )
-                                        : Text(
-                                            t(context, 'sendOtp'),
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                const SizedBox(height: 10),
+                const Text(
+                  'K E D O T A',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF00A79D),
+                    letterSpacing: 4.0,
                   ),
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  'P H Y S I O T H E R A P Y',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF00A79D).withValues(alpha: 0.85),
+                    letterSpacing: 4.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // White card bawah
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Back button + judul "Lupa PIN"
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: const Icon(
+                            Icons.arrow_back_rounded,
+                            color: Color(0xFF1E293B),
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          t(context, 'forgotPin'),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const StepIndicator(activeStep: 1),
+                    const SizedBox(height: 22),
+                    // Judul + deskripsi
+                    Text(
+                      t(context, 'enterPhoneNumberTitle'),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      t(context, 'forgotPinDesc'),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Label
+                    Text(
+                      t(context, 'phoneNumber'),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Input nomor telepon — sama dengan sign_in_screen
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          _buildIndonesianFlag(),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '+62',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Container(
+                            width: 1,
+                            height: 20,
+                            color: const Color(0xFFE2E8F0),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(13),
+                              ],
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                hintText: t(context, 'phoneExample'),
+                                hintStyle: const TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 14,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Tombol Kirim OTP
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _resetPin,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00A79D),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.4,
+                                ),
+                              )
+                            : Text(
+                                t(context, 'sendOtp'),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+        ],
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFE8F6F4),
+      body: AnimatedBuilder(
+        animation: _entranceController,
+        builder: (context, child) => FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: ScaleTransition(scale: _scaleAnimation, child: child),
+          ),
+        ),
+        child: content,
+      ),
+    );
+  }
+
+  Widget _buildIndonesianFlag() {
+    return Container(
+      width: 20,
+      height: 14,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
+      ),
+      child: const Column(
+        children: [
+          Expanded(child: ColoredBox(color: Color(0xFFE53E3E))),
+          Expanded(child: ColoredBox(color: Colors.white)),
         ],
       ),
     );
@@ -539,205 +508,202 @@ class _BirthDateVerificationScreenState
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isCompact = screenWidth < 380;
-    final compactTitleSpacing = screenWidth < 360 ? 12.0 : 16.0;
-
     final dateText = _selectedBirthDate != null
         ? '${_selectedBirthDate!.day.toString().padLeft(2, '0')}/${_selectedBirthDate!.month.toString().padLeft(2, '0')}/${_selectedBirthDate!.year}'
         : t(context, 'selectBirthDateHint');
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFEAF7F4),
-                  Color(0xFFF8FBFF),
-                  Color(0xFFF5EFFF),
+      backgroundColor: const Color(0xFFE8F6F4),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // Header teal
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                children: [
+                  Image.asset(
+                    'assets/image/logo 2.png',
+                    height: 56,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'K E D O T A',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF00A79D),
+                      letterSpacing: 4.0,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'P H Y S I O T H E R A P Y',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF00A79D).withValues(alpha: 0.85),
+                      letterSpacing: 4.5,
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isCompact ? 16 : 24,
-                  vertical: 24,
+            // White card bawah
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(32),
-                    child: Container(
-                      padding: EdgeInsets.fromLTRB(
-                        isCompact ? 18 : 24,
-                        24,
-                        isCompact ? 18 : 24,
-                        24,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(32),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF7F9CCB,
-                            ).withValues(alpha: 0.12),
-                            blurRadius: 22,
-                            offset: const Offset(0, 14),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Back + judul
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).pop(),
+                            child: const Icon(
+                              Icons.arrow_back_rounded,
+                              color: Color(0xFF1E293B),
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            t(context, 'forgotPin'),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E293B),
+                            ),
                           ),
                         ],
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                      const SizedBox(height: 20),
+                      const StepIndicator(activeStep: 3),
+                      const SizedBox(height: 22),
+                      Text(
+                        t(context, 'verifyBirthDateTitle'),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        t(context, 'verifyBirthDateDesc'),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        t(context, 'birthDate'),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: _pickDate,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              IconButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                icon: const Icon(Icons.arrow_back_rounded),
-                                color: const Color(0xFF17324D),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Colors.white.withValues(
-                                    alpha: 0.72,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
+                              Text(
+                                dateText,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: _selectedBirthDate != null
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: _selectedBirthDate != null
+                                      ? const Color(0xFF1E293B)
+                                      : const Color(0xFF94A3B8),
                                 ),
                               ),
-                              SizedBox(width: compactTitleSpacing),
-                              Expanded(
-                                child: Text(
-                                  t(context, 'verifyBirthDateTitle'),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF17324D),
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
+                              const Icon(
+                                Icons.calendar_today_rounded,
+                                color: Color(0xFF00A79D),
+                                size: 20,
                               ),
-                              SizedBox(width: compactTitleSpacing + 22),
                             ],
                           ),
-                          const SizedBox(height: 20),
-                          const StepIndicator(activeStep: 3),
-                          const SizedBox(height: 22),
-                          Text(
-                            t(context, 'verifyBirthDateDesc'),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF6B8092),
-                              height: 1.45,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          Text(
-                            t(context, 'birthDate'),
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF17324D),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          InkWell(
-                            onTap: _pickDate,
-                            borderRadius: BorderRadius.circular(16),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    dateText,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: _selectedBirthDate != null
-                                          ? FontWeight.w600
-                                          : FontWeight.normal,
-                                      color: _selectedBirthDate != null
-                                          ? const Color(0xFF17324D)
-                                          : const Color(0xFFA0B0C0),
-                                    ),
-                                  ),
-                                  const Icon(
-                                    Icons.calendar_today_rounded,
-                                    color: Color(0xFF00A79D),
-                                    size: 20,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 52,
-                            child: FilledButton(
-                              onPressed: (_isLoading || _cooldownSeconds > 0)
-                                  ? null
-                                  : _verifyBirthDate,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF00A79D),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                elevation: 0,
-                              ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : Text(
-                                      _cooldownSeconds > 0
-                                          ? 'Tunggu $_cooldownSeconds detik...'
-                                          : t(context, 'next'),
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: (_isLoading || _cooldownSeconds > 0)
+                              ? null
+                              : _verifyBirthDate,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00A79D),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(
+                                  _cooldownSeconds > 0
+                                      ? 'Tunggu $_cooldownSeconds detik...'
+                                      : t(context, 'next'),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      )
     );
   }
 }
+
 
 class ResetPinFormScreen extends StatefulWidget {
   final String phoneNumber;
@@ -886,45 +852,56 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
   }
 
   Widget _buildNumpadButton(String value) {
-    final isBlank = value.isEmpty;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: isBlank
-            ? null
-            : () {
-                if (value == 'back') {
-                  _onBackspace();
-                } else {
-                  _onNumpadTap(value);
-                }
-              },
-        borderRadius: BorderRadius.circular(100),
+    if (value.isEmpty) {
+      return const SizedBox(width: 68, height: 68);
+    }
+
+    final isBackspace = value == 'back';
+
+    if (isBackspace) {
+      return GestureDetector(
+        onTap: _onBackspace,
         child: Container(
+          height: 52,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isBlank
-                ? Colors.transparent
-                : Colors.white.withValues(alpha: 0.65),
-            border: isBlank
-                ? null
-                : Border.all(color: Colors.white.withValues(alpha: 0.8)),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF00A79D), width: 2),
           ),
-          child: Center(
-            child: value == 'back'
-                ? const Icon(
-                    Icons.backspace_outlined,
-                    color: Color(0xFF17324D),
-                    size: 22,
-                  )
-                : Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF17324D),
-                    ),
-                  ),
+          child: const Center(
+            child: Icon(
+              Icons.backspace_outlined,
+              color: Color(0xFF00A79D),
+              size: 24,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => _onNumpadTap(value),
+      child: Container(
+        height: 68,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
           ),
         ),
       ),
@@ -934,204 +911,183 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
   @override
   Widget build(BuildContext context) {
     final currentPin = _isConfirming ? _confirmPin : _firstPin;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isCompact = screenWidth < 380;
-    final isVeryCompact = screenWidth < 340;
-    final dotSize = isVeryCompact ? 12.0 : 16.0;
-    final dotGap = isVeryCompact ? 6.0 : 8.0;
-    final numpadGap = isVeryCompact ? 10.0 : 16.0;
-    final titleSpacing = isVeryCompact ? 12.0 : 16.0;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFEAF7F4),
-                  Color(0xFFF8FBFF),
-                  Color(0xFFF5EFFF),
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 36),
+
+            // Back + judul atas
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      if (_isConfirming) {
+                        setState(() {
+                          _isConfirming = false;
+                          _confirmPin = '';
+                        });
+                      } else {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                    child: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: Color(0xFF1E293B),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    t(context, 'forgotPin'),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isCompact ? 16 : 24,
-                  vertical: 24,
+
+            const SizedBox(height: 24),
+
+            // Icon gembok — sama dengan phone_create_pin_screen
+            Center(
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F6F4),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(32),
-                    child: Container(
-                      padding: EdgeInsets.fromLTRB(
-                        isCompact ? 18 : 24,
-                        24,
-                        isCompact ? 18 : 24,
-                        24,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(32),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF7F9CCB,
-                            ).withValues(alpha: 0.12),
-                            blurRadius: 22,
-                            offset: const Offset(0, 14),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Row(
-                            children: [
-                              IconButton(
-                                onPressed: () {
-                                  if (_isConfirming) {
-                                    setState(() {
-                                      _isConfirming = false;
-                                      _confirmPin = '';
-                                    });
-                                  } else {
-                                    Navigator.of(context).pop();
-                                  }
-                                },
-                                icon: const Icon(Icons.arrow_back_rounded),
-                                color: const Color(0xFF17324D),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Colors.white.withValues(
-                                    alpha: 0.72,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: titleSpacing),
-                              Expanded(
-                                child: Text(
-                                  _isConfirming
-                                      ? t(context, 'confirmNewPin')
-                                      : t(context, 'createNewPin'),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF17324D),
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: titleSpacing + 22),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          const StepIndicator(activeStep: 4),
-                          const SizedBox(height: 18),
-                          Text(
-                            _isConfirming
-                                ? t(context, 'confirmPinDesc')
-                                : t(context, 'createNewPinDesc'),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              color: Color(0xFF6B8092),
-                              height: 1.45,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(6, (index) {
-                              final isFilled = index < currentPin.length;
-                              return AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                margin: EdgeInsets.symmetric(
-                                  horizontal: dotGap,
-                                ),
-                                width: dotSize,
-                                height: dotSize,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isFilled
-                                      ? (_isPinError
-                                            ? Colors.red.shade400
-                                            : const Color(0xFF00A79D))
-                                      : Colors.white.withValues(alpha: 0.8),
-                                  border: Border.all(
-                                    color: isFilled
-                                        ? (_isPinError
-                                              ? Colors.red.shade400
-                                              : const Color(0xFF00A79D))
-                                        : const Color(0xFFC0D0E0),
-                                    width: 2,
-                                  ),
-                                ),
-                              );
-                            }),
-                          ),
-                          AnimatedOpacity(
-                            opacity: _isPinError ? 1.0 : 0.0,
-                            duration: const Duration(milliseconds: 200),
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 10),
-                              child: Text(
-                                _isSameAsOldPin
-                                    ? t(context, 'sameAsOldPinError')
-                                    : t(context, 'confirmPinMismatchError'),
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 12.5,
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  childAspectRatio: isVeryCompact ? 1.28 : 1.35,
-                                  crossAxisSpacing: numpadGap,
-                                  mainAxisSpacing: 14,
-                                ),
-                            itemCount: 12,
-                            itemBuilder: (context, index) {
-                              if (index == 9) {
-                                return _buildNumpadButton('');
-                              }
-                              if (index == 10) {
-                                return _buildNumpadButton('0');
-                              }
-                              if (index == 11) {
-                                return _buildNumpadButton('back');
-                              }
-                              return _buildNumpadButton('${index + 1}');
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                child: const Icon(
+                  Icons.lock_person_outlined,
+                  size: 36,
+                  color: Color(0xFF00A79D),
                 ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+
+            // Step indicator
+            const StepIndicator(activeStep: 4),
+            const SizedBox(height: 16),
+
+            // Subtitle
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                _isConfirming
+                    ? t(context, 'confirmPinDesc')
+                    : t(context, 'createNewPinDesc'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: Color(0xFF334155),
+                  height: 1.45,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Error teks
+            if (_isPinError)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  _isSameAsOldPin
+                      ? t(context, 'sameAsOldPinError')
+                      : t(context, 'confirmPinMismatchError'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFFEF4444),
+                  ),
+                ),
+              ),
+
+            // 6 PIN dots
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(6, (index) {
+                final isFilled = index < currentPin.length;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _isPinError
+                        ? (isFilled
+                              ? const Color(0xFFEF4444)
+                              : const Color(0xFFE2E8F0))
+                        : (isFilled
+                              ? const Color(0xFF00A79D)
+                              : const Color(0xFFE2E8F0)),
+                  ),
+                );
+              }),
+            ),
+
+            const Spacer(),
+
+            // Numpad — sama persis dengan phone_create_pin_screen
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _buildNumpadButton('1')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('2')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('3')),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _buildNumpadButton('4')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('5')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('6')),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _buildNumpadButton('7')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('8')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('9')),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _buildNumpadButton('')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('0')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildNumpadButton('back')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 36),
+          ],
+        ),
       ),
     );
   }

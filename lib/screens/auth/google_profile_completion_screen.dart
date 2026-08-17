@@ -1,4 +1,4 @@
-﻿import 'dart:ui' as ui;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_language.dart';
@@ -254,6 +254,21 @@ class _GoogleProfileCompletionScreenState
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
+                              IconButton(
+                                onPressed: () => Navigator.of(context).maybePop(),
+                                icon: const Icon(Icons.arrow_back_rounded),
+                                color: const Color(0xFF17324D),
+                                tooltip: t(context, 'back'),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.72),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    side: BorderSide(
+                                      color: Colors.white.withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                              ),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -289,7 +304,6 @@ class _GoogleProfileCompletionScreenState
                                   ],
                                 ),
                               ),
-                              const SizedBox.shrink(),
                             ],
                           ),
                           const SizedBox(height: 20),

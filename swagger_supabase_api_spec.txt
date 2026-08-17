@@ -1,15 +1,28 @@
 openapi: 3.0.0
 info:
   title: Kedota Physiotherapy App API
-  version: 1.1.0
+  version: 1.3.0
   description: >-
     Spesifikasi OpenAPI untuk API produksi aplikasi Kedota Physiotherapy yang
     berjalan di atas Supabase. Dokumen ini mencakup alur autentikasi phone dan
-    Google OAuth, manajemen profil, update PIN, verifikasi tanggal lahir,
-    CRUD data profil, update status, dan penghapusan akun.
+    Google OAuth, manajemen profil, update PIN via Edge Function, verifikasi 
+    tanggal lahir, CRUD data profil, update status, dan penghapusan akun.
+
+    Catatan implementasi:
+    - PIN di-hash menggunakan SHA-256 sebelum disimpan ke kolom pin_hash.
+    - Auth email untuk signup phone menggunakan email asli user (jika valid),
+      fallback ke format {digits}@kedota.local.
+    - Update PIN untuk forgot PIN flow menggunakan Edge Function (update-pin)
+      yang berjalan server-side dengan service-role key aman.
+    - Password Supabase Auth disinkronkan setiap kali PIN diperbarui via
+      Edge Function atau direct session update.
 servers:
   - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/rest/v1
     description: Production Supabase REST API
+  - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/auth/v1
+    description: Production Supabase Auth API
+  - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/functions/v1
+    description: Production Supabase Edge Functions
 tags:
   - name: Auth
     description: Endpoint untuk registrasi, login, dan OAuth pengguna
@@ -17,6 +30,8 @@ tags:
     description: Endpoint untuk mengambil, membuat, memperbarui, dan menghapus data profil pengguna
   - name: PIN
     description: Endpoint untuk update dan verifikasi PIN pengguna
+  - name: Edge Functions
+    description: Supabase Edge Functions untuk operasi server-side yang aman
 security:
   - apiKeyAuth: []
   - bearerAuth: []
@@ -27,9 +42,11 @@ paths:
         - Auth
       summary: Daftar akun baru via nomor HP
       description: >-
-        Membuat akun pengguna baru di Supabase Auth menggunakan email yang
-        digenerate dari nomor HP, lalu menyimpan profil awal ke tabel profiles
-        dengan signup_method = phone.
+        Membuat akun pengguna baru di Supabase Auth menggunakan email asli user
+        (jika valid) atau email yang digenerate dari nomor HP ({digits}@kedota.local),
+        lalu menyimpan profil ke tabel profiles dengan signup_method = phone.
+        Jika akun auth sudah ada (race condition), akan mencoba signIn ulang
+        dan upsert profil. PIN di-hash dengan SHA-256 sebelum disimpan.
       requestBody:
         required: true
         content:
@@ -55,6 +72,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit pendaftaran tercapai. Tunggu beberapa menit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Kesalahan internal server saat memproses pendaftaran.
           content:
@@ -68,9 +91,11 @@ paths:
         - Auth
       summary: Login pengguna via nomor HP dan PIN
       description: >-
-        Melakukan login pengguna menggunakan nomor telepon dan PIN. Di sisi
-        app, nomor HP dikonversi ke email lalu signInWithPassword dipanggil
-        ke Supabase Auth.
+        Melakukan login menggunakan nomor telepon dan PIN. PIN diverifikasi
+        dengan membandingkan SHA-256 hash terhadap pin_hash di tabel profiles.
+        Auth identity dicari berurutan dari auth_email → email → generated email
+        (multi-kandidat untuk menangani migrasi email). Setelah login berhasil,
+        last_login_at diperbarui.
       requestBody:
         required: true
         content:
@@ -91,7 +116,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Kredensial tidak valid, PIN salah.
+          description: Kredensial tidak valid — PIN salah atau nomor tidak terdaftar.
           content:
             application/json:
               schema:
@@ -109,12 +134,15 @@ paths:
         - Auth
       summary: Login atau Daftar via Google OAuth
       description: >-
-        Melakukan autentikasi menggunakan Google Sign-In. Di Android dan iOS
-        menggunakan native Google SDK dengan signInWithIdToken, di web
-        menggunakan signInWithOAuth. Routing setelah callback: jika phone dan
-        pin_hash ada di profiles maka ke PinVerificationScreen; jika salah satu
-        kosong maka ke GoogleProfileCompletionScreen; jika signup_method adalah
-        phone maka sign out Google lalu ke OTP verification.
+        Melakukan autentikasi menggunakan Google Sign-In. Di Android/iOS
+        menggunakan native Google SDK (signInWithIdToken), di web menggunakan
+        signInWithOAuth. Dialog pilih akun selalu muncul karena signOut()
+        dipanggil sebelum signIn().
+
+        Routing setelah OAuth callback:
+        - phone ada && pin_hash ada di profiles → PinVerificationScreen
+        - salah satu kosong → GoogleProfileCompletionScreen
+        - signup_method == 'phone' && phone ada → sign out Google → OtpVerificationScreen
       responses:
         '200':
           description: OAuth berhasil, session Supabase dibuat.
@@ -137,12 +165,14 @@ paths:
       description: >-
         Mengambil daftar data profil pengguna dari tabel profiles.
         Mendukung filter by id, email, atau phone via query parameter.
+        Pencarian phone mendukung multi-variant matching (+62xxx, 62xxx, 08xxx, 8xxx)
+        menggunakan inFilter. Jika inFilter gagal, fallback ke client-side matching.
       parameters:
         - in: query
           name: select
           schema:
             type: string
-            example: "id,full_name,email,phone,pin_hash,signup_method"
+            example: "id,full_name,email,phone,pin_hash,signup_method,birth_date"
           description: Kolom yang ingin diambil menggunakan PostgREST select syntax.
         - in: query
           name: id
@@ -154,7 +184,7 @@ paths:
           name: phone
           schema:
             type: string
-            example: "in.(+6281234567890,6281234567890,081234567890)"
+            example: "in.(+6281234567890,6281234567890,081234567890,81234567890)"
           description: Filter profil berdasarkan nomor telepon dengan multi-variant matching.
         - in: query
           name: email
@@ -190,8 +220,10 @@ paths:
       summary: Tambah data profil baru
       description: >-
         Membuat entri profil baru untuk pengguna. Dipakai saat
-        completeSocialProfile untuk Google dan createPhoneProfile untuk HP.
-        Membutuhkan header Prefer return=representation agar response
+        completeSocialProfile (Google) dan createPhoneProfile (HP).
+        Implementasi menggunakan upsert (client.from('profiles').upsert()),
+        fallback ke Retrofit _persistProfile jika upsert gagal.
+        Membutuhkan header Prefer: return=representation agar response
         mengembalikan row yang dibuat.
       parameters:
         - in: header
@@ -227,6 +259,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Profil dengan ID tersebut sudah ada (conflict upsert).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Kesalahan internal server saat membuat profil.
           content:
@@ -239,7 +277,7 @@ paths:
       tags:
         - Profiles
       summary: Ambil detail profil by ID
-      description: Mengambil detail profil berdasarkan ID pengguna UUID.
+      description: Mengambil detail profil berdasarkan UUID pengguna.
       parameters:
         - in: path
           name: id
@@ -281,16 +319,19 @@ paths:
       summary: Update profil pengguna
       description: >-
         Memperbarui data profil. Dipakai untuk update nama, email, TTL, gender,
-        atau pin_hash. Membutuhkan header Prefer return=representation.
-        Jika dipanggil via service-role key admin, menggunakan Dio langsung
-        dengan header Authorization Bearer service_role_key.
+        atau pin_hash. Membutuhkan header Prefer: return=representation.
+
+        Jika user sedang login, update menggunakan Retrofit client dengan
+        Bearer session token. Jika tidak ada session aktif (misalnya reset PIN
+        dari alur lupa PIN), update dilakukan via Dio langsung menggunakan
+        service-role key (admin mode).
       parameters:
         - in: path
           name: id
           required: true
           schema:
             type: string
-          description: UUID profil pengguna dengan format PostgREST eq.uuid.
+          description: UUID profil pengguna dalam format PostgREST (eq.{uuid}).
         - in: header
           name: Prefer
           schema:
@@ -379,14 +420,19 @@ paths:
     patch:
       tags:
         - PIN
-      summary: Update PIN pengguna
+      summary: Update PIN pengguna (session aktif)
       description: >-
-        Memperbarui pin_hash profil pengguna. Dipanggil dari alur lupa PIN
-        dengan allowSamePin true, maupun ganti PIN biasa dengan allowSamePin
-        false. Setelah update pin_hash di tabel profiles, password di Supabase
-        Auth juga disinkronkan agar login tetap bisa menggunakan PIN baru.
-        Jika user sedang login maka update dilakukan via client session,
-        jika tidak maka menggunakan service-role admin API.
+        Memperbarui pin_hash profil pengguna menggunakan SHA-256 hash dari PIN baru.
+        Endpoint ini digunakan HANYA untuk user dengan session aktif (logged in).
+        
+        Untuk forgot PIN flow (tanpa session), gunakan Edge Function /functions/v1/update-pin.
+        
+        Dipanggil dari:
+        - Ganti PIN saat user sudah login (allowSamePin = false)
+        
+        Implementasi menggunakan direct session update:
+        - Update pin_hash di tabel profiles
+        - Sync password di Supabase Auth via client.auth.updateUser()
       parameters:
         - in: path
           name: id
@@ -416,13 +462,13 @@ paths:
                 items:
                   $ref: '#/components/schemas/Profile'
         '400':
-          description: PIN baru sama dengan PIN lama saat allowSamePin false.
+          description: PIN baru sama dengan PIN lama saat allowSamePin = false.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Akses ditolak.
+          description: Akses ditolak — session tidak aktif.
           content:
             application/json:
               schema:
@@ -440,6 +486,120 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /functions/v1/update-pin:
+    post:
+      tags:
+        - Edge Functions
+      summary: Update PIN via Edge Function (server-side)
+      description: >-
+        Supabase Edge Function untuk update PIN secara aman dari client tanpa
+        mengekspos service-role key. Berjalan di server-side (Deno runtime).
+        
+        **Kapan digunakan:**
+        - Forgot PIN flow — user tidak punya session aktif
+        - Future: admin reset PIN user
+        
+        **Keamanan:**
+        - Validasi JWT token (atau anon key untuk forgot PIN)
+        - Service-role key hanya di server-side
+        - Cegah user update PIN user lain (jika punya session)
+        - Rollback otomatis jika sync auth password gagal
+        
+        **Alur:**
+        1. Validasi Authorization header (JWT atau anon key)
+        2. Cek session — jika ada, pastikan profile_id = user.id
+        3. Ambil pin_hash lama (untuk rollback)
+        4. Update pin_hash di tabel profiles
+        5. Sync password ke Supabase Auth via admin.updateUserById
+        6. Jika gagal → rollback pin_hash lama
+        7. Return success/error response
+        
+        **Implementasi di client (Flutter):**
+        ```dart
+        // Service: supabase_auth_service.dart
+        // Method: updateUserPin()
+        
+        // Jika user punya session → direct update
+        if (currentUser != null && currentUser.id == profileId) {
+          await client.from('profiles').update(...);
+          await client.auth.updateUser(...);
+        }
+        // Jika tidak ada session → Edge Function
+        else {
+          await dio.post('/functions/v1/update-pin', ...);
+        }
+        ```
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeFunctionUpdatePinRequest'
+      responses:
+        '200':
+          description: PIN berhasil diperbarui.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionUpdatePinResponse'
+        '400':
+          description: Request body tidak valid (missing fields).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionErrorResponse'
+              example:
+                error: "Missing required fields: profile_id, new_pin_hash, new_pin"
+        '401':
+          description: Authorization header tidak valid atau missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionErrorResponse'
+              example:
+                error: "Missing or invalid Authorization header"
+        '403':
+          description: User mencoba update PIN user lain.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionErrorResponse'
+              example:
+                error: "Forbidden: cannot update another user's PIN"
+        '404':
+          description: Profil tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionErrorResponse'
+              example:
+                error: "Profile not found"
+        '500':
+          description: >-
+            Internal server error. Bisa terjadi saat:
+            - Gagal update pin_hash di profiles
+            - Gagal sync password ke auth (sudah di-rollback)
+            - Error tidak terduga
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionErrorResponse'
+              examples:
+                profile_update_failed:
+                  value:
+                    error: "Failed to update profile PIN"
+                    detail: "Database error message"
+                auth_sync_failed:
+                  value:
+                    error: "Failed to sync PIN to auth password — profile rolled back"
+                    detail: "Auth API error message"
+                unexpected:
+                  value:
+                    error: "Internal server error"
+                    detail: "Error description"
+
   /profiles/{id}/verify-birth-date:
     post:
       tags:
@@ -448,8 +608,9 @@ paths:
       description: >-
         Memverifikasi tanggal lahir user untuk keperluan lupa PIN.
         Membandingkan input tanggal lahir dengan yang tersimpan di kolom
-        birth_date format YYYY-MM-DD. Jika tidak cocok, diberlakukan
-        cooldown 3 detik sebelum user bisa coba lagi.
+        birth_date (format YYYY-MM-DD). Jika tidak cocok, diberlakukan
+        cooldown 3 detik di sisi UI sebelum user bisa coba lagi.
+        Digunakan di BirthDateVerificationScreen pada alur forgot_pin_screen.dart.
       parameters:
         - in: path
           name: id
@@ -490,7 +651,8 @@ paths:
       summary: Update status profil
       description: >-
         Memperbarui flag tertentu pada profil pengguna seperti
-        is_profile_complete atau last_login_at.
+        is_profile_complete atau last_login_at. Dipanggil setelah login
+        berhasil untuk memperbarui timestamp last_login_at.
       parameters:
         - in: path
           name: id
@@ -538,6 +700,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /profiles/check-phone:
+    get:
+      tags:
+        - Profiles
+      summary: Cek apakah nomor HP sudah terdaftar
+      description: >-
+        Mengecek apakah nomor HP sudah terdaftar di tabel profiles.
+        Menggunakan multi-variant phone matching (+62xxx, 62xxx, 08xxx, 8xxx).
+        Digunakan oleh GoogleProfileCompletionScreen sebelum memproses OTP.
+      parameters:
+        - in: query
+          name: phone
+          required: true
+          schema:
+            type: string
+            example: "in.(+6281234567890,6281234567890,081234567890,81234567890)"
+          description: Nomor HP dalam berbagai format untuk pengecekan duplikat.
+      responses:
+        '200':
+          description: Hasil pengecekan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckExistsResponse'
+        '401':
+          description: Token atau API key tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profiles/check-email:
+    get:
+      tags:
+        - Profiles
+      summary: Cek apakah email sudah terdaftar
+      description: >-
+        Mengecek apakah email sudah terdaftar di tabel profiles.
+        Digunakan oleh PhoneProfileCompletionScreen sebelum melanjutkan ke
+        pembuatan PIN agar tidak ada duplikat email.
+      parameters:
+        - in: query
+          name: email
+          required: true
+          schema:
+            type: string
+            example: "eq.budi@example.com"
+          description: Email yang akan dicek.
+      responses:
+        '200':
+          description: Hasil pengecekan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckExistsResponse'
+        '401':
+          description: Token atau API key tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     apiKeyAuth:
@@ -567,7 +791,7 @@ components:
           example: "081234567890"
         pin:
           type: string
-          description: PIN 6-digit
+          description: PIN 6-digit (akan di-hash dengan SHA-256)
           example: "123456"
         full_name:
           type: string
@@ -575,7 +799,9 @@ components:
         email:
           type: string
           format: email
-          description: Email opsional. Jika tidak diisi, digenerate dari nomor HP.
+          description: >-
+            Email opsional. Jika valid, dipakai sebagai auth identity di Supabase Auth.
+            Jika tidak diisi atau tidak valid, digenerate dari nomor HP ({digits}@kedota.local).
           example: budi@example.com
         birth_date:
           type: string
@@ -608,7 +834,7 @@ components:
           example: "081234567890"
         pin:
           type: string
-          description: PIN 6-digit
+          description: PIN 6-digit (akan diverifikasi dengan SHA-256 hash)
           example: "123456"
 
     AuthResponse:
@@ -643,7 +869,7 @@ components:
           example: 123e4567-e89b-12d3-a456-426614174000
         phone:
           type: string
-          description: Nomor HP format +62xxx
+          description: Nomor HP format +62xxx (dinormalisasi, tanpa tanda +62 stripped)
           example: "+6281234567890"
         full_name:
           type: string
@@ -651,19 +877,21 @@ components:
         email:
           type: string
           format: email
+          description: Email display dari input user atau Google
           example: budi@example.com
         auth_email:
           type: string
           format: email
-          description: Email yang dipakai di Supabase Auth
+          description: Email yang dipakai di Supabase Auth (mungkin berbeda dari email display)
           example: budi@example.com
         pin_hash:
           type: string
-          description: Hash FNV-1a dari PIN 6-digit
-          example: "937377f0abcd1234"
+          description: SHA-256 hash dari PIN 6-digit
+          example: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
         birth_date:
           type: string
           format: date
+          description: Format YYYY-MM-DD, disimpan menggunakan local date (bukan UTC) untuk menghindari timezone shift
           example: "1995-08-10"
         gender:
           type: string
@@ -682,10 +910,14 @@ components:
         is_profile_complete:
           type: boolean
           example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-08-17T10:00:00Z"
         updated_at:
           type: string
           format: date-time
-          example: "2026-08-09T10:00:00Z"
+          example: "2026-08-17T10:00:00Z"
 
     UpdateProfileRequest:
       type: object
@@ -715,10 +947,14 @@ components:
         is_profile_complete:
           type: boolean
           example: true
+        last_login_at:
+          type: string
+          format: date-time
+          example: "2026-08-17T10:00:00Z"
         updated_at:
           type: string
           format: date-time
-          example: "2026-08-09T10:30:00Z"
+          example: "2026-08-17T10:30:00Z"
 
     UpdatePinRequest:
       type: object
@@ -727,12 +963,55 @@ components:
       properties:
         pin_hash:
           type: string
-          description: Hash FNV-1a dari PIN baru
-          example: "a1b2c3d4e5f67890"
+          description: SHA-256 hash dari PIN baru
+          example: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
         updated_at:
           type: string
           format: date-time
-          example: "2026-08-09T10:30:00Z"
+          example: "2026-08-17T10:30:00Z"
+
+    EdgeFunctionUpdatePinRequest:
+      type: object
+      required:
+        - profile_id
+        - new_pin_hash
+        - new_pin
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          description: UUID profil pengguna yang akan diupdate
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        new_pin_hash:
+          type: string
+          description: SHA-256 hash dari PIN baru (untuk disimpan di profiles.pin_hash)
+          example: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
+        new_pin:
+          type: string
+          description: PIN baru plaintext 6-digit (untuk disync ke Supabase Auth password)
+          example: "123456"
+
+    EdgeFunctionUpdatePinResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: true jika update berhasil
+          example: true
+        profile:
+          $ref: '#/components/schemas/Profile'
+
+    EdgeFunctionErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Missing or invalid Authorization header"
+        detail:
+          type: string
+          description: Detail error tambahan (opsional)
+          example: "JWT token expired"
 
     VerifyBirthDateRequest:
       type: object
@@ -743,7 +1022,7 @@ components:
           type: string
           format: date
           description: Tanggal lahir input dari user format YYYY-MM-DD
-          example: "2000-01-01"
+          example: "1995-08-10"
 
     VerifyBirthDateResponse:
       type: object
@@ -762,11 +1041,19 @@ components:
         last_login_at:
           type: string
           format: date-time
-          example: "2026-08-09T10:00:00Z"
+          example: "2026-08-17T10:00:00Z"
         updated_at:
           type: string
           format: date-time
-          example: "2026-08-09T10:00:00Z"
+          example: "2026-08-17T10:00:00Z"
+
+    CheckExistsResponse:
+      type: object
+      properties:
+        exists:
+          type: boolean
+          description: true jika data sudah terdaftar
+          example: false
 
     Profile:
       type: object
@@ -776,7 +1063,7 @@ components:
           example: 123e4567-e89b-12d3-a456-426614174000
         phone:
           type: string
-          description: Format +62xxx
+          description: Format +62xxx (atau tanpa +, tergantung input saat registrasi)
           example: "+6281234567890"
         full_name:
           type: string
@@ -786,16 +1073,22 @@ components:
           example: budi@example.com
         auth_email:
           type: string
+          description: Email yang dipakai di Supabase Auth (untuk multi-kandidat sign-in)
           example: budi@example.com
         pin_hash:
           type: string
-          example: "937377f0abcd1234"
+          description: SHA-256 hash dari PIN
+          example: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
         birth_date:
           type: string
           format: date
           example: "1995-08-10"
         gender:
           type: string
+          enum:
+            - Laki-laki
+            - Perempuan
+            - Lainnya
           example: Laki-laki
         signup_method:
           type: string
@@ -806,19 +1099,20 @@ components:
           example: phone
         is_profile_complete:
           type: boolean
+          description: Flag informasi kelengkapan profil (bukan penentu utama routing)
           example: true
         last_login_at:
           type: string
           format: date-time
-          example: "2026-08-09T09:00:00Z"
+          example: "2026-08-17T09:00:00Z"
         created_at:
           type: string
           format: date-time
-          example: "2026-08-09T10:00:00Z"
+          example: "2026-08-17T10:00:00Z"
         updated_at:
           type: string
           format: date-time
-          example: "2026-08-09T10:30:00Z"
+          example: "2026-08-17T10:30:00Z"
 
     ErrorResponse:
       type: object
