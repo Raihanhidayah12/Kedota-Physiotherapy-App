@@ -13,8 +13,9 @@
 | 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home |
 | 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil → Buat PIN → Akun Berhasil Dibuat |
 | 🌐 Google Sign-In | 🟢 Selesai | OAuth Google → Pilih Akun → Lengkapi Profil → OTP → Buat PIN → Home |
-| 🍎 Apple Sign-In | ⚪ Placeholder | UI tersedia, belum aktif |
-| 📩 Verifikasi OTP Dummy | 🟢 Selesai | Kode valid: `123456`, `555555`, `000000`, `999999` |
+| 🍎 Apple Sign-In | 🟢 Selesai | OAuth Apple terintegrasi (`signInWithOAuth`) |
+| 📩 OTP Verifikasi (Dummy) | 🟢 Selesai | Kode valid: `123456`, `555555`, `000000`, `999999` |
+| 📡 OTP Production (Plan) | 🔵 Siap Migrasi | Endpoint `/auth/otp` & `/auth/verify` sudah disiapkan di Swagger |
 | 🔓 Lupa PIN | 🟢 Selesai | OTP → Verifikasi Tanggal Lahir → PIN Baru (boleh sama dengan lama) |
 | 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → cooldown 30 detik |
 | 💤 Dormant Account | 🟢 Selesai | Akun >60 hari tidak aktif → verifikasi via email |
@@ -140,7 +141,7 @@ PIN Verification → Lupa PIN
 | Profile Completeness Check | Hanya `phone` + `pin_hash` keduanya ada yang dianggap akun lengkap |
 | Duplicate Phone Check | Cek nomor duplikat mengecualikan akun milik user yang sedang login |
 | Duplicate Email Check | Cek email duplikat saat profil phone dibuat |
-| Dormant Account | Tidak aktif >60 hari → verifikasi via email OTP |
+| Account Status & Dormant | Cek status (`active`, `deactivated`, `recycled`) & deteksi akun tidak aktif >60 hari |
 | Edge Function | Update PIN untuk forgot PIN flow via server-side function (`update-pin`) |
 | Service-Role Key | Hanya digunakan di Edge Function (server-side), tidak pernah di client |
 
@@ -215,12 +216,43 @@ lib/
 |---|---|
 | Framework | Flutter 3.x (Dart) |
 | Backend | Supabase (PostgreSQL + Auth + Edge Functions) |
-| OAuth | Google Sign-In via native SDK + Supabase |
+| OAuth | Google Sign-In (native SDK + Supabase) & Apple Sign-In (Supabase OAuth) |
 | HTTP Client | Dio + Retrofit (generated) |
 | Local Storage | `shared_preferences` |
 | PIN Security | SHA-256 Hashing |
 | Server Functions | Supabase Edge Functions (Deno runtime) |
+| API Docs | OpenAPI 3.0 (Swagger) — `swagger_supabase_api_spec.txt` |
 | UI Style | Header teal + White card layout |
+
+---
+
+## 📄 Dokumentasi API
+
+Spesifikasi API lengkap tersedia dalam format **OpenAPI 3.0 (Swagger)** di:
+```
+swagger_supabase_api_spec.txt
+```
+
+### Endpoint yang Tersedia:
+
+| Tag | Endpoint | Method | Keterangan |
+|---|---|:---:|---|
+| Auth | `/auth/signup` | POST | Daftar akun via nomor HP |
+| Auth | `/auth/signin` | POST | Login via nomor HP + PIN |
+| Auth | `/auth/google` | POST | Login / Daftar via Google OAuth |
+| Auth | `/auth/apple` | POST | Login via Apple OAuth |
+| Auth | `/auth/signout` | POST | Logout dari session aktif |
+| Auth | `/auth/otp` | POST | Kirim OTP via SMS *(Production Plan)* |
+| Auth | `/auth/verify` | POST | Verifikasi kode OTP *(Production Plan)* |
+| Profiles | `/profiles` | GET / POST | Ambil / Buat profil pengguna |
+| Profiles | `/profiles/{id}` | GET / PATCH / DELETE | Detail / Update / Hapus profil |
+| Profiles | `/profiles/{id}/pin` | PATCH | Update PIN (session aktif) |
+| Profiles | `/profiles/{id}/verify-birth-date` | POST | Verifikasi TTL untuk lupa PIN |
+| Profiles | `/profiles/{id}/status` | PATCH | Update status profil |
+| Profiles | `/profiles/check-phone` | GET | Cek duplikat nomor HP |
+| Profiles | `/profiles/check-email` | GET | Cek duplikat email |
+| Profiles | `/profiles/check-status` | GET | Cek status & dormant akun |
+| Edge Functions | `/functions/v1/update-pin` | POST | Update PIN via server-side (aman) |
 
 ---
 
@@ -247,6 +279,7 @@ flutter run
 ```
 123456   555555   000000   999999
 ```
+*(Catatan: Endpoint production `/auth/otp` & `/auth/verify` sudah disiapkan di dokumentasi Swagger untuk integrasi OTP sungguhan ke depannya).*
 
 **Format nomor HP valid:**
 ```
@@ -254,6 +287,27 @@ flutter run
 6281234567890
 81234567890
 ```
+
+---
+
+## 📡 OTP Production Plan
+
+Saat ini OTP berjalan secara **dummy (frontend-only)** untuk keperluan development dan testing.
+Untuk production, akan dimigrasi ke Supabase Native OTP (SMS via Twilio / Vonage / dsb.):
+
+**Alur OTP Production:**
+```
+Kirim OTP:    POST /auth/otp    → { phone: "+6281234567890" }
+Verif OTP:    POST /auth/verify → { phone, token, type: "sms" }
+```
+
+**Yang perlu diubah saat migrasi ke production:**
+1. Aktifkan **Phone Auth** di Supabase Dashboard → Authentication → Providers
+2. Hubungkan SMS provider (Twilio, Vonage, dll.) di Supabase Dashboard
+3. Ganti logika `_verifyOtp()` di `otp_verification_screen.dart` dari validasi dummy ke `client.auth.verifyOTP()`
+4. Ganti tombol kirim ulang untuk memanggil `client.auth.signInWithOtp(phone: ...)`
+
+> ⚠️ Endpoint Swagger untuk OTP production (`/auth/otp` & `/auth/verify`) sudah disiapkan dan siap dijadikan referensi implementasi.
 
 ---
 
@@ -346,6 +400,7 @@ Lihat `DEPLOY_EDGE_FUNCTION.md` untuk panduan deployment lengkap.
 | `birth_date` | date | Tanggal lahir format `YYYY-MM-DD` (untuk verifikasi lupa PIN) |
 | `gender` | text | `Laki-laki` / `Perempuan` / `Lainnya` |
 | `signup_method` | text | `phone` / `google` / `apple` |
+| `status` | text | `active` / `deactivated` / `recycled` |
 | `is_profile_complete` | bool | Flag kelengkapan profil (informasi tambahan) |
 | `last_login_at` | timestamptz | Untuk deteksi akun dormant (>60 hari) |
 | `created_at` | timestamptz | — |

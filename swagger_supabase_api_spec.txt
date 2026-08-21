@@ -16,6 +16,22 @@ info:
       yang berjalan server-side dengan service-role key aman.
     - Password Supabase Auth disinkronkan setiap kali PIN diperbarui via
       Edge Function atau direct session update.
+
+    DATABASE SCHEMA:
+    Tabel utama yang digunakan adalah `profiles` dengan struktur:
+    - id (UUID, PK)
+    - phone (String)
+    - full_name (String)
+    - email (String)
+    - auth_email (String)
+    - pin_hash (String, SHA-256)
+    - birth_date (Date, YYYY-MM-DD)
+    - gender (Enum: Laki-laki, Perempuan, Lainnya)
+    - signup_method (Enum: phone, google, apple)
+    - status (Enum: active, deactivated, recycled)
+    - is_profile_complete (Boolean)
+    - last_login_at (Timestamp)
+    - created_at, updated_at (Timestamp)
 servers:
   - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/rest/v1
     description: Production Supabase REST API
@@ -152,6 +168,83 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
           description: OAuth gagal atau user membatalkan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/apple:
+    post:
+      tags:
+        - Auth
+      summary: Login via Apple OAuth
+      description: >-
+        Melakukan autentikasi menggunakan Apple Sign-In.
+      responses:
+        '200':
+          description: OAuth berhasil, session Supabase dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: OAuth gagal atau user membatalkan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/signout:
+    post:
+      tags:
+        - Auth
+      summary: Logout dari session saat ini
+      description: Mengakhiri session aktif user di Supabase Auth.
+      responses:
+        '200':
+          description: Berhasil logout.
+
+  /auth/otp:
+    post:
+      tags:
+        - Auth
+      summary: Minta OTP via SMS (Production Plan)
+      description: >-
+        Endpoint untuk meminta kode OTP via SMS menggunakan native Supabase OTP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendOtpRequest'
+      responses:
+        '200':
+          description: OTP berhasil dikirim.
+        '400':
+          description: Nomor telepon tidak valid atau limit tercapai.
+
+  /auth/verify:
+    post:
+      tags:
+        - Auth
+      summary: Verifikasi kode OTP (Production Plan)
+      description: >-
+        Verifikasi kode OTP yang diterima user untuk mendapatkan session/auth.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpRequest'
+      responses:
+        '200':
+          description: OTP valid, login/verifikasi sukses.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: OTP salah atau kadaluarsa.
           content:
             application/json:
               schema:
@@ -700,6 +793,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /profiles/check-status:
+    get:
+      tags:
+        - Profiles
+      summary: Cek status akun pengguna
+      description: >-
+        Mengecek apakah nomor HP sudah terdaftar, status dormant (>60 hari inaktif),
+        atau status akun (active, deactivated, recycled).
+      parameters:
+        - in: query
+          name: phone
+          required: true
+          schema:
+            type: string
+          description: Nomor HP yang akan dicek.
+      responses:
+        '200':
+          description: Status akun berhasil diambil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountCheckResult'
+        '404':
+          description: Akun tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /profiles/check-phone:
     get:
       tags:
@@ -836,6 +958,35 @@ components:
           type: string
           description: PIN 6-digit (akan diverifikasi dengan SHA-256 hash)
           example: "123456"
+
+    SendOtpRequest:
+      type: object
+      required:
+        - phone
+      properties:
+        phone:
+          type: string
+          description: Nomor HP format internasional (+62...)
+          example: "+6281234567890"
+
+    VerifyOtpRequest:
+      type: object
+      required:
+        - phone
+        - token
+        - type
+      properties:
+        phone:
+          type: string
+          example: "+6281234567890"
+        token:
+          type: string
+          description: 6-digit OTP code
+          example: "123456"
+        type:
+          type: string
+          enum: [sms]
+          example: "sms"
 
     AuthResponse:
       type: object
@@ -1046,6 +1197,36 @@ components:
           type: string
           format: date-time
           example: "2026-08-17T10:00:00Z"
+        status:
+          type: string
+          enum:
+            - active
+            - deactivated
+            - recycled
+          example: active
+
+    AccountCheckResult:
+      type: object
+      properties:
+        isRegistered:
+          type: boolean
+          example: true
+        isDormant:
+          type: boolean
+          example: false
+        email:
+          type: string
+          example: budi@example.com
+        phone:
+          type: string
+          example: "+6281234567890"
+        status:
+          type: string
+          enum:
+            - active
+            - deactivated
+            - recycled
+          example: active
 
     CheckExistsResponse:
       type: object
@@ -1097,6 +1278,13 @@ components:
             - google
             - apple
           example: phone
+        status:
+          type: string
+          enum:
+            - active
+            - deactivated
+            - recycled
+          example: active
         is_profile_complete:
           type: boolean
           description: Flag informasi kelengkapan profil (bukan penentu utama routing)
