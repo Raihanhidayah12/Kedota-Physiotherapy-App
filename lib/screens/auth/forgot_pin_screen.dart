@@ -39,6 +39,48 @@ class StepIndicator extends StatelessWidget {
   }
 }
 
+// ─── Shared logo header ───────────────────────────────────────────────────────
+Widget _buildLogoHeader(BuildContext context) {
+  final h = MediaQuery.of(context).size.height;
+  final w = MediaQuery.of(context).size.width;
+  final logoH = (h * 0.075).clamp(44.0, 64.0);
+  final titleSize = (w * 0.046).clamp(14.0, 20.0);
+  final subtitleSize = (w * 0.025).clamp(8.0, 11.0);
+  final vPad = h < 640 ? 14.0 : 22.0;
+  return Padding(
+    padding: EdgeInsets.symmetric(vertical: vPad),
+    child: Column(
+      children: [
+        Image.asset(
+          'assets/image/logo 2.png',
+          height: logoH,
+          fit: BoxFit.contain,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'K E D O T A',
+          style: TextStyle(
+            fontSize: titleSize,
+            fontWeight: FontWeight.w900,
+            color: const Color(0xFF00A79D),
+            letterSpacing: 4.0,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'P H Y S I O T H E R A P Y',
+          style: TextStyle(
+            fontSize: subtitleSize,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF00A79D).withValues(alpha: 0.85),
+            letterSpacing: 3.5,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class ForgotPinScreen extends StatefulWidget {
   const ForgotPinScreen({super.key});
 
@@ -92,7 +134,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
       type: isError ? BottomSheetType.error : BottomSheetType.success,
       title: isError ? 'Informasi' : 'Berhasil',
       subtitle: message,
-      singleButtonText: t(context, 'close'),
+      singleButtonText: t(context, 'closeBtn'),
       onSinglePressed: () => Navigator.of(context).pop(),
     );
   }
@@ -161,38 +203,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
       child: Column(
         children: [
           // Header teal — sama persis dengan sign_in_screen
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Column(
-              children: [
-                Image.asset(
-                  'assets/image/logo 2.png',
-                  height: 56,
-                  fit: BoxFit.contain,
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'K E D O T A',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF00A79D),
-                    letterSpacing: 4.0,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'P H Y S I O T H E R A P Y',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF00A79D).withValues(alpha: 0.85),
-                    letterSpacing: 4.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildLogoHeader(context),
           // White card bawah
           Expanded(
             child: Container(
@@ -416,7 +427,7 @@ class _BirthDateVerificationScreenState
       type: isError ? BottomSheetType.error : BottomSheetType.success,
       title: isError ? 'Informasi' : 'Berhasil',
       subtitle: message,
-      singleButtonText: t(context, 'close'),
+      singleButtonText: t(context, 'closeBtn'),
       onSinglePressed: () => Navigator.of(context).pop(),
     );
   }
@@ -519,38 +530,7 @@ class _BirthDateVerificationScreenState
         child: Column(
           children: [
             // Header teal
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Column(
-                children: [
-                  Image.asset(
-                    'assets/image/logo 2.png',
-                    height: 56,
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'K E D O T A',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF00A79D),
-                      letterSpacing: 4.0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'P H Y S I O T H E R A P Y',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF00A79D).withValues(alpha: 0.85),
-                      letterSpacing: 4.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildLogoHeader(context),
             // White card bawah
             Expanded(
               child: Container(
@@ -682,7 +662,7 @@ class _BirthDateVerificationScreenState
                                 )
                               : Text(
                                   _cooldownSeconds > 0
-                                      ? 'Tunggu $_cooldownSeconds detik...'
+                                      ? t(context, 'wait30Seconds').replaceAll('{seconds}', '$_cooldownSeconds')
                                       : t(context, 'next'),
                                   style: const TextStyle(
                                     fontSize: 16,
@@ -739,7 +719,7 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
       type: isError ? BottomSheetType.error : BottomSheetType.success,
       title: isError ? 'Informasi' : 'Berhasil',
       subtitle: message,
-      singleButtonText: t(context, 'close'),
+      singleButtonText: t(context, 'closeBtn'),
       onSinglePressed: () => Navigator.of(context).pop(),
     );
   }
@@ -853,7 +833,8 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
 
   Widget _buildNumpadButton(String value) {
     if (value.isEmpty) {
-      return const SizedBox(width: 68, height: 68);
+      // Placeholder transparan — ukuran mengikuti AspectRatio
+      return AspectRatio(aspectRatio: 1, child: const SizedBox.shrink());
     }
 
     final isBackspace = value == 'back';
@@ -861,18 +842,20 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
     if (isBackspace) {
       return GestureDetector(
         onTap: _onBackspace,
-        child: Container(
-          height: 52,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF00A79D), width: 2),
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.backspace_outlined,
-              color: Color(0xFF00A79D),
-              size: 24,
+        child: LayoutBuilder(
+          builder: (context, c) => Container(
+            height: c.maxWidth * 0.76,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF00A79D), width: 2),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.backspace_outlined,
+                color: const Color(0xFF00A79D),
+                size: c.maxWidth * 0.35,
+              ),
             ),
           ),
         ),
@@ -881,26 +864,30 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
 
     return GestureDetector(
       onTap: () => _onNumpadTap(value),
-      child: Container(
-        height: 68,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Center(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Center(
+            child: LayoutBuilder(
+              builder: (context, c) => Text(
+                value,
+                style: TextStyle(
+                  fontSize: c.maxWidth * 0.35,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1E293B),
+                ),
+              ),
             ),
           ),
         ),
@@ -1272,19 +1259,16 @@ class _PinResetSuccessScreenState extends State<PinResetSuccessScreen>
                                   height: 1.6,
                                 ),
                                 children: [
-                                  const TextSpan(
-                                    text:
-                                        'Anda akan diarahkan ke halaman login dalam ',
+                                  TextSpan(
+                                    text: t(context, 'pinUpdatedSuccessDesc'),
                                   ),
+                                  const TextSpan(text: '\n'),
                                   TextSpan(
                                     text: '$_countdown detik',
                                     style: const TextStyle(
                                       color: Color(0xFF00A79D),
                                       fontWeight: FontWeight.w700,
                                     ),
-                                  ),
-                                  const TextSpan(
-                                    text: '\nuntuk mencoba PIN Anda!',
                                   ),
                                 ],
                               ),

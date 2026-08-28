@@ -69,7 +69,8 @@ class SupabaseAuthService {
     return buildEmailFromPhone(phone);
   }
 
-  String hashPin(String pin) {    final bytes = utf8.encode(pin);
+  String hashPin(String pin) {
+    final bytes = utf8.encode(pin);
     final digest = crypto.sha256.convert(bytes);
     return digest.toString();
   }
@@ -416,6 +417,12 @@ class SupabaseAuthService {
         );
       }
 
+      final metadata = user.userMetadata ?? <String, dynamic>{};
+      final profilePhotoUrl = _firstNonEmptyString([
+        metadata['avatar_url'],
+        metadata['picture'],
+        metadata['photo_url'],
+      ]);
       final profilePayload = {
         'id': user.id,
         'phone': normalizedPhone,
@@ -426,6 +433,7 @@ class SupabaseAuthService {
         'gender': gender,
         'signup_method': provider,
         'pin_hash': hashPin(pin),
+        'profile_photo_url': profilePhotoUrl,
         'is_profile_complete': true,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
@@ -453,6 +461,68 @@ class SupabaseAuthService {
       debugPrint(stackTrace.toString());
       throw Exception(_formatSupabaseError(error));
     }
+  }
+
+  Future<void> syncProfilePhotoFromAuth() async {
+    final user = client.auth.currentUser;
+    if (user == null) return;
+
+    final metadata = user.userMetadata ?? <String, dynamic>{};
+    final profilePhotoUrl = _firstNonEmptyString([
+      metadata['avatar_url'],
+      metadata['picture'],
+      metadata['photo_url'],
+    ]);
+    if (profilePhotoUrl == null || _isGoogleHostedPhoto(profilePhotoUrl)) {
+      return;
+    }
+
+    try {
+      final imageResponse = await Dio().get<List<int>>(
+        profilePhotoUrl,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final imageBytes = imageResponse.data;
+      if (imageBytes == null || imageBytes.isEmpty) return;
+
+      final photoPath = '${user.id}/profile.jpg';
+      await client.storage
+          .from('profile-photos')
+          .uploadBinary(
+            photoPath,
+            Uint8List.fromList(imageBytes),
+            fileOptions: const FileOptions(
+              contentType: 'image/jpeg',
+              upsert: true,
+            ),
+          );
+      final storedPhotoUrl = client.storage
+          .from('profile-photos')
+          .getPublicUrl(photoPath);
+      await client
+          .from('profiles')
+          .update({
+            'profile_photo_url': storedPhotoUrl,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', user.id);
+    } catch (error) {
+      debugPrint('Profile photo sync failed: $error');
+    }
+  }
+
+  String? _firstNonEmptyString(List<dynamic> values) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
+  bool _isGoogleHostedPhoto(String url) {
+    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    return host == 'googleusercontent.com' ||
+        host.endsWith('.googleusercontent.com');
   }
 
   /// Create profile for phone sign up (after OTP verification).
@@ -692,7 +762,29 @@ class SupabaseAuthService {
           .eq('id', user.id)
           .maybeSingle();
 
-      return response;
+      if (response != null) {
+        return response;
+      }
+
+      final authEmail = user.email?.trim() ?? '';
+      if (authEmail.isEmpty) {
+        return null;
+      }
+
+      final authEmailProfile = await client
+          .from('profiles')
+          .select()
+          .eq('auth_email', authEmail)
+          .maybeSingle();
+      if (authEmailProfile != null) {
+        return authEmailProfile;
+      }
+
+      return await client
+          .from('profiles')
+          .select()
+          .eq('email', authEmail)
+          .maybeSingle();
     } catch (error, stackTrace) {
       debugPrint('Error checking profile existence: $error');
       debugPrint(stackTrace.toString());
@@ -980,6 +1072,7 @@ class SupabaseAuthService {
         options: Options(
           headers: {
             'Authorization': 'Bearer $token',
+            'apikey': _supabasePublishableKey,
             'Content-Type': 'application/json',
           },
         ),
@@ -1005,6 +1098,42 @@ class SupabaseAuthService {
       debugPrint('Error updating user PIN: $error');
       rethrow;
     }
+  }
+
+  Future<void> _signInProfileAccount(
+    Map<String, dynamic> profile,
+    String phone,
+    String pin,
+  ) async {
+    final activeUser = client.auth.currentUser;
+    if (activeUser != null && activeUser.id == profile['id']?.toString()) {
+      return;
+    }
+
+    final emailCandidates = <String>{
+      if (profile['auth_email'] is String &&
+          (profile['auth_email'] as String).trim().isNotEmpty)
+        (profile['auth_email'] as String).trim(),
+      if (profile['email'] is String &&
+          (profile['email'] as String).trim().isNotEmpty)
+        (profile['email'] as String).trim(),
+      if (phone.trim().isNotEmpty) buildEmailFromPhone(phone),
+    };
+
+    Object? lastError;
+    for (final email in emailCandidates) {
+      try {
+        final response = await client.auth.signInWithPassword(
+          email: email,
+          password: pin,
+        );
+        if (response.user != null) return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw Exception(lastError?.toString() ?? 'Unable to sign in account.');
   }
 
   /// Verify 6-digit PIN by comparing hashPin against stored pin_hash in profiles table
@@ -1050,6 +1179,8 @@ class SupabaseAuthService {
       }
 
       if (storedHash == inputHash) {
+        await _signInProfileAccount(profile, phone, pin);
+        await syncProfilePhotoFromAuth();
         try {
           await client
               .from('profiles')
@@ -1066,6 +1197,8 @@ class SupabaseAuthService {
         'verifyPin: fallback legacyHash=${legacyHash.substring(0, 8)}... storedHash=${storedHash.substring(0, storedHash.length > 8 ? 8 : storedHash.length)}...',
       );
       if (storedHash == legacyHash) {
+        await _signInProfileAccount(profile, phone, pin);
+        await syncProfilePhotoFromAuth();
         try {
           await client
               .from('profiles')

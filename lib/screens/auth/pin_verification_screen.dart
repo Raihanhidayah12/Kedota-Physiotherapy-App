@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
 import '../errors/pin_rate_limit_screen.dart';
-import '../home/home_screen.dart';
+import '../home/main_screen.dart';
 import 'forgot_pin_screen.dart';
 import 'otp_verification_screen.dart';
 
@@ -61,7 +62,7 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const MainScreen()),
         (route) => false,
       );
     } catch (e) {
@@ -83,9 +84,9 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
     }
   }
 
-  Widget _buildNumpadButton(String value) {
+  Widget _buildNumpadButton(String value, double btnSize) {
     if (value.isEmpty) {
-      return const SizedBox(width: 72, height: 72);
+      return SizedBox(width: btnSize, height: btnSize);
     }
 
     final isBackspace = value == 'backspace';
@@ -94,18 +95,18 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
       return GestureDetector(
         onTap: () => _onNumpadTap(value),
         child: Container(
-          width: 68,
-          height: 52,
+          width: btnSize,
+          height: btnSize * 0.76,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: const Color(0xFF00A79D), width: 2),
           ),
-          child: const Center(
+          child: Center(
             child: Icon(
               Icons.backspace_outlined,
-              color: Color(0xFF00A79D),
-              size: 24,
+              color: const Color(0xFF00A79D),
+              size: btnSize * 0.35,
             ),
           ),
         ),
@@ -115,8 +116,8 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
     return GestureDetector(
       onTap: () => _onNumpadTap(value),
       child: Container(
-        width: 68,
-        height: 68,
+        width: btnSize,
+        height: btnSize,
         decoration: BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
@@ -131,10 +132,10 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
         child: Center(
           child: Text(
             value,
-            style: const TextStyle(
-              fontSize: 24,
+            style: TextStyle(
+              fontSize: btnSize * 0.35,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+              color: const Color(0xFF1E293B),
             ),
           ),
         ),
@@ -170,12 +171,12 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
             const SizedBox(height: 16),
 
             // SUBTITLE TEXT
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
               child: Text(
-                'Masukkan 6 digit PIN Anda untuk masuk.',
+                t(context, 'enterPinDesc'),
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 13.5,
                   color: Color(0xFF334155),
                   height: 1.45,
@@ -187,11 +188,11 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
 
             // ERROR MESSAGE (WHEN PIN IS WRONG)
             if (_isError)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  'PIN tidak sesuai silakan coba lagi.',
-                  style: TextStyle(
+                  t(context, 'wrongPinOrSignInFailed'),
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFFEF4444),
@@ -225,44 +226,50 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
             const Spacer(),
 
             // NUMERIC KEYPAD
-            Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final btnSize = (constraints.maxWidth * 0.22).clamp(56.0, 80.0);
+                final gap = (constraints.maxWidth * 0.04).clamp(10.0, 20.0);
+                return Column(
                   children: [
-                    _buildNumpadButton('1'),
-                    _buildNumpadButton('2'),
-                    _buildNumpadButton('3'),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildNumpadButton('1', btnSize),
+                        _buildNumpadButton('2', btnSize),
+                        _buildNumpadButton('3', btnSize),
+                      ],
+                    ),
+                    SizedBox(height: gap),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildNumpadButton('4', btnSize),
+                        _buildNumpadButton('5', btnSize),
+                        _buildNumpadButton('6', btnSize),
+                      ],
+                    ),
+                    SizedBox(height: gap),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildNumpadButton('7', btnSize),
+                        _buildNumpadButton('8', btnSize),
+                        _buildNumpadButton('9', btnSize),
+                      ],
+                    ),
+                    SizedBox(height: gap),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildNumpadButton('', btnSize),
+                        _buildNumpadButton('0', btnSize),
+                        _buildNumpadButton('backspace', btnSize),
+                      ],
+                    ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNumpadButton('4'),
-                    _buildNumpadButton('5'),
-                    _buildNumpadButton('6'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNumpadButton('7'),
-                    _buildNumpadButton('8'),
-                    _buildNumpadButton('9'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNumpadButton(''),
-                    _buildNumpadButton('0'),
-                    _buildNumpadButton('backspace'),
-                  ],
-                ),
-              ],
+                );
+              },
             ),
 
             const SizedBox(height: 24),
@@ -287,9 +294,9 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
                   ),
                 );
               },
-              child: const Text(
-                'Lupa PIN',
-                style: TextStyle(
+              child: Text(
+                t(context, 'forgotPin'),
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF00A79D),

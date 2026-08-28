@@ -172,22 +172,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                     page.imagePath!,
                                     fit: BoxFit.contain,
                                   )
-                                : Container(
-                                    width: 220,
-                                    height: 220,
-                                    decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFFCBD5E1,
-                                      ).withValues(alpha: 0.6),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.image_outlined,
-                                        size: 64,
-                                        color: Color(0xFF475569),
-                                      ),
-                                    ),
+                                : LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final sz = (constraints.maxWidth * 0.7).clamp(160.0, 240.0);
+                                      return Container(
+                                        width: sz,
+                                        height: sz,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFCBD5E1).withValues(alpha: 0.6),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Center(
+                                          child: Icon(
+                                            Icons.image_outlined,
+                                            size: sz * 0.28,
+                                            color: const Color(0xFF475569),
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
                           ),
                         ),
@@ -207,10 +210,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               Text(
                                 page.title,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 22,
+                                style: TextStyle(
+                                  fontSize: (MediaQuery.of(context).size.width * 0.056).clamp(17.0, 24.0),
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
+                                  color: const Color(0xFF1E293B),
                                   height: 1.25,
                                 ),
                               ),
@@ -221,10 +224,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               Text(
                                 page.description,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 14.5,
+                                style: TextStyle(
+                                  fontSize: (MediaQuery.of(context).size.width * 0.037).clamp(12.0, 16.0),
                                   fontWeight: FontWeight.w500,
-                                  color: Color(0xFF64748B),
+                                  color: const Color(0xFF64748B),
                                   height: 1.45,
                                 ),
                               ),

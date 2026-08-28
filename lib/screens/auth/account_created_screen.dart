@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../home/home_screen.dart';
+import '../home/main_screen.dart';
 
 class AccountCreatedScreen extends StatefulWidget {
   const AccountCreatedScreen({super.key});
@@ -72,7 +72,7 @@ class _AccountCreatedScreenState extends State<AccountCreatedScreen>
   void _goToHome() {
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      MaterialPageRoute(builder: (_) => const MainScreen()),
       (route) => false,
     );
   }

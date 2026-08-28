@@ -1,9 +1,44 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppLanguage { en, id }
 
+// ─── Persistence key ──────────────────────────────────────────────────────────
+const _kLangKey = 'app_language';
+
+// ─── Global notifier — default: Bahasa Indonesia untuk pengguna baru ─────────
+// Default: Indonesian for new users
 final appLanguageNotifier = ValueNotifier<AppLanguage>(AppLanguage.id);
 
+/// Load bahasa tersimpan dari SharedPreferences.
+/// Pengguna baru (belum ada key tersimpan) → otomatis Indonesia.
+///
+/// Load saved language from SharedPreferences.
+/// New users (no saved key) → defaults to Indonesian.
+Future<void> loadSavedLanguage() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_kLangKey);
+    // Hanya set EN kalau user memang sudah pilih EN sebelumnya.
+    // Only set EN if the user explicitly chose EN before.
+    appLanguageNotifier.value =
+        saved == 'en' ? AppLanguage.en : AppLanguage.id;
+  } catch (e) {
+    // Gagal baca storage → tetap Indonesia (default)
+    // Failed to read storage → stay Indonesian (default)
+    appLanguageNotifier.value = AppLanguage.id;
+    debugPrint('loadSavedLanguage error: $e');
+  }
+}
+
+/// Simpan bahasa ke SharedPreferences.
+/// Save language to SharedPreferences.
+Future<void> _saveLanguage(AppLanguage lang) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_kLangKey, lang == AppLanguage.en ? 'en' : 'id');
+}
+
+// ─── InheritedNotifier scope ──────────────────────────────────────────────────
 class AppLanguageScope extends InheritedNotifier<ValueNotifier<AppLanguage>> {
   const AppLanguageScope({
     super.key,
@@ -19,17 +54,22 @@ class AppLanguageScope extends InheritedNotifier<ValueNotifier<AppLanguage>> {
         AppLanguage.id;
   }
 
+  /// Toggle bahasa dan langsung simpan ke storage.
+  /// Toggle language and immediately persist to storage.
   static void toggle(BuildContext context) {
     final notifier = context
         .dependOnInheritedWidgetOfExactType<AppLanguageScope>()
         ?.notifier;
     if (notifier == null) return;
-    notifier.value = notifier.value == AppLanguage.en
+    final next = notifier.value == AppLanguage.en
         ? AppLanguage.id
         : AppLanguage.en;
+    notifier.value = next;
+    _saveLanguage(next); // fire-and-forget — tidak perlu await di sini
   }
 }
 
+// ─── Helper function ──────────────────────────────────────────────────────────
 String t(BuildContext context, String key) {
   final language = AppLanguageScope.current(context);
   return _translations[language]?[key] ??
@@ -37,6 +77,7 @@ String t(BuildContext context, String key) {
       key;
 }
 
+// ─── Translations ─────────────────────────────────────────────────────────────
 const _translations = {
   AppLanguage.en: {
     'language': 'Language',
@@ -221,6 +262,117 @@ const _translations = {
     'accountExistsTitle': 'Account Already Exists',
     'accountExistsByPhone':
         'This email is already linked to an account registered via phone number {phone}. Please log in with your phone number first.',
+
+    // ── Home screen ──────────────────────────────────────────────────────
+    'greetingMorning': 'Good Morning',
+    'greetingAfternoon': 'Good Afternoon',
+    'greetingEvening': 'Good Evening',
+    'greetingNight': 'Good Night',
+    'searchHint': 'Search services or therapists…',
+    'upcomingAppointment': 'Upcoming Appointment',
+    'seeAll': 'See All',
+    'ourServices': 'Our Services',
+    'rehabProgress': 'Rehabilitation Progress',
+    'detail': 'Detail',
+    'popularSearch': 'Popular Searches',
+    'noResultFor': 'No results for',
+    'serviceCat': 'Service',
+    'therapistCat': 'Therapist',
+    'tipsCat': 'Tips',
+    'homeCare': 'Home Care',
+    'homeCareDesc': 'Therapy at your home',
+    'klinik': 'Clinic',
+    'klinikDesc': 'Visit our physiotherapy clinic',
+    'rehab': 'Rehabilitation',
+    'rehabDesc': 'Motion recovery program',
+    'wellness': 'Wellness',
+    'wellnessDesc': 'Wellness & relaxation care',
+    'tipsStretch': 'Stretching Before Session',
+    'tipsStretchBody': 'Do 10 minutes of stretching for optimal results',
+    'tipsWater': 'Drink Enough Water',
+    'tipsWaterBody': 'Hydration helps muscle recovery faster',
+    'tipsRest': 'Regular Rest',
+    'tipsRestBody': '7–8 hours of sleep speeds up rehabilitation',
+    'appointmentLabel': 'Home Care · Marvin McKinney',
+    'appointmentDate': 'Tuesday, Aug 18 · 11:00 – 12:00',
+    'bookNow': 'Book Now',
+    'weeklyProgress': 'Weekly Progress',
+    'sessions': 'sessions',
+    'tipsTitle': 'Tips for Today',
+
+    // ── History screen ───────────────────────────────────────────────────
+    'historyTitle': 'History',
+    'historySubtitle': 'Your therapy schedule history',
+    'filterAll': 'All',
+    'filterUpcoming': 'Upcoming',
+    'filterDone': 'Done',
+    'filterCancelled': 'Cancelled',
+    'sortLabel': 'Sort',
+    'sortNewest': 'Newest',
+    'sortOldest': 'Oldest',
+    'sortByDate': 'By Date',
+    'upcomingAppointmentSection': 'Upcoming Appointment',
+    'previousHistory': 'Previous History',
+    'statusUpcoming': 'Upcoming',
+    'statusDone': 'Done',
+    'statusExpired': 'Expired',
+    'statusCancelled': 'Cancelled',
+    'reschedule': 'Reschedule',
+    'cancel2': 'Cancel',
+    'noAppointments': 'No appointments',
+    'filterDate': 'Date',
+
+    // ── Settings screen ──────────────────────────────────────────────────
+    'settingsTitle': 'Settings',
+    'emailVerified': 'Email Verified',
+    'emailNotVerified': 'Verify Email',
+    'idCopied': 'ID copied',
+    'groupAccount': 'Account',
+    'groupServices': 'Services',
+    'groupInfo': 'Information',
+    'groupOther': 'Other',
+    'menuEditProfile': 'Edit Profile',
+    'menuEditProfileSub': 'Name, photo, and personal info',
+    'menuChangePin': 'Change PIN',
+    'menuChangePinSub': 'Update your account security PIN',
+    'menuNotification': 'Notifications',
+    'menuNotificationSub': 'Manage notification preferences',
+    'menuCS': 'Customer Service',
+    'menuCSSub': 'Contact our support team',
+    'menuAddress': 'My Address',
+    'menuAddressSub': 'Manage delivery and service addresses',
+    'menuFaq': 'FAQ',
+    'menuFaqSub': 'Frequently asked questions',
+    'menuTerms': 'Terms & Conditions',
+    'menuTermsSub': 'Learn about service terms',
+    'menuPrivacy': 'Privacy Policy',
+    'menuPrivacySub': 'How we protect your data',
+    'menuAbout': 'About App',
+    'menuAboutSub': 'v1.0.0 · PT Kedota Health Indonesia',
+    'menuLogout': 'Sign Out',
+    'menuLogoutSub': 'Sign out of your account',
+    'aboutAppDesc': 'Physiotherapy App',
+    'aboutVersion': 'Version 1.0.0',
+    'aboutDesc':
+        'Trusted physiotherapy platform to support your recovery and wellness.',
+    'aboutFeatureBooking': 'Easy\nBooking',
+    'aboutFeatureMonitor': 'Health\nMonitor',
+    'aboutFeatureHomeCare': 'Home\nCare',
+    'aboutDeveloper': 'Developed by',
+    'closeBtn': 'Close',
+    'logoutTitle': 'Sign Out?',
+    'logoutDesc': 'You will be signed out of your current account.',
+    'logoutConfirm': 'Sign Out',
+    'comingSoon': 'Coming soon',
+    'languageToggle': 'Language',
+    'languageToggleSub': 'Switch app language',
+
+    // ── Tab navigation ───────────────────────────────────────────────────
+    'tabBeranda': 'Home',
+    'tabProgress': 'Progress',
+    'tabReservasi': 'Reservation',
+    'tabRiwayat': 'History',
+    'tabPengaturan': 'Settings',
   },
   AppLanguage.id: {
     'language': 'Bahasa',
@@ -409,5 +561,116 @@ const _translations = {
     'accountExistsTitle': 'Akun Sudah Ada',
     'accountExistsByPhone':
         'Email ini sudah terhubung dengan akun yang terdaftar via nomor telepon {phone}. Silakan login dengan nomor telepon Anda terlebih dahulu.',
+
+    // ── Home screen ──────────────────────────────────────────────────────
+    'greetingMorning': 'Selamat Pagi',
+    'greetingAfternoon': 'Selamat Siang',
+    'greetingEvening': 'Selamat Sore',
+    'greetingNight': 'Selamat Malam',
+    'searchHint': 'Cari layanan atau terapis…',
+    'upcomingAppointment': 'Janji Temu Mendatang',
+    'seeAll': 'Lihat semua',
+    'ourServices': 'Layanan Kami',
+    'rehabProgress': 'Progress Rehabilitasi',
+    'detail': 'Detail',
+    'popularSearch': 'Pencarian Populer',
+    'noResultFor': 'Tidak ada hasil untuk',
+    'serviceCat': 'Layanan',
+    'therapistCat': 'Terapis',
+    'tipsCat': 'Tips',
+    'homeCare': 'Home Care',
+    'homeCareDesc': 'Terapi di rumah Anda',
+    'klinik': 'Klinik',
+    'klinikDesc': 'Kunjungi klinik fisioterapi kami',
+    'rehab': 'Rehabilitasi',
+    'rehabDesc': 'Program pemulihan gerak tubuh',
+    'wellness': 'Wellness',
+    'wellnessDesc': 'Perawatan kebugaran & relaksasi',
+    'tipsStretch': 'Peregangan Sebelum Sesi',
+    'tipsStretchBody': 'Lakukan peregangan 10 menit untuk hasil optimal',
+    'tipsWater': 'Minum Air yang Cukup',
+    'tipsWaterBody': 'Hidrasi membantu pemulihan otot lebih cepat',
+    'tipsRest': 'Istirahat Teratur',
+    'tipsRestBody': 'Tidur 7–8 jam mempercepat proses rehabilitasi',
+    'appointmentLabel': 'Home Care · Marvin McKinney',
+    'appointmentDate': 'Selasa, 18 Agu · 11:00 – 12:00',
+    'bookNow': 'Pesan Sekarang',
+    'weeklyProgress': 'Progress Mingguan',
+    'sessions': 'sesi',
+    'tipsTitle': 'Tips Hari Ini',
+
+    // ── History screen ───────────────────────────────────────────────────
+    'historyTitle': 'Riwayat',
+    'historySubtitle': 'Riwayat jadwal terapi Anda',
+    'filterAll': 'Semua',
+    'filterUpcoming': 'Mendatang',
+    'filterDone': 'Selesai',
+    'filterCancelled': 'Dibatalkan',
+    'sortLabel': 'Urutkan',
+    'sortNewest': 'Terbaru',
+    'sortOldest': 'Terlama',
+    'sortByDate': 'Per Tanggal',
+    'upcomingAppointmentSection': 'Janji Temu Mendatang',
+    'previousHistory': 'Riwayat Sebelumnya',
+    'statusUpcoming': 'Mendatang',
+    'statusDone': 'Selesai',
+    'statusExpired': 'Batas Waktu',
+    'statusCancelled': 'Dibatalkan',
+    'reschedule': 'Jadwal Ulang',
+    'cancel2': 'Batalkan',
+    'noAppointments': 'Tidak ada janji temu',
+    'filterDate': 'Tanggal',
+
+    // ── Settings screen ──────────────────────────────────────────────────
+    'settingsTitle': 'Pengaturan',
+    'emailVerified': 'Email Terverifikasi',
+    'emailNotVerified': 'Verifikasi Email',
+    'idCopied': 'ID disalin',
+    'groupAccount': 'Akun',
+    'groupServices': 'Layanan',
+    'groupInfo': 'Informasi',
+    'groupOther': 'Lainnya',
+    'menuEditProfile': 'Ubah Profil',
+    'menuEditProfileSub': 'Nama, foto, dan informasi pribadi',
+    'menuChangePin': 'Ubah PIN',
+    'menuChangePinSub': 'Ganti PIN keamanan akun Anda',
+    'menuNotification': 'Notifikasi',
+    'menuNotificationSub': 'Atur preferensi notifikasi',
+    'menuCS': 'Customer Service',
+    'menuCSSub': 'Hubungi tim dukungan kami',
+    'menuAddress': 'Alamat Saya',
+    'menuAddressSub': 'Kelola alamat pengiriman dan layanan',
+    'menuFaq': 'FAQ',
+    'menuFaqSub': 'Pertanyaan yang sering ditanyakan',
+    'menuTerms': 'Syarat & Ketentuan',
+    'menuTermsSub': 'Pelajari syarat penggunaan layanan',
+    'menuPrivacy': 'Kebijakan Privasi',
+    'menuPrivacySub': 'Cara kami melindungi data Anda',
+    'menuAbout': 'Tentang Aplikasi',
+    'menuAboutSub': 'v1.0.0 · PT Trifa Axis Global',
+    'menuLogout': 'Keluar',
+    'menuLogoutSub': 'Keluar dari akun Anda',
+    'aboutAppDesc': 'Aplikasi Fisioterapi',
+    'aboutVersion': 'Versi 1.0.0',
+    'aboutDesc':
+        'Platform fisioterapi terpercaya untuk membantu pemulihan dan kesehatan Anda.',
+    'aboutFeatureBooking': 'Booking\nMudah',
+    'aboutFeatureMonitor': 'Monitor\nKesehatan',
+    'aboutFeatureHomeCare': 'Home\nCare',
+    'aboutDeveloper': 'Dikembangkan oleh',
+    'closeBtn': 'Tutup',
+    'logoutTitle': 'Keluar dari Akun?',
+    'logoutDesc': 'Anda akan keluar dari akun Anda saat ini.',
+    'logoutConfirm': 'Keluar',
+    'comingSoon': 'Segera hadir',
+    'languageToggle': 'Bahasa',
+    'languageToggleSub': 'Ganti bahasa aplikasi',
+
+    // ── Tab navigation ───────────────────────────────────────────────────
+    'tabBeranda': 'Beranda',
+    'tabProgress': 'Progress',
+    'tabReservasi': 'Reservasi',
+    'tabRiwayat': 'Riwayat',
+    'tabPengaturan': 'Pengaturan',
   },
 };

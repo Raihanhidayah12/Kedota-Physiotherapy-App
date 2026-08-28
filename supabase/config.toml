@@ -1,7 +1,6 @@
 # Supabase Configuration File
 # Learn more: https://supabase.com/docs/reference/cli/config
 
-[project]
 # Project ID extracted from SUPABASE_URL
 project_id = "wwmctqhbqpsbkyxkeaqv"
 
@@ -29,7 +28,6 @@ max_client_conn = 100
 
 [realtime]
 enabled = true
-port = 54323
 ip_version = "IPv4"
 
 [studio]
@@ -45,12 +43,10 @@ pop3_port = 54326
 
 [storage]
 enabled = true
-port = 54321
 file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-port = 54321
 site_url = "http://127.0.0.1:54323"
 additional_redirect_urls = ["https://127.0.0.1:54323"]
 jwt_expiry = 3600
@@ -69,7 +65,6 @@ enable_confirmations = false
 
 [edge_runtime]
 enabled = true
-port = 54321
 
 [analytics]
 enabled = false

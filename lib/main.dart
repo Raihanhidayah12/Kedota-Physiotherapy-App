@@ -15,8 +15,11 @@ Future<void> main() async {
     debugPrint('Could not load .env file: $e');
   }
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+  // Load bahasa tersimpan sebelum app jalan
+  // Load saved language before app starts
+  await loadSavedLanguage();
 
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
   final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);

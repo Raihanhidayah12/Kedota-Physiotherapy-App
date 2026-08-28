@@ -66,9 +66,11 @@ class _SignInScreenState extends State<SignInScreen>
       data,
     ) async {
       if (data.event == AuthChangeEvent.signedIn &&
-          data.session?.user != null) {
+          data.session?.user != null &&
+          mounted &&
+          (ModalRoute.of(context)?.isCurrent ?? false)) {
         final provider = data.session?.user.appMetadata['provider'] as String?;
-        if ((provider == 'google' || provider == 'apple') && mounted) {
+        if (provider == 'google' || provider == 'apple') {
           await _handleGoogleSignInResult();
         }
       }
@@ -93,6 +95,8 @@ class _SignInScreenState extends State<SignInScreen>
 
       if (currentUser == null) return;
 
+      await service.syncProfilePhotoFromAuth();
+
       final googleEmail = currentUser.email ?? '';
 
       // Cari profile berdasarkan email Google atau user ID
@@ -100,7 +104,9 @@ class _SignInScreenState extends State<SignInScreen>
       if (googleEmail.isNotEmpty) {
         existingProfile = await service.client
             .from('profiles')
-            .select('id, email, signup_method, phone, pin_hash, full_name, birth_date')
+            .select(
+              'id, email, signup_method, phone, pin_hash, full_name, birth_date',
+            )
             .eq('email', googleEmail)
             .maybeSingle();
       }
@@ -149,18 +155,21 @@ class _SignInScreenState extends State<SignInScreen>
       // Akun Google belum lengkap (phone atau pin kosong) → ke profile completion
       if (!mounted) return;
       final metadata = currentUser.userMetadata ?? {};
-      final email = currentUser.email ?? existingProfile?['email'] as String? ?? '';
-      final fullName = (metadata['full_name'] ??
-              metadata['name'] ??
-              existingProfile?['full_name'] ??
-              '')
-          .toString();
+      final email =
+          currentUser.email ?? existingProfile?['email'] as String? ?? '';
+      final fullName =
+          (metadata['full_name'] ??
+                  metadata['name'] ??
+                  existingProfile?['full_name'] ??
+                  '')
+              .toString();
       // Jangan ambil phone dari metadata Google — user harus isi manual
-      final birthDateStr = (metadata['birth_date'] ??
-              metadata['birthday'] ??
-              existingProfile?['birth_date'] ??
-              '')
-          .toString();
+      final birthDateStr =
+          (metadata['birth_date'] ??
+                  metadata['birthday'] ??
+                  existingProfile?['birth_date'] ??
+                  '')
+              .toString();
 
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -188,7 +197,7 @@ class _SignInScreenState extends State<SignInScreen>
         subtitle: phone.isEmpty
             ? t(context, 'enterPhoneError')
             : t(context, 'validPhoneError'),
-        singleButtonText: t(context, 'close'),
+        singleButtonText: t(context, 'closeBtn'),
         onSinglePressed: () => Navigator.of(context).pop(),
       );
       return;
@@ -217,7 +226,7 @@ class _SignInScreenState extends State<SignInScreen>
         type: BottomSheetType.error,
         title: 'Gagal Masuk',
         subtitle: '${t(context, 'googleSignInFailed')}: $e',
-        singleButtonText: t(context, 'close'),
+        singleButtonText: t(context, 'closeBtn'),
         onSinglePressed: () => Navigator.of(context).pop(),
       );
     }
@@ -234,9 +243,9 @@ class _SignInScreenState extends State<SignInScreen>
       CustomBottomSheet.show(
         context,
         type: BottomSheetType.error,
-        title: 'Gagal Masuk',
-        subtitle: 'Apple Sign-In Gagal: $e',
-        singleButtonText: t(context, 'close'),
+        title: t(context, 'googleSignInFailed'),
+        subtitle: 'Apple Sign-In failed: $e',
+        singleButtonText: t(context, 'closeBtn'),
         onSinglePressed: () => Navigator.of(context).pop(),
       );
     }
@@ -266,19 +275,21 @@ class _SignInScreenState extends State<SignInScreen>
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 28),
+            padding: EdgeInsets.symmetric(
+              vertical: MediaQuery.of(context).size.height < 640 ? 16 : 28,
+            ),
             child: Column(
               children: [
                 Image.asset(
                   'assets/image/logo 2.png',
-                  height: 60,
+                  height: (MediaQuery.of(context).size.height * 0.08).clamp(48.0, 68.0),
                   fit: BoxFit.contain,
                 ),
-                const SizedBox(height: 12),
-                const Text(
+                const SizedBox(height: 10),
+                Text(
                   'K E D O T A',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: (MediaQuery.of(context).size.width * 0.05).clamp(16.0, 22.0),
                     fontWeight: FontWeight.w900,
                     color: _accentGreen,
                     letterSpacing: 4.0,
@@ -288,10 +299,10 @@ class _SignInScreenState extends State<SignInScreen>
                 Text(
                   'P H Y S I O T H E R A P Y',
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: (MediaQuery.of(context).size.width * 0.026).clamp(9.0, 12.0),
                     fontWeight: FontWeight.w600,
                     color: _accentGreen.withValues(alpha: 0.85),
-                    letterSpacing: 4.5,
+                    letterSpacing: 4.0,
                   ),
                 ),
               ],
@@ -312,16 +323,16 @@ class _SignInScreenState extends State<SignInScreen>
                     Center(
                       child: Text.rich(
                         TextSpan(
-                          children: const [
+                          children: [
                             TextSpan(
-                              text: 'Selamat Datang di ',
-                              style: TextStyle(
+                              text: '${t(context, 'welcome')} di ',
+                              style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF1E293B),
                               ),
                             ),
-                            TextSpan(
+                            const TextSpan(
                               text: 'Kedota!',
                               style: TextStyle(
                                 fontSize: 20,
@@ -335,11 +346,11 @@ class _SignInScreenState extends State<SignInScreen>
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Center(
+                    Center(
                       child: Text(
-                        'Silakan masuk ke akun Anda atau daftar sekarang untuk memulai perjalanan bersama kami.',
+                        t(context, 'signInSubtitle'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 13,
                           color: Color(0xFF64748B),
                           height: 1.45,
@@ -350,9 +361,9 @@ class _SignInScreenState extends State<SignInScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Masukkan No. Telp',
-                          style: TextStyle(
+                        Text(
+                          t(context, 'phoneNumber'),
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF1E293B),
@@ -433,9 +444,9 @@ class _SignInScreenState extends State<SignInScreen>
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Text(
-                          'Masuk',
-                          style: TextStyle(
+                        child: Text(
+                          t(context, 'signIn'),
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
@@ -445,20 +456,20 @@ class _SignInScreenState extends State<SignInScreen>
                     ),
                     const SizedBox(height: 24),
                     Row(
-                      children: const [
-                        Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                      children: [
+                        const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
                         Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: Text(
-                            'Atau Masuk dengan',
-                            style: TextStyle(
+                            t(context, 'orContinueWith'),
+                            style: const TextStyle(
                               fontSize: 12,
                               color: Color(0xFF94A3B8),
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
-                        Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                        const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
                       ],
                     ),
                     const SizedBox(height: 20),
