@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
@@ -20,16 +21,11 @@ class SignInScreen extends StatefulWidget {
   State<SignInScreen> createState() => _SignInScreenState();
 }
 
-class _SignInScreenState extends State<SignInScreen>
-    with SingleTickerProviderStateMixin {
+class _SignInScreenState extends State<SignInScreen> {
   final _phoneController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
   bool _isPhoneError = false;
   static const Color _accentGreen = Color(0xFF00A79D);
-
-  late final AnimationController _entranceController;
-  late final Animation<double> _fadeAnimation;
-  late final Animation<Offset> _slideAnimation;
-  late final Animation<double> _scaleAnimation;
 
   bool _isHandlingGoogleAuth = false;
   StreamSubscription<AuthState>? _authSubscription;
@@ -38,28 +34,15 @@ class _SignInScreenState extends State<SignInScreen>
   void initState() {
     super.initState();
 
-    _entranceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 550),
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _entranceController,
-      curve: Curves.easeOutCubic,
-    );
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
-            .chain(CurveTween(curve: Curves.easeOutCubic))
-            .animate(_entranceController);
-    _scaleAnimation = Tween<double>(begin: 0.97, end: 1)
-        .chain(CurveTween(curve: Curves.easeOutCubic))
-        .animate(_entranceController);
-
-    _entranceController.forward();
-
     _phoneController.addListener(() {
       if (_isPhoneError && _phoneController.text.isNotEmpty) {
         setState(() => _isPhoneError = false);
       }
+    });
+
+    // Update border saat fokus berubah (issue #1 & #9)
+    _phoneFocusNode.addListener(() {
+      if (mounted) setState(() {});
     });
 
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
@@ -80,8 +63,8 @@ class _SignInScreenState extends State<SignInScreen>
   @override
   void dispose() {
     _authSubscription?.cancel();
-    _entranceController.dispose();
     _phoneController.dispose();
+    _phoneFocusNode.dispose();
     super.dispose();
   }
 
@@ -99,7 +82,6 @@ class _SignInScreenState extends State<SignInScreen>
 
       final googleEmail = currentUser.email ?? '';
 
-      // Cari profile berdasarkan email Google atau user ID
       Map<String, dynamic>? existingProfile;
       if (googleEmail.isNotEmpty) {
         existingProfile = await service.client
@@ -110,7 +92,6 @@ class _SignInScreenState extends State<SignInScreen>
             .eq('email', googleEmail)
             .maybeSingle();
       }
-      // Fallback: cari by user ID kalau tidak ketemu by email
       existingProfile ??= await service.checkUserProfileExists();
 
       if (!mounted) return;
@@ -119,7 +100,6 @@ class _SignInScreenState extends State<SignInScreen>
       final phone = (existingProfile?['phone'] ?? '').toString().trim();
       final pinHash = (existingProfile?['pin_hash'] ?? '').toString().trim();
 
-      // Akun phone yang email-nya kebetulan sama dengan Google → verifikasi OTP dulu
       if (signupMethod == 'phone' && phone.isNotEmpty) {
         await service.signOut();
         if (!mounted) return;
@@ -141,7 +121,6 @@ class _SignInScreenState extends State<SignInScreen>
         return;
       }
 
-      // Akun Google sudah lengkap (ada phone + pin_hash) → langsung masuk PIN
       if (phone.isNotEmpty && pinHash.isNotEmpty) {
         if (!mounted) return;
         await Navigator.of(context).push(
@@ -152,7 +131,6 @@ class _SignInScreenState extends State<SignInScreen>
         return;
       }
 
-      // Akun Google belum lengkap (phone atau pin kosong) → ke profile completion
       if (!mounted) return;
       final metadata = currentUser.userMetadata ?? {};
       final email =
@@ -163,7 +141,6 @@ class _SignInScreenState extends State<SignInScreen>
                   existingProfile?['full_name'] ??
                   '')
               .toString();
-      // Jangan ambil phone dari metadata Google — user harus isi manual
       final birthDateStr =
           (metadata['birth_date'] ??
                   metadata['birthday'] ??
@@ -252,20 +229,44 @@ class _SignInScreenState extends State<SignInScreen>
   }
 
   Widget _buildIndonesianFlag() {
-    return Container(
-      width: 20,
-      height: 14,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
-      ),
-      child: Column(
-        children: [
-          Expanded(child: Container(color: const Color(0xFFE53E3E))),
-          Expanded(child: Container(color: Colors.white)),
-        ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: Container(
+        width: 20,
+        height: 14,
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: const Color(0xFFCE1126), // merah Indonesia
+              ),
+            ),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  // Menentukan warna border field (issue #9 — hanya 3 state: normal, error, focus)
+  Color get _phoneBorderColor {
+    if (_isPhoneError) return const Color(0xFFEF4444);
+    if (_phoneFocusNode.hasFocus) return const Color(0xFF00A79D);
+    return const Color(0xFFE2E8F0);
+  }
+
+  double get _phoneBorderWidth {
+    return (_isPhoneError || _phoneFocusNode.hasFocus) ? 1.5 : 1.0;
   }
 
   @override
@@ -306,7 +307,7 @@ class _SignInScreenState extends State<SignInScreen>
                   ),
                 ),
               ],
-            ),
+            ).animate().fade(duration: 500.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
           ),
           Expanded(
             child: Container(
@@ -358,98 +359,121 @@ class _SignInScreenState extends State<SignInScreen>
                       ),
                     ),
                     const SizedBox(height: 28),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          t(context, 'phoneNumber'),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E293B),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: _isPhoneError
-                              ? const Color(0xFFEF4444)
-                              : const Color(0xFFE2E8F0),
-                          width: _isPhoneError ? 1.5 : 1.0,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 4,
-                      ),
-                      child: Row(
+                    // Label nomor telepon dengan tanda *
+                    Text.rich(
+                      TextSpan(
                         children: [
-                          _buildIndonesianFlag(),
-                          const SizedBox(width: 8),
-                          const Text(
-                            '+62',
-                            style: TextStyle(
+                          TextSpan(
+                            text: t(context, 'phoneNumber'),
+                            style: const TextStyle(
                               fontSize: 14,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w600,
                               color: Color(0xFF1E293B),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Container(
-                            width: 1,
-                            height: 20,
-                            color: const Color(0xFFE2E8F0),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _phoneController,
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(13),
-                              ],
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                hintText: '08XX XXXX XXXX',
-                                hintStyle: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 14,
-                                ),
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                              ),
+                          const TextSpan(
+                            text: ' *',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFEF4444),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _validateAndSubmitPhone,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _accentGreen,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                    const SizedBox(height: 8),
+                    // Field telepon dengan 3 state: normal / focused / error
+                    GestureDetector(
+                      onTap: () => _phoneFocusNode.requestFocus(),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _phoneBorderColor,
+                            width: _phoneBorderWidth,
                           ),
                         ),
-                        child: Text(
-                          t(context, 'signIn'),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: [
+                            _buildIndonesianFlag(),
+                            const SizedBox(width: 8),
+                            const Text(
+                              '+62',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 1,
+                              height: 20,
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: _phoneController,
+                                focusNode: _phoneFocusNode,
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(13),
+                                ],
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: '08XX XXXX XXXX',
+                                  hintStyle: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 14,
+                                  ),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Button "Masuk" dengan gradient (issue #3)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF007F78), Color(0xFF00A79D)],
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: _validateAndSubmitPhone,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: Text(
+                            t(context, 'signIn'),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -481,17 +505,14 @@ class _SignInScreenState extends State<SignInScreen>
                         style: OutlinedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: const Color(0xFF1E293B),
-                          side: const BorderSide(
-                            color: Color(0xFFE2E8F0),
-                            width: 1,
-                          ),
+                          side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: Row(
+                        child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
+                          children: [
                             GoogleLogoIcon(size: 20),
                             SizedBox(width: 8),
                             Text(
@@ -515,22 +536,15 @@ class _SignInScreenState extends State<SignInScreen>
                         style: OutlinedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: const Color(0xFF1E293B),
-                          side: const BorderSide(
-                            color: Color(0xFFE2E8F0),
-                            width: 1,
-                          ),
+                          side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: Row(
+                        child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(
-                              Icons.apple,
-                              color: Color(0xFF1E293B),
-                              size: 22,
-                            ),
+                          children: [
+                            Icon(Icons.apple, color: Color(0xFF1E293B), size: 22),
                             SizedBox(width: 8),
                             Text(
                               'Apple',
@@ -544,7 +558,7 @@ class _SignInScreenState extends State<SignInScreen>
                         ),
                       ),
                     ),
-                  ],
+                  ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
                 ),
               ),
             ),
@@ -554,20 +568,8 @@ class _SignInScreenState extends State<SignInScreen>
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE8F6F4),
-      body: AnimatedBuilder(
-        animation: _entranceController,
-        builder: (context, child) {
-          return FadeTransition(
-            opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: ScaleTransition(scale: _scaleAnimation, child: child),
-            ),
-          );
-        },
-        child: content,
-      ),
+      backgroundColor: const Color(0xFFF7F9F9),
+      body: content,
     );
   }
 }

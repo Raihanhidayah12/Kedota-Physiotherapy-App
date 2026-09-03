@@ -212,7 +212,7 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
     final currentPin = _isConfirming ? _confirmPin : _firstPin;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF7F9F9),
       body: SafeArea(
         child: Column(
           children: [

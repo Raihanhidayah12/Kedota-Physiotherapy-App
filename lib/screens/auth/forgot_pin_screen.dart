@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../utils/phone_validator.dart';
 import '../../widgets/custom_bottom_sheet.dart';
-import 'otp_verification_screen.dart';
+import '../../widgets/custom_date_picker.dart';
 import 'sign_in_screen.dart';
 
 class StepIndicator extends StatelessWidget {
@@ -37,6 +38,59 @@ class StepIndicator extends StatelessWidget {
       }),
     );
   }
+}
+
+class ForgotPinAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final int activeStep;
+  final VoidCallback? onBackPressed;
+
+  const ForgotPinAppBar({
+    super.key,
+    required this.activeStep,
+    this.onBackPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: true,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF1E293B), size: 22),
+        onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
+      ),
+      title: const Text(
+        'Lupa PIN',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+      ),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(4, (index) {
+              final isActive = index < activeStep;
+              return Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isActive ? const Color(0xFF00A79D) : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 16);
 }
 
 // ─── Shared logo header ───────────────────────────────────────────────────────
@@ -81,6 +135,372 @@ Widget _buildLogoHeader(BuildContext context) {
   );
 }
 
+// ─── ForgotPin-specific OTP screen ─────────────────────────────────────────
+class ForgotPinOtpScreen extends StatefulWidget {
+  final String phoneNumber;
+  final VoidCallback onVerified;
+
+  const ForgotPinOtpScreen({
+    super.key,
+    required this.phoneNumber,
+    required this.onVerified,
+  });
+
+  @override
+  State<ForgotPinOtpScreen> createState() => _ForgotPinOtpScreenState();
+}
+
+class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen> {
+  final _otpController = TextEditingController();
+  final _focusNode = FocusNode();
+  Timer? _timer;
+  int _secondsRemaining = 59;
+  bool _isError = false;
+
+  static const _validDummyOtps = {'1234', '5555', '0000', '9999'};
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+    _otpController.addListener(_checkOtpComplete);
+    _focusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _otpController.removeListener(_checkOtpComplete);
+    _otpController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _secondsRemaining = 59;
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        if (_secondsRemaining > 0) {
+          _secondsRemaining -= 1;
+        } else {
+          timer.cancel();
+        }
+      });
+    });
+  }
+
+  String _formatPhoneNumber(String phone) {
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.length >= 10) {
+      final prefix = digits.substring(0, 4);
+      final suffix = digits.substring(digits.length - 4);
+      return '$prefix-****-$suffix';
+    }
+    return phone;
+  }
+
+  void _checkOtpComplete() {
+    if (_otpController.text.isNotEmpty) {
+      HapticFeedback.selectionClick();
+    }
+    if (_otpController.text.length == 4) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _verifyOtp();
+      });
+    } else {
+      if (_isError) setState(() => _isError = false);
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    final otp = _otpController.text.trim();
+    if (_validDummyOtps.contains(otp)) {
+      widget.onVerified();
+      return;
+    }
+
+    setState(() {
+      _isError = true;
+      _otpController.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final formattedPhone = _formatPhoneNumber(widget.phoneNumber);
+    final seconds = _secondsRemaining.toString().padLeft(2, '0');
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      // AppBar dengan back arrow + "Lupa PIN" + 4 progress bar — sesuai Figma
+      appBar: ForgotPinAppBar(
+        activeStep: 1,
+        onBackPressed: () => Navigator.of(context).pop(),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Title
+              const Text(
+                'Verifikasi OTP',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Subtitle — 4 digit
+              RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF475569),
+                    height: 1.45,
+                  ),
+                  children: [
+                    TextSpan(text: t(context, 'enterOtpSentTo')),
+                    TextSpan(
+                      text: formattedPhone,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const TextSpan(text: '.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Error text inline
+              if (_isError)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    t(context, 'otpInvalid'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                ),
+
+              // 4-box OTP input — responsive dengan LayoutBuilder
+              SizedBox(
+                width: double.infinity,
+                child: GestureDetector(
+                  onTap: () => _focusNode.requestFocus(),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Tidak ada minimum clamp agar tidak overflow di layar sempit
+                      final boxSize = ((constraints.maxWidth - 36) / 4)
+                          .clamp(0.0, 72.0);
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(4, (index) {
+                          final isActive = index == _otpController.text.length;
+                          final char = _otpController.text.length > index
+                              ? _otpController.text[index]
+                              : '';
+
+                          return Container(
+                            margin:
+                                EdgeInsets.only(right: index == 3 ? 0 : 12),
+                            width: boxSize,
+                            height: boxSize * 1.07,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: _isError
+                                    ? const Color(0xFFEF4444)
+                                    : (isActive && _focusNode.hasFocus
+                                          ? const Color(0xFF00A79D)
+                                          : const Color(0xFFE2E8F0)),
+                                width:
+                                    _isError || (isActive && _focusNode.hasFocus)
+                                        ? 1.5
+                                        : 1.0,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                if (char.isNotEmpty)
+                                  Text(
+                                    char,
+                                    style: TextStyle(
+                                      fontSize: boxSize * 0.4,
+                                      fontWeight: FontWeight.w800,
+                                      color: _isError
+                                          ? const Color(0xFFEF4444)
+                                          : const Color(0xFF1E293B),
+                                    ),
+                                  )
+                                else if (isActive && _focusNode.hasFocus)
+                                  const _ForgotPinBlinkingCursor(),
+                                Positioned(
+                                  bottom: 10,
+                                  child: Container(
+                                    width: boxSize * 0.33,
+                                    height: 2,
+                                    decoration: BoxDecoration(
+                                      color: _isError
+                                          ? const Color(0xFFEF4444)
+                                          : (char.isNotEmpty ||
+                                                    (isActive &&
+                                                        _focusNode.hasFocus)
+                                                ? const Color(0xFF00A79D)
+                                                : const Color(0xFFCBD5E1)),
+                                      borderRadius: BorderRadius.circular(1),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+              // Hidden text field
+              SizedBox(
+                width: 1,
+                height: 1,
+                child: Opacity(
+                  opacity: 0,
+                  child: TextField(
+                    controller: _otpController,
+                    focusNode: _focusNode,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(4),
+                    ],
+                    autofocus: true,
+                    decoration: const InputDecoration(border: InputBorder.none),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 28),
+
+              // Resend timer / button
+              if (_secondsRemaining > 0)
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${t(context, 'resendIn')} ',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '00:$seconds',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF00A79D),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                TextButton(
+                  onPressed: _startTimer,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF00A79D),
+                  ),
+                  child: Text(
+                    t(context, 'resendOtp'),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF00A79D),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Progress bar — sudah dipindahkan ke dalam _ForgotPinOtpScreenState
+
+// Blinking cursor for ForgotPinOtpScreen
+class _ForgotPinBlinkingCursor extends StatefulWidget {
+  const _ForgotPinBlinkingCursor();
+
+  @override
+  State<_ForgotPinBlinkingCursor> createState() => _ForgotPinBlinkingCursorState();
+}
+
+class _ForgotPinBlinkingCursorState extends State<_ForgotPinBlinkingCursor>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: Container(
+        width: 2,
+        height: 24,
+        decoration: BoxDecoration(
+          color: const Color(0xFF00A79D),
+          borderRadius: BorderRadius.circular(1),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 class ForgotPinScreen extends StatefulWidget {
   const ForgotPinScreen({super.key});
 
@@ -88,43 +508,23 @@ class ForgotPinScreen extends StatefulWidget {
   State<ForgotPinScreen> createState() => _ForgotPinScreenState();
 }
 
-class _ForgotPinScreenState extends State<ForgotPinScreen>
-    with SingleTickerProviderStateMixin {
+class _ForgotPinScreenState extends State<ForgotPinScreen> {
   final _phoneController = TextEditingController();
-  late final AnimationController _entranceController;
-  late final Animation<double> _fadeAnimation;
-  late final Animation<Offset> _slideAnimation;
-  late final Animation<double> _scaleAnimation;
+  final _phoneFocusNode = FocusNode();
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _entranceController = AnimationController(
-      duration: const Duration(milliseconds: 700),
-      vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _entranceController,
-      curve: Curves.easeOutCubic,
-    );
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0.0, 0.04), end: Offset.zero).animate(
-          CurvedAnimation(
-            parent: _entranceController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
-    _scaleAnimation = Tween<double>(begin: 0.96, end: 1.0).animate(
-      CurvedAnimation(parent: _entranceController, curve: Curves.easeOutCubic),
-    );
-    _entranceController.forward();
+    _phoneFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
-    _entranceController.dispose();
     _phoneController.dispose();
+    _phoneFocusNode.dispose();
     super.dispose();
   }
 
@@ -174,10 +574,8 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
       final normalizedPhone = PhoneValidator.normalizePhoneNumber(phone);
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => OtpVerificationScreen(
+          builder: (_) => ForgotPinOtpScreen(
             phoneNumber: normalizedPhone,
-            isDormant: accountResult.isDormant,
-            targetEmail: accountResult.email,
             onVerified: () {
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
@@ -202,8 +600,8 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
       bottom: false,
       child: Column(
         children: [
-          // Header teal — sama persis dengan sign_in_screen
-          _buildLogoHeader(context),
+          // Header teal
+          _buildLogoHeader(context).animate().fade(duration: 500.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
           // White card bawah
           Expanded(
             child: Container(
@@ -217,31 +615,6 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Back button + judul "Lupa PIN"
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.of(context).pop(),
-                          child: const Icon(
-                            Icons.arrow_back_rounded,
-                            color: Color(0xFF1E293B),
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          t(context, 'forgotPin'),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1E293B),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    const StepIndicator(activeStep: 1),
-                    const SizedBox(height: 22),
                     // Judul + deskripsi
                     Text(
                       t(context, 'enterPhoneNumberTitle'),
@@ -272,97 +645,113 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
                     ),
                     const SizedBox(height: 8),
                     // Input nomor telepon — sama dengan sign_in_screen
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: const Color(0xFFE2E8F0),
+                    GestureDetector(
+                      onTap: () => _phoneFocusNode.requestFocus(),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _phoneFocusNode.hasFocus
+                                ? const Color(0xFF00A79D)
+                                : const Color(0xFFE2E8F0),
+                            width: _phoneFocusNode.hasFocus ? 1.5 : 1.0,
+                          ),
                         ),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        children: [
-                          _buildIndonesianFlag(),
-                          const SizedBox(width: 8),
-                          const Text(
-                            '+62',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E293B),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: [
+                            _buildIndonesianFlag(),
+                            const SizedBox(width: 8),
+                            const Text(
+                              '+62',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1E293B),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Container(
-                            width: 1,
-                            height: 20,
-                            color: const Color(0xFFE2E8F0),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _phoneController,
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(13),
-                              ],
-                              decoration: InputDecoration(
-                                border: InputBorder.none,
-                                hintText: t(context, 'phoneExample'),
-                                hintStyle: const TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 14,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 14,
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 1,
+                              height: 20,
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: _phoneController,
+                                focusNode: _phoneFocusNode,
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(13),
+                                ],
+                                decoration: InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: t(context, 'phoneExample'),
+                                  hintStyle: const TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 14,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
                     // Tombol Kirim OTP
                     SizedBox(
                       width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _resetPin,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00A79D),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                      height: 52,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF007F78), Color(0xFF00A79D)],
                           ),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.4,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _resetPin,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.4,
+                                  ),
+                                )
+                              : Text(
+                                  t(context, 'sendOtp'),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              )
-                            : Text(
-                                t(context, 'sendOtp'),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
+                        ),
                       ),
                     ),
-                  ],
-                ),
+                    ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
+                  ),
               ),
             ),
           ),
@@ -371,34 +760,37 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE8F6F4),
-      body: AnimatedBuilder(
-        animation: _entranceController,
-        builder: (context, child) => FadeTransition(
-          opacity: _fadeAnimation,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: ScaleTransition(scale: _scaleAnimation, child: child),
-          ),
-        ),
-        child: content,
-      ),
+      backgroundColor: const Color(0xFFF7F9F9),
+      body: content,
     );
   }
 
   Widget _buildIndonesianFlag() {
-    return Container(
-      width: 20,
-      height: 14,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
-      ),
-      child: const Column(
-        children: [
-          Expanded(child: ColoredBox(color: Color(0xFFE53E3E))),
-          Expanded(child: ColoredBox(color: Colors.white)),
-        ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: Container(
+        width: 20,
+        height: 14,
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: const Color(0xFFCE1126),
+              ),
+            ),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -416,10 +808,43 @@ class BirthDateVerificationScreen extends StatefulWidget {
 
 class _BirthDateVerificationScreenState
     extends State<BirthDateVerificationScreen> {
+  final _dobController = TextEditingController();
   DateTime? _selectedBirthDate;
   bool _isLoading = false;
+  bool _isDobError = false;
   int _cooldownSeconds = 0;
   Timer? _cooldownTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _dobController.addListener(() {
+      if (_isDobError && _dobController.text.isNotEmpty) {
+        setState(() => _isDobError = false);
+      }
+      _parseTypedDate(_dobController.text);
+    });
+  }
+
+  void _parseTypedDate(String input) {
+    final parts = input.split('/');
+    if (parts.length == 3 &&
+        parts[0].length == 2 &&
+        parts[1].length == 2 &&
+        parts[2].length == 4) {
+      final day = int.tryParse(parts[0]);
+      final month = int.tryParse(parts[1]);
+      final year = int.tryParse(parts[2]);
+      if (day != null && month != null && year != null) {
+        try {
+          final dt = DateTime(year, month, day);
+          if (dt.year == year && dt.month == month && dt.day == day) {
+            _selectedBirthDate = dt;
+          }
+        } catch (_) {}
+      }
+    }
+  }
 
   void _showNotificationSheet(String message, {bool isError = false}) {
     CustomBottomSheet.show(
@@ -449,37 +874,34 @@ class _BirthDateVerificationScreenState
   @override
   void dispose() {
     _cooldownTimer?.cancel();
+    _dobController.dispose();
     super.dispose();
   }
 
   Future<void> _pickDate() async {
     if (_cooldownSeconds > 0) return;
     final now = DateTime.now();
-    final picked = await showDatePicker(
+    final picked = await showDialog<DateTime>(
       context: context,
-      initialDate: DateTime(2000, 1, 1),
-      firstDate: DateTime(1920),
-      lastDate: now,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF00A79D),
-              onPrimary: Colors.white,
-              onSurface: Color(0xFF17324D),
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: (_) => CustomDatePickerDialog(
+        initialDate: _selectedBirthDate ?? DateTime(2000, 1, 1),
+        firstDate: DateTime(1920),
+        lastDate: now,
+      ),
     );
     if (picked != null) {
-      setState(() => _selectedBirthDate = picked);
+      setState(() {
+        _selectedBirthDate = picked;
+        _dobController.text =
+            '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+        _isDobError = false;
+      });
     }
   }
 
   Future<void> _verifyBirthDate() async {
     if (_selectedBirthDate == null) {
+      setState(() => _isDobError = true);
       _showNotificationSheet(t(context, 'selectBirthDateError'), isError: true);
       return;
     }
@@ -501,6 +923,7 @@ class _BirthDateVerificationScreenState
           ),
         );
       } else {
+        setState(() => _isDobError = true);
         _showNotificationSheet(
           t(context, 'birthDateMismatchError'),
           isError: true,
@@ -519,170 +942,124 @@ class _BirthDateVerificationScreenState
 
   @override
   Widget build(BuildContext context) {
-    final dateText = _selectedBirthDate != null
-        ? '${_selectedBirthDate!.day.toString().padLeft(2, '0')}/${_selectedBirthDate!.month.toString().padLeft(2, '0')}/${_selectedBirthDate!.year}'
-        : t(context, 'selectBirthDateHint');
-
     return Scaffold(
-      backgroundColor: const Color(0xFFE8F6F4),
+      backgroundColor: Colors.white,
+      appBar: const ForgotPinAppBar(activeStep: 2),
       body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            // Header teal
-            _buildLogoHeader(context),
-            // White card bawah
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Verifikasi Tanggal Lahir',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                t(context, 'verifyBirthDateDesc'),
+                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.45),
+              ),
+              const SizedBox(height: 28),
+              const Text(
+                'Tanggal Lahir',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _isDobError ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0),
+                    width: _isDobError ? 1.5 : 1.0,
+                  ),
                 ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Back + judul
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () => Navigator.of(context).pop(),
-                            child: const Icon(
-                              Icons.arrow_back_rounded,
-                              color: Color(0xFF1E293B),
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            t(context, 'forgotPin'),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
+                padding: const EdgeInsets.only(left: 14, right: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _dobController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[\d/]')),
+                          LengthLimitingTextInputFormatter(10),
                         ],
-                      ),
-                      const SizedBox(height: 20),
-                      const StepIndicator(activeStep: 3),
-                      const SizedBox(height: 22),
-                      Text(
-                        t(context, 'verifyBirthDateTitle'),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1E293B),
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF1E293B)),
+                        decoration: const InputDecoration(
+                          hintText: 'dd/mm/yyyy',
+                          hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        t(context, 'verifyBirthDateDesc'),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        t(context, 'birthDate'),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      InkWell(
-                        onTap: _pickDate,
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
+                    ),
+                    IconButton(
+                      onPressed: _pickDate,
+                      icon: const Icon(Icons.calendar_today_outlined, color: Color(0xFF00A79D), size: 20),
+                    ),
+                  ],
+                ),
+              ),
+              if (_isDobError) ...[
+                const SizedBox(height: 6),
+                Text(
+                  t(context, 'selectBirthDateError'),
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: (_isLoading || _cooldownSeconds > 0)
+                        ? null
+                        : const LinearGradient(
+                            colors: [Color(0xFF007F78), Color(0xFF00A79D)],
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                            ),
+                    color: (_isLoading || _cooldownSeconds > 0)
+                        ? const Color(0xFF94A3B8)
+                        : null,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: ElevatedButton(
+                    onPressed: (_isLoading || _cooldownSeconds > 0) ? null : _verifyBirthDate,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.transparent,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                        : Text(
+                            _cooldownSeconds > 0
+                                ? t(context, 'wait30Seconds').replaceAll('{seconds}', '$_cooldownSeconds')
+                                : 'Konfirmasi',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                dateText,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: _selectedBirthDate != null
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                  color: _selectedBirthDate != null
-                                      ? const Color(0xFF1E293B)
-                                      : const Color(0xFF94A3B8),
-                                ),
-                              ),
-                              const Icon(
-                                Icons.calendar_today_rounded,
-                                color: Color(0xFF00A79D),
-                                size: 20,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: (_isLoading || _cooldownSeconds > 0)
-                              ? null
-                              : _verifyBirthDate,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00A79D),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Text(
-                                  _cooldownSeconds > 0
-                                      ? t(context, 'wait30Seconds').replaceAll('{seconds}', '$_cooldownSeconds')
-                                      : t(context, 'next'),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      )
+      ),
     );
   }
 }
+
+
+
+
+
+
+
 
 
 class ResetPinFormScreen extends StatefulWidget {
@@ -901,179 +1278,153 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: ForgotPinAppBar(
+        activeStep: _isConfirming ? 4 : 3,
+        onBackPressed: () {
+          if (_isConfirming) {
+            setState(() {
+              _isConfirming = false;
+              _confirmPin = '';
+            });
+          } else {
+            Navigator.of(context).pop();
+          }
+        },
+      ),
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 36),
-
-            // Back + judul atas
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      if (_isConfirming) {
-                        setState(() {
-                          _isConfirming = false;
-                          _confirmPin = '';
-                        });
-                      } else {
-                        Navigator.of(context).pop();
-                      }
-                    },
-                    child: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: Color(0xFF1E293B),
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    t(context, 'forgotPin'),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Icon gembok — sama dengan phone_create_pin_screen
-            Center(
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F6F4),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  Icons.lock_person_outlined,
-                  size: 36,
-                  color: Color(0xFF00A79D),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Step indicator
-            const StepIndicator(activeStep: 4),
-            const SizedBox(height: 16),
-
-            // Subtitle
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                _isConfirming
-                    ? t(context, 'confirmPinDesc')
-                    : t(context, 'createNewPinDesc'),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              const SizedBox(height: 32),
+              
+              // Title
+              Text(
+                _isConfirming ? t(context, 'confirmPin') : t(context, 'createNewPin'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 13.5,
-                  color: Color(0xFF334155),
-                  height: 1.45,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1E293B),
                 ),
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Error teks
-            if (_isPinError)
+              const SizedBox(height: 8),
+              
+              // Subtitle
               Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
-                  _isSameAsOldPin
-                      ? t(context, 'sameAsOldPinError')
-                      : t(context, 'confirmPinMismatchError'),
+                  _isConfirming
+                      ? t(context, 'confirmPinDesc')
+                      : t(context, 'createNewPinDesc'),
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFEF4444),
+                    fontSize: 13,
+                    color: Color(0xFF64748B),
+                    height: 1.45,
                   ),
                 ),
               ),
 
-            // 6 PIN dots
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(6, (index) {
-                final isFilled = index < currentPin.length;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _isPinError
-                        ? (isFilled
-                              ? const Color(0xFFEF4444)
-                              : const Color(0xFFE2E8F0))
-                        : (isFilled
-                              ? const Color(0xFF00A79D)
-                              : const Color(0xFFE2E8F0)),
-                  ),
-                );
-              }),
-            ),
+              const SizedBox(height: 32),
 
-            const Spacer(),
+              // Error teks
+              if (_isPinError)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    _isSameAsOldPin
+                        ? t(context, 'sameAsOldPinError')
+                        : t(context, 'confirmPinMismatchError'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                ),
 
-            // Numpad — sama persis dengan phone_create_pin_screen
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: _buildNumpadButton('1')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('2')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('3')),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildNumpadButton('4')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('5')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('6')),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildNumpadButton('7')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('8')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('9')),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildNumpadButton('')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('0')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('back')),
-                    ],
-                  ),
-                ],
+              // 6 PIN dots
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(6, (index) {
+                  final isFilled = index < currentPin.length;
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isPinError
+                          ? (isFilled
+                                ? const Color(0xFFEF4444)
+                                : const Color(0xFFE2E8F0))
+                          : (isFilled
+                                ? const Color(0xFF00A79D)
+                                : const Color(0xFFE2E8F0)),
+                    ),
+                  );
+                }),
               ),
-            ),
 
-            const SizedBox(height: 36),
-          ],
+              const SizedBox(height: 48),
+
+              // Numpad
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 320),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: _buildNumpadButton('1')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildNumpadButton('2')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildNumpadButton('3')),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: _buildNumpadButton('4')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildNumpadButton('5')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildNumpadButton('6')),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: _buildNumpadButton('7')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildNumpadButton('8')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildNumpadButton('9')),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: _buildNumpadButton('')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildNumpadButton('0')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildNumpadButton('back')),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 36),
+            ],
+          ),
         ),
       ),
     );
@@ -1087,14 +1438,7 @@ class PinResetSuccessScreen extends StatefulWidget {
   State<PinResetSuccessScreen> createState() => _PinResetSuccessScreenState();
 }
 
-class _PinResetSuccessScreenState extends State<PinResetSuccessScreen>
-    with TickerProviderStateMixin {
-  late final AnimationController _checkController;
-  late final AnimationController _fadeController;
-  late final Animation<double> _checkScale;
-  late final Animation<double> _checkOpacity;
-  late final Animation<double> _fadeIn;
-
+class _PinResetSuccessScreenState extends State<PinResetSuccessScreen> {
   int _countdown = 3;
   Timer? _timer;
 
@@ -1102,31 +1446,6 @@ class _PinResetSuccessScreenState extends State<PinResetSuccessScreen>
   void initState() {
     super.initState();
 
-    _checkController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
-    );
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-
-    _checkScale = CurvedAnimation(
-      parent: _checkController,
-      curve: Curves.elasticOut,
-    );
-    _checkOpacity = CurvedAnimation(
-      parent: _checkController,
-      curve: Curves.easeIn,
-    );
-    _fadeIn = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
-
-    _checkController.forward();
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) _fadeController.forward();
-    });
-
-    // Countdown 3 detik lalu ke SignInScreen
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -1151,164 +1470,76 @@ class _PinResetSuccessScreenState extends State<PinResetSuccessScreen>
   @override
   void dispose() {
     _timer?.cancel();
-    _checkController.dispose();
-    _fadeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isCompact = screenWidth < 360;
-
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFEAF7F4), Color(0xFFF8FBFF), Color(0xFFF5EFFF)],
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Icon Checkmark Circle
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF00A79D).withValues(alpha: 0.15),
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFF4ADE80),
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                
+                // Title
+                const Text(
+                  'PIN Baru Berhasil Dibuat',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF00A79D),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                // Subtitle
+                const Text(
+                  'Anda akan diarahkan ke halaman login dalam 3 detik untuk mencoba PIN Anda!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF64748B),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              top: -70,
-              left: -40,
-              child: Container(
-                width: 220,
-                height: 220,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF86D8C8).withValues(alpha: 0.24),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: -80,
-              right: -30,
-              child: Container(
-                width: 260,
-                height: 260,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF8AA8FF).withValues(alpha: 0.2),
-                ),
-              ),
-            ),
-            SafeArea(
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isCompact ? 20 : 32,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ScaleTransition(
-                        scale: _checkScale,
-                        child: FadeTransition(
-                          opacity: _checkOpacity,
-                          child: Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: const Color(
-                                0xFF00A79D,
-                              ).withValues(alpha: 0.12),
-                              border: Border.all(
-                                color: const Color(
-                                  0xFF00A79D,
-                                ).withValues(alpha: 0.3),
-                                width: 2,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.check_circle_rounded,
-                              color: Color(0xFF00A79D),
-                              size: 72,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      FadeTransition(
-                        opacity: _fadeIn,
-                        child: Column(
-                          children: [
-                            Text(
-                              t(context, 'pinUpdatedSuccessTitle'),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: isCompact ? 22 : 24,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF00A79D),
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            SizedBox(height: isCompact ? 10 : 12),
-                            RichText(
-                              textAlign: TextAlign.center,
-                              text: TextSpan(
-                                style: TextStyle(
-                                  fontSize: isCompact ? 13 : 14,
-                                  color: const Color(0xFF64748B),
-                                  height: 1.6,
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: t(context, 'pinUpdatedSuccessDesc'),
-                                  ),
-                                  const TextSpan(text: '\n'),
-                                  TextSpan(
-                                    text: '$_countdown detik',
-                                    style: const TextStyle(
-                                      color: Color(0xFF00A79D),
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 32),
-                            // Progress indicator countdown
-                            SizedBox(
-                              width: 48,
-                              height: 48,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  CircularProgressIndicator(
-                                    value: _countdown / 3,
-                                    strokeWidth: 3.5,
-                                    backgroundColor: const Color(0xFFE2E8F0),
-                                    color: const Color(0xFF00A79D),
-                                  ),
-                                  Text(
-                                    '$_countdown',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF00A79D),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );
   }
 }
+
+
+

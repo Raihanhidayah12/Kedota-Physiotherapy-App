@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>Aplikasi Kedota Physiotherapy membutuhkan izin notifikasi untuk mengirimkan pengingat jadwal terapi dan informasi penting lainnya.</string>
 </dict>
 </plist>

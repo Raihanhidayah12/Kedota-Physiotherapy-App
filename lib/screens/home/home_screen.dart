@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
+import 'edit_profile_screen.dart';
+import 'notification_screen.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _c900 = Color(0xFF004D47);
@@ -25,6 +27,7 @@ class _HomeBodyState extends State<HomeBody>
     with TickerProviderStateMixin {
   String _fullName = 'Pasien Kedota';
   String? _profileImageUrl;
+  bool _isProfileIncomplete = false;
   // header expand animation
   late AnimationController _headerCtrl;
   late Animation<double> _headerExpand; // height expand from top-to-bottom
@@ -199,6 +202,9 @@ class _HomeBodyState extends State<HomeBody>
             ? profileName
             : (metadataName?.isNotEmpty == true ? metadataName! : _fullName);
         _profileImageUrl = imageUrl;
+        final nik     = profile?['nik']?.toString().trim() ?? '';
+        final address = profile?['address']?.toString().trim() ?? '';
+        _isProfileIncomplete = nik.isEmpty || address.isEmpty;
       });
     } catch (e) {
       debugPrint('Home profile load failed: $e');
@@ -224,6 +230,84 @@ class _HomeBodyState extends State<HomeBody>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() => _profileImageUrl = null);
     });
+  }
+
+  // ── incomplete profile banner ────────────────────────────────────────────
+  Widget _buildIncompleteProfileBanner() {
+    return GestureDetector(
+      onTap: () async {
+        final refreshed = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+        );
+        if (refreshed == true && mounted) _loadProfile();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF8E1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFFFCC02), width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFEE82),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.info_outline_rounded,
+                color: Color(0xFFB7820A),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t(context, 'incompleteProfileTitle'),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF7A5800),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    t(context, 'incompleteProfileDesc'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF9A7000),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Tombol langsung ke Informasi Akun
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFCC02),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                t(context, 'incompleteProfileBtn'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF7A5800),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── greeting helper ─────────────────────────────────────────────────────────
@@ -256,6 +340,11 @@ class _HomeBodyState extends State<HomeBody>
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       const SizedBox(height: 20),
+                      // Banner kelengkapan profil
+                      if (_isProfileIncomplete) ...[
+                        _buildIncompleteProfileBanner(),
+                        const SizedBox(height: 16),
+                      ],
                       _fadeSlide(0, _buildPromoBanner()),
                       const SizedBox(height: 28),
                       _fadeSlide(1, _buildSectionRow(t(context, 'upcomingAppointment'), t(context, 'seeAll'))),
@@ -421,34 +510,41 @@ class _HomeBodyState extends State<HomeBody>
         ),
       );
 
-  Widget _buildNotifButton() => Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.25),
+  Widget _buildNotifButton() => GestureDetector(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const NotificationScreen()),
+          );
+        },
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.25),
+            ),
           ),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            const Icon(Icons.notifications_outlined,
-                color: Colors.white, size: 20),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                width: 7,
-                height: 7,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF6B6B),
-                  shape: BoxShape.circle,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const Icon(Icons.notifications_outlined,
+                  color: Colors.white, size: 20),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFF6B6B),
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
 
@@ -770,7 +866,7 @@ class _HomeBodyState extends State<HomeBody>
 
   Widget _buildPromoBanner() {
     final screenW = MediaQuery.of(context).size.width;
-    final bannerH = (screenW * 0.38).clamp(130.0, 170.0);
+    final bannerH = (screenW * 0.45).clamp(155.0, 190.0);
     return Column(
         children: [
           SizedBox(
@@ -877,14 +973,17 @@ class _HomeBodyState extends State<HomeBody>
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 9, vertical: 4),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              child: Center(
+                child: SingleChildScrollView(
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.22),
                       borderRadius: BorderRadius.circular(20),
@@ -950,6 +1049,8 @@ class _HomeBodyState extends State<HomeBody>
                   ),
                 ],
               ),
+              ),
+             ),
             ),
           ],
         ),
@@ -1083,23 +1184,29 @@ class _HomeBodyState extends State<HomeBody>
                     ),
                     child: Row(
                       children: [
-                        _apptInfoItem(
-                          Icons.calendar_month_outlined,
-                          'Selasa',
-                          '18 Agu 2026',
+                        Expanded(
+                          flex: 10,
+                          child: _apptInfoItem(
+                            Icons.calendar_month_outlined,
+                            'Selasa',
+                            '18 Agu 2026',
+                          ),
                         ),
                         Container(
                           width: 1,
                           height: 36,
                           color: Colors.white.withValues(alpha: 0.25),
-                          margin: const EdgeInsets.symmetric(horizontal: 12),
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
                         ),
-                        _apptInfoItem(
-                          Icons.access_time_rounded,
-                          '11:00',
-                          '12:00 WIB',
+                        Expanded(
+                          flex: 9,
+                          child: _apptInfoItem(
+                            Icons.access_time_rounded,
+                            '11:00',
+                            '12:00 WIB',
+                          ),
                         ),
-                        const Spacer(),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
@@ -1125,26 +1232,32 @@ class _HomeBodyState extends State<HomeBody>
   Widget _apptInfoItem(IconData icon, String top, String bottom) => Row(
         children: [
           Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.8)),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                top,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  top,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              Text(
-                bottom,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 10,
+                Text(
+                  bottom,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 10,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       );

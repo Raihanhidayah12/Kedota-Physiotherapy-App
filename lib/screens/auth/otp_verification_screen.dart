@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_bottom_sheet.dart';
@@ -8,12 +9,56 @@ import 'pin_verification_screen.dart';
 import 'phone_profile_completion_screen.dart';
 import '../errors/otp_rate_limit_screen.dart';
 
+class _BlinkingCursor extends StatefulWidget {
+  const _BlinkingCursor();
+
+  @override
+  State<_BlinkingCursor> createState() => _BlinkingCursorState();
+}
+
+class _BlinkingCursorState extends State<_BlinkingCursor>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: Container(
+        width: 2,
+        height: 24,
+        decoration: BoxDecoration(
+          color: const Color(0xFF00A79D),
+          borderRadius: BorderRadius.circular(1),
+        ),
+      ),
+    );
+  }
+}
+
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
   final String? pin;
   final VoidCallback? onVerified;
   final bool isDormant;
   final String? targetEmail;
+  final bool showStepIndicator;
+  final int activeStep;
 
   const OtpVerificationScreen({
     super.key,
@@ -22,6 +67,8 @@ class OtpVerificationScreen extends StatefulWidget {
     this.onVerified,
     this.isDormant = false,
     this.targetEmail,
+    this.showStepIndicator = false,
+    this.activeStep = 2,
   });
 
   @override
@@ -36,12 +83,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   bool _isError = false;
   int _failedAttempts = 0;
 
-  static const _validDummyOtps = {'123456', '555555', '000000', '999999'};
+  static const _validDummyOtps = {'1234', '5555', '0000', '9999'};
 
   Widget _buildStepIndicator(int activeStep) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(4, (index) {
+      children: List.generate(5, (index) {
         final isActive = index == activeStep - 1;
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -61,13 +108,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.initState();
     _startTimer();
     _otpController.addListener(_checkOtpComplete);
+    _focusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   void _checkOtpComplete() {
     if (_otpController.text.isNotEmpty) {
       HapticFeedback.selectionClick();
     }
-    if (_otpController.text.length == 6) {
+    if (_otpController.text.length == 4) {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted) {
           _verifyOtp();
@@ -139,7 +189,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       primaryButtonText: t(context, 'continueEmail'),
       onPrimaryPressed: () {
         Navigator.of(context).pop();
-        // pushAndRemoveUntil agar tidak ada context lama yang tersisa
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) => OtpVerificationScreen(
@@ -235,15 +284,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       );
       return;
     }
-
-    CustomBottomSheet.show(
-      context,
-      type: BottomSheetType.error,
-      title: 'Kode Salah',
-      subtitle: 'Kode OTP tidak sesuai. Silakan coba lagi.',
-      singleButtonText: 'Coba Lagi',
-      onSinglePressed: () => Navigator.of(context).pop(),
-    );
   }
 
   @override
@@ -251,7 +291,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final formattedPhone = _formatPhoneNumber(widget.phoneNumber);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE8F6F4),
+      backgroundColor: const Color(0xFFF7F9F9),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -287,7 +327,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   ),
                 ],
               ),
-            ),
+            ).animate().fade(duration: 500.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -299,11 +339,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
                   child: Column(
                     children: [
-                      _buildStepIndicator(2),
-                      const SizedBox(height: 18),
-                      const Text(
-                        'Verifikasi OTP',
-                        style: TextStyle(
+                      if (widget.showStepIndicator) ...[
+                        _buildStepIndicator(widget.activeStep),
+                        const SizedBox(height: 18),
+                      ],
+                      Text(
+                        t(context, 'verifyOtp'),
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: Color(0xFF00A79D),
@@ -319,9 +361,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             height: 1.45,
                           ),
                           children: [
-                            const TextSpan(
-                              text:
-                                  'Masukkan 6 digit kode OTP yang telah dikirimkan ke nomor ',
+                            TextSpan(
+                              text: t(context, 'enterOtpSentTo'),
                             ),
                             TextSpan(
                               text: formattedPhone,
@@ -334,72 +375,106 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      GestureDetector(
-                        onTap: () => _focusNode.requestFocus(),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(6, (index) {
-                              final isActive =
-                                  index == _otpController.text.length;
-                              final char = _otpController.text.length > index
-                                  ? _otpController.text[index]
-                                  : "";
+                      const SizedBox(height: 16),
+                      // Teks error inline jika OTP salah
+                      if (_isError)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Kode OTP tidak sesuai silakan coba lagi.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFEF4444),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: GestureDetector(
+                          onTap: () => _focusNode.requestFocus(),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final boxSize = ((constraints.maxWidth - 36) / 4)
+                                  .clamp(0.0, 72.0);
+                              return Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(4, (index) {
+                                  final isActive =
+                                      index == _otpController.text.length;
+                                  final char =
+                                      _otpController.text.length > index
+                                          ? _otpController.text[index]
+                                          : "";
 
-                              return Container(
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                ),
-                                width: 50,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: _isError
-                                        ? const Color(0xFFEF4444)
-                                        : (isActive
-                                              ? const Color(0xFF00A79D)
-                                              : const Color(0xFFE2E8F0)),
-                                    width: _isError || isActive ? 1.5 : 1.0,
-                                  ),
-                                ),
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    Text(
-                                      char,
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
+                                  return Container(
+                                    margin: EdgeInsets.only(
+                                      right: index == 3 ? 0 : 12,
+                                    ),
+                                    width: boxSize,
+                                    height: boxSize * 1.07,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
                                         color: _isError
                                             ? const Color(0xFFEF4444)
-                                            : const Color(0xFF1E293B),
+                                            : (isActive && _focusNode.hasFocus
+                                                  ? const Color(0xFF00A79D)
+                                                  : const Color(0xFFE2E8F0)),
+                                        width: _isError ||
+                                                (isActive &&
+                                                    _focusNode.hasFocus)
+                                            ? 1.5
+                                            : 1.0,
                                       ),
                                     ),
-                                    Positioned(
-                                      bottom: 8,
-                                      child: Container(
-                                        width: 18,
-                                        height: 2,
-                                        decoration: BoxDecoration(
-                                          color: _isError
-                                              ? const Color(0xFFEF4444)
-                                              : (char.isNotEmpty || isActive
-                                                    ? const Color(0xFF00A79D)
-                                                    : const Color(0xFFCBD5E1)),
-                                          borderRadius: BorderRadius.circular(
-                                            1,
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        if (char.isNotEmpty)
+                                          Text(
+                                            char,
+                                            style: TextStyle(
+                                              fontSize: boxSize * 0.4,
+                                              fontWeight: FontWeight.bold,
+                                              color: _isError
+                                                  ? const Color(0xFFEF4444)
+                                                  : const Color(0xFF1E293B),
+                                            ),
+                                          )
+                                        else if (isActive &&
+                                            _focusNode.hasFocus)
+                                          const _BlinkingCursor(),
+                                        Positioned(
+                                          bottom: 10,
+                                          child: Container(
+                                            width: boxSize * 0.33,
+                                            height: 2,
+                                            decoration: BoxDecoration(
+                                              color: _isError
+                                                  ? const Color(0xFFEF4444)
+                                                  : (char.isNotEmpty ||
+                                                            (isActive &&
+                                                                _focusNode
+                                                                    .hasFocus)
+                                                        ? const Color(
+                                                            0xFF00A79D)
+                                                        : const Color(
+                                                            0xFFCBD5E1)),
+                                              borderRadius:
+                                                  BorderRadius.circular(1),
+                                            ),
                                           ),
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                                  );
+                                }),
                               );
-                            }),
+                            },
                           ),
                         ),
                       ),
@@ -415,7 +490,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             autofocus: true,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(6),
+                              LengthLimitingTextInputFormatter(4),
                             ],
                             onChanged: (_) => setState(() {}),
                           ),
@@ -429,9 +504,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         runSpacing: 4,
                         children: [
                           if (_secondsRemaining > 0) ...[
-                            const Text(
-                              'Kirim Ulang Dalam ',
-                              style: TextStyle(
+                            Text(
+                              t(context, 'resendIn'),
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF64748B),
                                 fontWeight: FontWeight.w500,
@@ -452,10 +527,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                 CustomBottomSheet.show(
                                   context,
                                   type: BottomSheetType.success,
-                                  title: 'Kode OTP Dikirim',
+                                  title: t(context, 'otpSentTitle'),
                                   subtitle: t(context, 'otpResent'),
                                   singleButtonText:
-                                      t(context, 'close') ?? 'Tutup',
+                                      t(context, 'close'),
                                   onSinglePressed: () =>
                                       Navigator.of(context).pop(),
                                 );
@@ -475,7 +550,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           ],
                         ],
                       ),
-                    ],
+                    ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
                   ),
                 ),
               ),

@@ -153,57 +153,47 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
 
   Widget _buildNumpadButton(String value) {
     if (value.isEmpty) {
-      return const SizedBox(width: 68, height: 68);
+      return const SizedBox(height: 56);
     }
 
     final isBackspace = value == 'backspace';
 
-    if (isBackspace) {
-      return GestureDetector(
+    return Center(
+      child: GestureDetector(
         onTap: () => _onNumberPressed(value),
         child: Container(
-          width: 68,
-          height: 52,
+          width: 56,
+          height: 56,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF00A79D), width: 2),
+            shape: isBackspace ? BoxShape.rectangle : BoxShape.circle,
+            borderRadius: isBackspace ? BorderRadius.circular(16) : null,
+            border: isBackspace ? Border.all(color: const Color(0xFF00A79D), width: 2) : null,
+            boxShadow: isBackspace
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
           ),
-          child: const Center(
-            child: Icon(
-              Icons.backspace_outlined,
-              color: Color(0xFF00A79D),
-              size: 24,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return GestureDetector(
-      onTap: () => _onNumberPressed(value),
-      child: Container(
-        width: 68,
-        height: 68,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Center(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
-            ),
+          child: Center(
+            child: isBackspace
+                ? const Icon(
+                    Icons.backspace_outlined,
+                    color: Color(0xFF00A79D),
+                    size: 22,
+                  )
+                : Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
           ),
         ),
       ),
@@ -213,139 +203,150 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
   @override
   Widget build(BuildContext context) {
     final currentPin = _isConfirming ? _confirmPin : _firstPin;
+    final minH = MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF7F9F9),
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 36),
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minH > 0 ? minH : 600),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children: [
+                    const SizedBox(height: 36),
 
-            // LOCK ICON BADGE
-            Center(
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F6F4),
-                  borderRadius: BorderRadius.circular(20),
+                    // LOCK ICON BADGE
+                    Center(
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F6F4),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(
+                          Icons.lock_person_outlined,
+                          size: 36,
+                          color: Color(0xFF00A79D),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // SUBTITLE TEXT
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(
+                        _isConfirming
+                            ? 'Silakan masukkan kembali 6 digit PIN Anda untuk konfirmasi.'
+                            : 'Silakan buat 6 digit PIN Anda terlebih dahulu untuk melanjutkan.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          color: Color(0xFF334155),
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // ERROR TEKS (PIN MISMATCH)
+                    if (_isPinError)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          'PIN tidak sesuai silakan coba lagi.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFEF4444),
+                          ),
+                        ),
+                      ),
+
+                    // 6 PIN DOTS INDICATOR
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(6, (index) {
+                        final isFilled = index < currentPin.length;
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 5),
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _isPinError
+                                ? (isFilled
+                                      ? const Color(0xFFEF4444)
+                                      : const Color(0xFFE2E8F0))
+                                : (isFilled
+                                      ? const Color(0xFF00A79D)
+                                      : const Color(0xFFE2E8F0)),
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
                 ),
-                child: const Icon(
-                  Icons.lock_person_outlined,
-                  size: 36,
-                  color: Color(0xFF00A79D),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
 
-            // SUBTITLE TEXT
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                _isConfirming
-                    ? 'Silakan masukkan kembali 6 digit PIN Anda untuk konfirmasi.'
-                    : 'Silakan buat 6 digit PIN Anda terlebih dahulu untuk melanjutkan.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  color: Color(0xFF334155),
-                  height: 1.45,
-                ),
-              ),
-            ),
+                const SizedBox(height: 24),
 
-            const SizedBox(height: 24),
-
-            // ERROR TEKS (PIN MISMATCH)
-            if (_isPinError)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'PIN tidak sesuai silakan coba lagi.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFEF4444),
-                  ),
-                ),
-              ),
-
-            // 6 PIN DOTS INDICATOR
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(6, (index) {
-                final isFilled = index < currentPin.length;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _isPinError
-                        ? (isFilled
-                              ? const Color(0xFFEF4444)
-                              : const Color(0xFFE2E8F0))
-                        : (isFilled
-                              ? const Color(0xFF00A79D)
-                              : const Color(0xFFE2E8F0)),
-                  ),
-                );
-              }),
-            ),
-
-            const Spacer(),
-
-            // NUMERIC KEYPAD
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  Row(
+                // NUMERIC KEYPAD
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
                     children: [
-                      Expanded(child: _buildNumpadButton('1')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('2')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('3')),
+                      Row(
+                        children: [
+                          Expanded(child: _buildNumpadButton('1')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildNumpadButton('2')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildNumpadButton('3')),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(child: _buildNumpadButton('4')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildNumpadButton('5')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildNumpadButton('6')),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(child: _buildNumpadButton('7')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildNumpadButton('8')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildNumpadButton('9')),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(child: _buildNumpadButton('')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildNumpadButton('0')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildNumpadButton('backspace')),
+                        ],
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildNumpadButton('4')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('5')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('6')),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildNumpadButton('7')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('8')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('9')),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildNumpadButton('')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('0')),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildNumpadButton('backspace')),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+                ),
 
-            const SizedBox(height: 36),
-          ],
+                const SizedBox(height: 36),
+              ],
+            ),
+          ),
         ),
       ),
     );

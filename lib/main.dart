@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'l10n/app_language.dart';
 import 'screens/splash/splash_screen.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +25,9 @@ Future<void> main() async {
 
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);
 
+  // Inisialisasi sistem notifikasi
+  await NotificationService().init();
+
   runApp(const KedotaApp());
 }
 
@@ -39,11 +43,32 @@ class KedotaApp extends StatelessWidget {
         title: 'Kedota Physiotherapy',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF1E88E5),
+            seedColor: const Color(0xFF007F78),
+            primary: const Color(0xFF007F78),
+            secondary: const Color(0xFF00A79D),
             brightness: Brightness.light,
           ),
           useMaterial3: true,
           textTheme: GoogleFonts.openSansTextTheme(),
+          datePickerTheme: DatePickerThemeData(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            headerBackgroundColor: const Color(0xFF007F78),
+            headerForegroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+            ),
+            dayStyle: const TextStyle(fontWeight: FontWeight.w600),
+            yearStyle: const TextStyle(fontWeight: FontWeight.w600),
+            cancelButtonStyle: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF8AA8AC),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            confirmButtonStyle: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF007F78),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
         ),
         home: const SplashScreen(),
       ),

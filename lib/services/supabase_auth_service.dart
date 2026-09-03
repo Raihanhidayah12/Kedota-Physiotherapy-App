@@ -463,6 +463,44 @@ class SupabaseAuthService {
     }
   }
 
+  /// Upload foto profil dari bytes (hasil image_picker) ke Supabase Storage.
+  /// Mengembalikan URL publik foto yang baru di-upload.
+  Future<String> uploadProfilePhoto({
+    required List<int> imageBytes,
+    required String contentType, // e.g. 'image/jpeg'
+  }) async {
+    final user = client.auth.currentUser;
+    if (user == null) throw Exception('Not logged in');
+
+    final ext       = contentType.contains('png') ? 'png' : 'jpg';
+    final photoPath = '${user.id}/profile.$ext';
+
+    await client.storage
+        .from('profile-photos')
+        .uploadBinary(
+          photoPath,
+          Uint8List.fromList(imageBytes),
+          fileOptions: FileOptions(contentType: contentType, upsert: true),
+        );
+
+    final publicUrl = client.storage
+        .from('profile-photos')
+        .getPublicUrl(photoPath);
+
+    // Tambahkan cache-buster agar UI langsung refresh
+    final bustedUrl = '$publicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+
+    await client
+        .from('profiles')
+        .update({
+          'profile_photo_url': bustedUrl,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', user.id);
+
+    return bustedUrl;
+  }
+
   Future<void> syncProfilePhotoFromAuth() async {
     final user = client.auth.currentUser;
     if (user == null) return;
@@ -1048,8 +1086,12 @@ class SupabaseAuthService {
             })
             .eq('id', profileId);
 
-        await client.auth.updateUser(UserAttributes(password: newPin));
-        debugPrint('updateUserPin: direct session update successful');
+        try {
+          await client.auth.updateUser(UserAttributes(password: newPin));
+          debugPrint('updateUserPin: direct session update successful');
+        } catch (authErr) {
+          debugPrint('updateUserPin: auth password sync notice: $authErr');
+        }
         return true;
       }
 
@@ -1222,6 +1264,36 @@ class SupabaseAuthService {
       await client.auth.signOut();
     } catch (e) {
       debugPrint('Error signing out: $e');
+    }
+  }
+
+  /// Hapus akun user secara permanen:
+  /// 1. Set status = 'recycled' di tabel profiles
+  /// 2. Delete row profiles
+  /// 3. Sign out dari Supabase Auth
+  ///
+  /// Catatan: Supabase Auth user hanya bisa dihapus via admin/service-role key
+  /// (tidak bisa dari client SDK), sehingga data Auth tetap ada tapi tidak
+  /// bisa diakses lagi karena profiles sudah dihapus.
+  Future<void> deleteAccount() async {
+    final user = client.auth.currentUser;
+    if (user == null) throw Exception('Not logged in');
+
+    try {
+      // 1. Tandai dulu sebagai recycled (soft delete sementara)
+      await client.from('profiles').update({
+        'status'    : 'recycled',
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', user.id);
+
+      // 2. Hapus row profil
+      await client.from('profiles').delete().eq('id', user.id);
+
+      // 3. Sign out
+      await client.auth.signOut();
+    } catch (e) {
+      debugPrint('deleteAccount error: $e');
+      rethrow;
     }
   }
 }

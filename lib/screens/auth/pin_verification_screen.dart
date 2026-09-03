@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
 import '../errors/pin_rate_limit_screen.dart';
 import '../home/main_screen.dart';
 import 'forgot_pin_screen.dart';
-import 'otp_verification_screen.dart';
 
 class PinVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -146,10 +146,15 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF7F9F9),
       body: SafeArea(
-        child: Column(
-          children: [
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height,
+            ),
+            child: Column(
+              children: [
             const SizedBox(height: 36),
 
             // TOP LOCK BADGE ICON
@@ -223,7 +228,7 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
               }),
             ),
 
-            const Spacer(),
+            const SizedBox(height: 24),
 
             // NUMERIC KEYPAD
             LayoutBuilder(
@@ -274,12 +279,12 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
 
             const SizedBox(height: 24),
 
-            // LUPA PIN LINK
+            // LUPA PIN LINK — langsung ke OTP pakai nomor yang sudah dimasukkan
             TextButton(
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => OtpVerificationScreen(
+                    builder: (_) => ForgotPinOtpScreen(
                       phoneNumber: widget.phoneNumber,
                       onVerified: () {
                         Navigator.of(context).pushReplacement(
@@ -303,8 +308,9 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-          ],
+          ].animate(interval: 40.ms).fade(duration: 400.ms).scale(begin: const Offset(0.95, 0.95)),
+            ),
+          ),
         ),
       ),
     );

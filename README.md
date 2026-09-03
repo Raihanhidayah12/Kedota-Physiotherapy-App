@@ -8,32 +8,34 @@
 
 | Fitur / Modul | Status | Keterangan |
 | :--- | :---: | :--- |
-| 🌐 Multi-Language (ID / EN) | 🟢 Selesai | Bahasa Indonesia & Inggris, toggle di Settings |
-| 🚀 Onboarding Screen | 🟢 Selesai | Tampil sekali saat pertama buka, 3 slide interaktif |
-| 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home |
-| 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil → Buat PIN → Akun Berhasil Dibuat |
-| 🌐 Google Sign-In | 🟢 Selesai | OAuth Google → Pilih Akun → Lengkapi Profil → OTP → Buat PIN → Home |
+| 🌐 Multi-Language (ID / EN) | 🟢 Selesai | Paritas 100% ID & EN di Auth, OTP, Edit Profile, Notifikasi, Settings & Forgot PIN (`AppLanguageScope`) |
+| 🚀 Onboarding Screen | 🟢 Selesai | Tampil sekali saat pertama buka, 3 slide interaktif (`SharedPreferences`) |
+| 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home Screen (Handled 400 pre-check & 422 password sync gracefully) |
+| 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil → Buat PIN → Account Created Screen |
+| 🌐 Google Sign-In | 🟢 Selesai | OAuth Google → Picker Akun → Lengkapi Profil / Direct PIN → Home |
 | 🍎 Apple Sign-In | 🟢 Selesai | OAuth Apple terintegrasi (`signInWithOAuth`) |
-| 📩 OTP Verifikasi (Dummy) | 🟢 Selesai | Kode valid: `123456`, `555555`, `000000`, `999999` |
-| 📡 OTP Production (Plan) | 🔵 Siap Migrasi | Endpoint `/auth/otp` & `/auth/verify` sudah disiapkan di Swagger |
-| 🔓 Lupa PIN | 🟢 Selesai | OTP → Verifikasi Tanggal Lahir → PIN Baru (boleh sama dengan lama) |
+| 📩 OTP Verifikasi | 🟢 Selesai | Teks & Dialog terverifikasi dinamis (ID/EN), Dummy codes: `123456`, `555555`, `000000`, `999999` |
+| 📡 OTP Production (Plan) | 🔵 Siap Migrasi | Endpoint `/auth/otp` & `/auth/verify` disiapkan di Swagger |
+| 🔓 Lupa PIN | 🟢 Selesai | OTP → Verifikasi Tanggal Lahir → PIN Baru → PIN Reset Success |
+| 🔑 Ganti PIN (Settings) | 🟢 Selesai | Verifikasi PIN Lama → Input PIN Baru → Konfirmasi PIN Baru (Rate limit 3x) |
+| 👤 Edit Profil | 🟢 Selesai | Ubah Nama, TTL, Gender, Upload/Hapus Foto Profil Supabase Storage |
+| 👁️ Privasi Nomor HP | 🟢 Selesai | Default hidden (`+628••••9436`) + Eye Icon toggle di Settings & Edit Profile |
+| 🔔 Preferensi Notifikasi | 🟢 Selesai | Push Notif, Pengingat Terapi (H-1 & 2 jam), Promo, Update Email |
+| ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan Lengkap + Hapus Akun Permanen (Verifikasi PIN 6-digit) |
 | 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → cooldown 30 detik |
-| 💤 Dormant Account | 🟢 Selesai | Akun >60 hari tidak aktif → verifikasi via email |
-| 🎨 UI Consistency | 🟢 Selesai | Semua auth screen menggunakan layout header teal + white card bawah |
-| ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (secure service-role key) |
-| 🏠 Home Screen | ⏳ Dalam Pengembangan | Placeholder tersedia |
-| 📅 Reservasi & Jadwal | ⏳ Dalam Pengembangan | — |
-| 📋 Riwayat Medis | ⏳ Dalam Pengembangan | — |
-| ⚙️ Settings | ⏳ Dalam Pengembangan | Termasuk language toggle & profil |
+| 💤 Dormant Account | 🟢 Selesai | Deteksi akun >60 hari tidak aktif → verifikasi via email |
+| 🎨 UI & Layout Stability | 🟢 Selesai | Numpad, DatePicker & Flex Badge responsive 0 overflow di mobile/web |
+| ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (`update-pin` Deno runtime) |
+| 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan Bottom Navigation 5 tab (Beranda, Progress, Reservasi, Riwayat, Pengaturan) |
 
 ---
 
 ## ✨ Fitur Utama
 
 ### 1. 🚀 Onboarding
-- 3 slide interaktif dengan animasi page transition
-- Hanya muncul sekali saat pertama kali membuka aplikasi
-- Status disimpan secara lokal menggunakan `SharedPreferences`
+- 3 slide interaktif dengan animasi page transition.
+- Hanya muncul sekali saat pertama kali membuka aplikasi.
+- Status disimpan secara lokal menggunakan `SharedPreferences`.
 - Konten slide:
   1. **Pesan Jadwal Tanpa Ribet!** — Atur jadwal konsultasi dengan gampang dan efisien
   2. **Pantau Kesehatan Lebih Mudah** — Monitor perkembangan vital-mu secara real-time
@@ -68,51 +70,54 @@ Sign In → Input Nomor HP
 | `628xxxxxxxxx` | `6281234567890` | `+6281234567890` |
 | `8xxxxxxxxx` | `81234567890` | `+6281234567890` |
 
-**Error state visual:** Input nomor HP menampilkan border merah jika kosong atau format tidak valid, border hilang otomatis saat user mulai mengetik ulang.
-
-**Session persisten:** Setelah login berhasil, saat app dibuka kembali langsung ke PIN Verification tanpa OTP ulang.
-
 ---
 
-### 3. 🌐 Google Sign-In
+### 3. 🌐 Google & Apple Sign-In
 
 **Alur akun baru:**
 ```
 Sign In → Continue with Google
-  → Pilih Akun Google (dialog picker selalu muncul)
-  → Lengkapi Profil (nama auto-fill dari Google, nomor HP & TTL isi manual)
+  → Dialog Pilih Akun Google (always prompt)
+  → Lengkapi Profil (Nama auto-fill, No. HP & TTL isi manual)
   → OTP Verification (verifikasi nomor HP yang diisi)
   → Buat PIN (6-digit) → Konfirmasi PIN
-  → Account Created Screen
-  → Home Screen
+  → Account Created Screen → Home Screen
 ```
 
-**Alur akun sudah terdaftar:**
+**Alur akun terdaftar:**
 ```
 Sign In → Continue with Google
-  → Pilih Akun Google (dialog picker selalu muncul)
-  → PIN Verification (langsung, tanpa OTP ulang)
-  → Home Screen
+  → Dialog Pilih Akun Google
+  → PIN Verification → Home Screen
 ```
-
-**Edge case — email Google sama dengan akun HP:**
-```
-Sign In → Continue with Google
-  → Deteksi signup_method == 'phone'
-  → Sign out session Google
-  → OTP Verification (verifikasi nomor HP terdaftar)
-  → PIN Verification
-  → Home Screen
-```
-
-**Routing logic (setelah OAuth callback):**
-- `phone ada` && `pin_hash ada` → **PinVerificationScreen**
-- Salah satu kosong → **GoogleProfileCompletionScreen**
-- `signup_method == 'phone'` && `phone ada` → sign out → **OtpVerificationScreen**
 
 ---
 
-### 4. 🔓 Lupa PIN
+### 4. ⚙️ Pengaturan, Edit Profil & Keamanan Akun
+
+- **Edit Profil**:
+  - Ubah Nama Lengkap, Tanggal Lahir (Date Picker + nama bulan dinamis ID/EN), dan Gender.
+  - Upload dan Hapus Foto Profil terintegrasi dengan **Supabase Storage**.
+- **Privasi Nomor HP (Hide/Show Phone)**:
+  - Tombol icon mata (`Icons.visibility` / `Icons.visibility_off`) pada header **Settings** dan **Edit Profile** untuk menyembunyikan nomor HP (misal `+628••••9436`) demi menjaga kerahasiaan.
+- **Ganti PIN (Change PIN)**:
+  - Verifikasi PIN lama (rate limit 3x) → Buat PIN Baru → Konfirmasi PIN Baru.
+- **Preferensi Notifikasi**:
+  - Push Notifications, Pengingat Jadwal Terapi (H-1 & 2 jam sebelum sesi), Promo & Penawaran, serta Update Berita via Email.
+- **Hapus Akun Permanen**:
+  - Dialog konfirmasi bahaya + Verifikasi PIN 6-digit sebelum akun dan data dihapus permanen dari Supabase.
+
+---
+
+### 5. 🌐 Multi-Language Support (ID / EN)
+
+- Mendukung **Bahasa Indonesia (ID)** dan **English (EN)** secara penuh di seluruh aplikasi.
+- Toggle bahasa cepat di halaman Settings.
+- Seluruh teks UI, dialog, Toast/SnackBar, hint input, hingga nama bulan pada DatePicker terjemah secara otomatis tanpa perlu restart aplikasi (`AppLanguageScope`).
+
+---
+
+### 6. 🔓 Lupa PIN Flow
 
 ```
 PIN Verification → Lupa PIN
@@ -121,209 +126,66 @@ PIN Verification → Lupa PIN
   → Verifikasi Tanggal Lahir [layout: header teal + white card]
   → Buat PIN Baru           [layout: putih penuh + icon gembok + numpad]
   → Konfirmasi PIN          [layout: putih penuh + icon gembok + numpad]
-      ↳ PIN tidak cocok → error inline merah (dots merah)
   → PIN Reset Success Screen (animasi ✓ + countdown 3 detik)
   → Sign In Screen
 ```
 
-**Catatan:** PIN baru boleh sama dengan PIN lama — user sudah terverifikasi identitasnya via OTP + tanggal lahir.
-
 ---
 
-### 5. 🛡️ Keamanan
+### 7. 🛡️ Keamanan & Stabilitas Layout
 
 | Mekanisme | Detail |
 |---|---|
 | PIN Hashing | SHA-256 (tersimpan di kolom `pin_hash`) |
 | PIN Rate Limit | Salah 3x → layar kunci 5 menit |
 | OTP Rate Limit | Salah 3x → redirect ke OTP Rate Limit Screen (cooldown 30 detik) |
+| Layout Stability | Layout scrollable berbasis `SingleChildScrollView` + `ConstrainedBox` mencegah RenderFlex overflow di layar HP & Web |
 | Google Account Picker | `signOut()` sebelum `signIn()` — dialog pilih akun selalu muncul |
-| Profile Completeness Check | Hanya `phone` + `pin_hash` keduanya ada yang dianggap akun lengkap |
-| Duplicate Phone Check | Cek nomor duplikat mengecualikan akun milik user yang sedang login |
-| Duplicate Email Check | Cek email duplikat saat profil phone dibuat |
-| Account Status & Dormant | Cek status (`active`, `deactivated`, `recycled`) & deteksi akun tidak aktif >60 hari |
-| Edge Function | Update PIN untuk forgot PIN flow via server-side function (`update-pin`) |
 | Service-Role Key | Hanya digunakan di Edge Function (server-side), tidak pernah di client |
 
 ---
 
-### 6. 🎨 UI / UX
-
-- **Layout auth utama**: Header teal dengan logo KEDOTA + white card rounded di bawah (Sign In, OTP, Lupa PIN, Verif Tanggal Lahir)
-- **Layout PIN screen**: Putih penuh dengan icon gembok + step indicator + 6 dots + numpad (Create PIN, Verify PIN, Reset PIN)
-- **Color scheme**: `#00A79D` (primary teal), `#1E293B` (text dark), `#E8F6F4` (background teal muda)
-- **Error handling form**: Border merah pada input + `CustomBottomSheet` untuk pesan error
-- **PIN error**: Inline dots merah untuk mismatch PIN
-- **Success screens**: Animasi elastik icon centang + countdown otomatis
-- **Haptic feedback**: Setiap tap angka pada numpad
-- **Entrance animation**: Fade + slide + scale pada Sign In dan Lupa PIN screen
-
----
-
-## 🗂️ Struktur Folder
+## 🔄 Alur Routing Splash Screen
 
 ```
-lib/
-├── l10n/
-│   └── app_language.dart                    # Semua string ID & EN
-├── screens/
-│   ├── auth/
-│   │   ├── account_created_screen.dart      # Sukses registrasi + countdown 5 detik
-│   │   ├── forgot_pin_screen.dart           # Lupa PIN (4 screen dalam 1 file):
-│   │   │                                    #   ForgotPinScreen (input no. telp)
-│   │   │                                    #   BirthDateVerificationScreen (verif TTL)
-│   │   │                                    #   ResetPinFormScreen (buat PIN baru)
-│   │   │                                    #   PinResetSuccessScreen (sukses reset)
-│   │   ├── google_create_pin_screen.dart    # Buat PIN setelah Google sign-in
-│   │   ├── google_profile_completion_screen.dart  # Lengkapi profil akun Google baru
-│   │   ├── otp_verification_screen.dart     # Verifikasi OTP 6-digit
-│   │   ├── phone_create_pin_screen.dart     # Buat PIN setelah registrasi HP
-│   │   ├── phone_profile_completion_screen.dart   # Lengkapi profil akun HP baru
-│   │   ├── pin_verification_screen.dart     # Input PIN saat sign in
-│   │   └── sign_in_screen.dart              # Entry point auth + Google/Apple OAuth
-│   ├── errors/
-│   │   ├── no_internet_screen.dart
-│   │   ├── otp_rate_limit_screen.dart       # Cooldown 30 detik setelah OTP salah 3x
-│   │   ├── pin_rate_limit_screen.dart       # Kunci 5 menit setelah PIN salah 3x
-│   │   └── verification_rate_limit_screen.dart
-│   ├── home/
-│   │   └── home_screen.dart
-│   ├── onboarding/
-│   │   └── onboarding_screen.dart
-│   └── splash/
-│       └── splash_screen.dart               # Auto-routing berdasarkan sesi & kelengkapan profil
-├── services/
-│   ├── supabase_auth_service.dart           # Semua logika autentikasi
-│   ├── supabase_api_client.dart             # Retrofit API client (generated)
-│   └── supabase_api_client.g.dart           # Generated code — jangan diedit manual
-├── supabase/
-│   ├── config.toml                          # Supabase project configuration
-│   └── functions/
-│       └── update-pin/
-│           └── index.ts                     # Edge Function untuk update PIN (server-side)
-└── widgets/
-    ├── custom_bottom_sheet.dart             # Reusable bottom sheet (success/error/warning)
-    ├── custom_error_screen.dart
-    ├── google_logo_icon.dart
-    └── language_button.dart
+App dibuka
+  └─ SplashScreen (animasi ~2.85 detik)
+       ├─ [session aktif]
+       │    ├─ phone ada && pin_hash ada  →  PinVerificationScreen
+       │    └─ salah satu kosong          →  GoogleProfileCompletionScreen
+       ├─ [no session] && hasSeenOnboarding  →  SignInScreen
+       └─ [no session] && belum onboarding   →  OnboardingScreen
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 🖼️ Tampilan Layout Screen
 
-| Komponen | Teknologi |
+| Screen | Layout Style |
 |---|---|
-| Framework | Flutter 3.x (Dart) |
-| Backend | Supabase (PostgreSQL + Auth + Edge Functions) |
-| OAuth | Google Sign-In (native SDK + Supabase) & Apple Sign-In (Supabase OAuth) |
-| HTTP Client | Dio + Retrofit (generated) |
-| Local Storage | `shared_preferences` |
-| PIN Security | SHA-256 Hashing |
-| Server Functions | Supabase Edge Functions (Deno runtime) |
-| API Docs | OpenAPI 3.0 (Swagger) — `swagger_supabase_api_spec.txt` |
-| UI Style | Header teal + White card layout |
-
----
-
-## 📄 Dokumentasi API
-
-Spesifikasi API lengkap tersedia dalam format **OpenAPI 3.0 (Swagger)** di:
-```
-swagger_supabase_api_spec.txt
-```
-
-### Endpoint yang Tersedia:
-
-| Tag | Endpoint | Method | Keterangan |
-|---|---|:---:|---|
-| Auth | `/auth/signup` | POST | Daftar akun via nomor HP |
-| Auth | `/auth/signin` | POST | Login via nomor HP + PIN |
-| Auth | `/auth/google` | POST | Login / Daftar via Google OAuth |
-| Auth | `/auth/apple` | POST | Login via Apple OAuth |
-| Auth | `/auth/signout` | POST | Logout dari session aktif |
-| Auth | `/auth/otp` | POST | Kirim OTP via SMS *(Production Plan)* |
-| Auth | `/auth/verify` | POST | Verifikasi kode OTP *(Production Plan)* |
-| Profiles | `/profiles` | GET / POST | Ambil / Buat profil pengguna |
-| Profiles | `/profiles/{id}` | GET / PATCH / DELETE | Detail / Update / Hapus profil |
-| Profiles | `/profiles/{id}/pin` | PATCH | Update PIN (session aktif) |
-| Profiles | `/profiles/{id}/verify-birth-date` | POST | Verifikasi TTL untuk lupa PIN |
-| Profiles | `/profiles/{id}/status` | PATCH | Update status profil |
-| Profiles | `/profiles/check-phone` | GET | Cek duplikat nomor HP |
-| Profiles | `/profiles/check-email` | GET | Cek duplikat email |
-| Profiles | `/profiles/check-status` | GET | Cek status & dormant akun |
-| Edge Functions | `/functions/v1/update-pin` | POST | Update PIN via server-side (aman) |
-
----
-
-## 🚀 Cara Menjalankan
-
-```bash
-# 1. Clone repository
-git clone https://github.com/username/kedotaapp.git
-cd kedotaapp
-
-# 2. Install dependencies
-flutter pub get
-
-# 3. Setup environment
-# Salin .env.example → .env, isi SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-
-# 4. Jalankan
-flutter run
-```
-
-### Kredensial Testing
-
-**OTP Dummy (6-digit):**
-```
-123456   555555   000000   999999
-```
-*(Catatan: Endpoint production `/auth/otp` & `/auth/verify` sudah disiapkan di dokumentasi Swagger untuk integrasi OTP sungguhan ke depannya).*
-
-**Format nomor HP valid:**
-```
-081234567890
-6281234567890
-81234567890
-```
-
----
-
-## 📡 OTP Production Plan
-
-Saat ini OTP berjalan secara **dummy (frontend-only)** untuk keperluan development dan testing.
-Untuk production, akan dimigrasi ke Supabase Native OTP (SMS via Twilio / Vonage / dsb.):
-
-**Alur OTP Production:**
-```
-Kirim OTP:    POST /auth/otp    → { phone: "+6281234567890" }
-Verif OTP:    POST /auth/verify → { phone, token, type: "sms" }
-```
-
-**Yang perlu diubah saat migrasi ke production:**
-1. Aktifkan **Phone Auth** di Supabase Dashboard → Authentication → Providers
-2. Hubungkan SMS provider (Twilio, Vonage, dll.) di Supabase Dashboard
-3. Ganti logika `_verifyOtp()` di `otp_verification_screen.dart` dari validasi dummy ke `client.auth.verifyOTP()`
-4. Ganti tombol kirim ulang untuk memanggil `client.auth.signInWithOtp(phone: ...)`
-
-> ⚠️ Endpoint Swagger untuk OTP production (`/auth/otp` & `/auth/verify`) sudah disiapkan dan siap dijadikan referensi implementasi.
+| Splash | Background teal penuh + logo animasi zoom-out → white |
+| Onboarding | Slide interaktif |
+| Sign In | Header teal (logo KEDOTA) + white card bawah |
+| OTP Verification | Header teal (logo KEDOTA) + white card bawah |
+| PIN Verification | Putih penuh + icon gembok + numpad |
+| Profil Completion (HP & Google) | Glassmorphism card dengan gradient background |
+| Create PIN (HP & Google) | Putih penuh + icon gembok + numpad |
+| Lupa PIN — Input No. Telp | Header teal (logo KEDOTA) + white card bawah |
+| Lupa PIN — Verif OTP | Header teal (logo KEDOTA) + white card bawah |
+| Lupa PIN — Verif TTL | Header teal (logo KEDOTA) + white card bawah |
+| Lupa PIN — Buat PIN Baru | Putih penuh + icon gembok + numpad |
+| Edit Profil | White card layout + avatar gradient + dialogs |
+| Settings | Header gradient teal + profile card + menu list |
 
 ---
 
 ## ⚡ Supabase Edge Functions
 
-### Update PIN Function
+### Update PIN Function (`update-pin`)
 
 Aplikasi ini menggunakan **Supabase Edge Function** untuk menangani update PIN secara aman, khususnya pada alur lupa PIN di mana user tidak memiliki session aktif.
 
-**Mengapa Edge Function?**
-- Service-role key **hanya** digunakan di server-side (aman)
-- Client app tidak pernah mengekspos service-role key
-- Validasi JWT token di server untuk keamanan ekstra
-- Rollback otomatis jika terjadi error
-
-**Arsitektur:**
+**Arsitektur Edge Function:**
 ```
 ┌────────────────────────────────────────────┐
 │         Flutter App (Client)               │
@@ -343,112 +205,151 @@ Aplikasi ini menggunakan **Supabase Edge Function** untuk menangani update PIN s
 └────────────────────────────────────────────┘
 ```
 
-**Endpoint:**
-```
-POST https://wwmctqhbqpsbkyxkeaqv.supabase.co/functions/v1/update-pin
-```
+**Endpoint:** `POST /functions/v1/update-pin`
 
-**Request:**
-```json
-{
-  "profile_id": "uuid-user",
-  "new_pin_hash": "sha256-hash",
-  "new_pin": "123456"
-}
-```
-
-**Response (Success):**
-```json
-{
-  "success": true,
-  "profile": { ... }
-}
-```
-
-**Kapan Digunakan:**
-1. **Lupa PIN flow** — User reset PIN tanpa session aktif
-2. **Future: Admin operations** — Admin reset PIN user
-
-**Deployment:**
+**Deployment Command:**
 ```bash
-# Login
 supabase login
-
-# Link project
 supabase link --project-ref wwmctqhbqpsbkyxkeaqv
-
-# Deploy function
 supabase functions deploy update-pin
 ```
 
-Lihat `DEPLOY_EDGE_FUNCTION.md` untuk panduan deployment lengkap.
-
 ---
 
-## 🗃️ Supabase Database
+## 🗃️ Schema Supabase Database
 
 ### Tabel `profiles`
 
 | Kolom | Tipe | Keterangan |
 |---|---|---|
 | `id` | uuid | Primary key, terhubung ke `auth.users` |
-| `phone` | text | Nomor HP format `+62xxx` (dinormalisasi saat simpan) |
-| `full_name` | text | Nama lengkap |
-| `email` | text | Email display (dari input user atau Google) |
-| `auth_email` | text | Email yang dipakai di Supabase Auth |
+| `phone` | text | Nomor HP format `+62xxx` |
+| `full_name` | text | Nama lengkap pengguna |
+| `email` | text | Email display pengguna |
+| `auth_email` | text | Email identitas Supabase Auth |
 | `pin_hash` | text | SHA-256 hash dari PIN 6-digit |
-| `birth_date` | date | Tanggal lahir format `YYYY-MM-DD` (untuk verifikasi lupa PIN) |
+| `birth_date` | date | Tanggal lahir format `YYYY-MM-DD` |
 | `gender` | text | `Laki-laki` / `Perempuan` / `Lainnya` |
+| `profile_photo_url` | text | URL foto profil dari Supabase Storage |
 | `signup_method` | text | `phone` / `google` / `apple` |
 | `status` | text | `active` / `deactivated` / `recycled` |
-| `is_profile_complete` | bool | Flag kelengkapan profil (informasi tambahan) |
+| `is_profile_complete` | bool | Flag kelengkapan profil |
 | `last_login_at` | timestamptz | Untuk deteksi akun dormant (>60 hari) |
-| `created_at` | timestamptz | — |
-| `updated_at` | timestamptz | — |
-
-### Logika Profile Completeness
-
-Akun dianggap **lengkap** hanya jika kolom `phone` **dan** `pin_hash` keduanya tidak kosong di tabel `profiles`. Flag `is_profile_complete` digunakan sebagai informasi tambahan, bukan penentu utama routing.
-
-### Auth Email Strategy
-
-- **Phone signup**: menggunakan email asli user sebagai auth identity (jika valid), fallback ke `{digits}@kedota.local`
-- **Google signup**: menggunakan email Google sebagai auth identity
-- Penyimpanan ke `auth_email` memungkinkan sign-in multi-kandidat untuk menangani migrasi email
+| `created_at` | timestamptz | Waktu registrasi |
+| `updated_at` | timestamptz | Waktu perbaruan terakhir |
 
 ---
 
-## 🔄 Alur Routing Splash Screen
+## 📄 Dokumentasi API (OpenAPI 3.0 / Swagger)
+
+Spesifikasi API lengkap tersedia di file: `swagger_supabase_api_spec.txt`.
+
+### Daftar Endpoint Utama:
+
+| Tag | Endpoint | Method | Deskripsi |
+|---|---|:---:|---|
+| Auth | `/auth/signup` | POST | Registrasi akun via nomor HP |
+| Auth | `/auth/signin` | POST | Login via nomor HP + PIN |
+| Auth | `/auth/google` | POST | Login / Registrasi Google OAuth |
+| Auth | `/auth/apple` | POST | Login Apple OAuth |
+| Auth | `/auth/signout` | POST | Logout dari session aktif |
+| Auth | `/auth/otp` | POST | Send OTP SMS *(Production Plan)* |
+| Auth | `/auth/verify` | POST | Verify OTP token *(Production Plan)* |
+| Profiles | `/profiles` | GET / POST | Ambil / Buat data profil |
+| Profiles | `/profiles/{id}` | GET / PATCH / DELETE | Detail / Update / Hapus profil |
+| Profiles | `/profiles/{id}/pin` | PATCH | Update PIN (session aktif) |
+| Profiles | `/profiles/{id}/verify-birth-date` | POST | Verifikasi TTL untuk lupa PIN |
+| Profiles | `/profiles/{id}/status` | PATCH | Update status profil |
+| Profiles | `/profiles/check-phone` | GET | Cek duplikat nomor HP |
+| Profiles | `/profiles/check-email` | GET | Cek duplikat email |
+| Profiles | `/profiles/check-status` | GET | Cek status & dormant akun |
+| Functions | `/functions/v1/update-pin` | POST | Update PIN via Edge Function (Server-side) |
+
+---
+
+## 🗂️ Struktur Folder Repository
 
 ```
-App dibuka
-  └─ SplashScreen (animasi ~2.85 detik)
-       ├─ [session aktif]
-       │    ├─ phone ada && pin_hash ada  →  PinVerificationScreen
-       │    └─ salah satu kosong          →  GoogleProfileCompletionScreen
-       ├─ [no session] && hasSeenOnboarding  →  SignInScreen
-       └─ [no session] && belum onboarding   →  OnboardingScreen
+lib/
+├── l10n/
+│   └── app_language.dart                    # Kamus terjemahan lengkap Bahasa Indonesia & English
+├── screens/
+│   ├── auth/
+│   │   ├── account_created_screen.dart      # Screen sukses registrasi
+│   │   ├── forgot_pin_screen.dart           # Screen lupa PIN (Input HP, OTP, Verif TTL, Reset PIN)
+│   │   ├── google_create_pin_screen.dart    # Buat PIN akun Google
+│   │   ├── google_profile_completion_screen.dart # Lengkapi profil Google
+│   │   ├── otp_verification_screen.dart     # Input & Verifikasi OTP
+│   │   ├── phone_create_pin_screen.dart     # Buat PIN akun HP
+│   │   ├── phone_profile_completion_screen.dart # Lengkapi profil HP
+│   │   ├── pin_verification_screen.dart     # Input PIN login
+│   │   └── sign_in_screen.dart              # Entry screen Sign In & OAuth
+│   ├── errors/
+│   │   ├── no_internet_screen.dart
+│   │   ├── otp_rate_limit_screen.dart       # Cooldown 30s OTP
+│   │   ├── pin_rate_limit_screen.dart       # Lock 5m PIN
+│   │   └── verification_rate_limit_screen.dart
+│   ├── home/
+│   │   ├── change_pin_screen.dart           # Ganti PIN dari Settings
+│   │   ├── edit_profile_screen.dart         # Edit profil, foto, hide phone, hapus akun
+│   │   ├── history_screen.dart              # Riwayat aktivitas & medis
+│   │   ├── home_screen.dart                 # Dashboard utama pasien Kedota
+│   │   ├── main_screen.dart                 # Bottom Navigation Bar (5 tab)
+│   │   ├── notification_preferences_screen.dart # Preferensi notifikasi
+│   │   ├── notification_screen.dart         # Halaman daftar notifikasi
+│   │   ├── progress_screen.dart             # Monitor perkembangan kesehatan
+│   │   └── settings_screen.dart             # Settings, toggle bahasa, header profil
+│   ├── onboarding/
+│   │   └── onboarding_screen.dart
+│   └── splash/
+│       └── splash_screen.dart               # Auto-routing berdasarkan sesi
+├── services/
+│   ├── supabase_auth_service.dart           # Service logika autentikasi & profile DB
+│   ├── supabase_api_client.dart             # Retrofit API client
+│   └── supabase_api_client.g.dart           # Code-generated Retrofit client
+├── supabase/
+│   ├── config.toml                          # Project config Supabase
+│   └── functions/
+│       └── update-pin/
+│           └── index.ts                     # Edge function update PIN
+└── widgets/
+    ├── custom_bottom_sheet.dart             # Reusable bottom sheet
+    ├── custom_error_screen.dart
+    ├── google_logo_icon.dart
+    └── language_button.dart
 ```
 
 ---
 
-## 🖼️ Layout Screen
+## 🛠️ Tech Stack
 
-| Screen | Layout |
+| Komponen | Teknologi |
 |---|---|
-| Splash | Background teal penuh + logo animasi zoom-out → white |
-| Onboarding | Slide interaktif |
-| Sign In | Header teal (logo KEDOTA) + white card bawah |
-| OTP Verification | Header teal (logo KEDOTA) + white card bawah |
-| PIN Verification | Putih penuh + icon gembok + numpad |
-| Profil Completion (HP & Google) | Glassmorphism card dengan gradient background |
-| Create PIN (HP & Google) | Putih penuh + icon gembok + numpad |
-| Lupa PIN — Input No. Telp | Header teal (logo KEDOTA) + white card bawah |
-| Lupa PIN — Verif OTP | Header teal (logo KEDOTA) + white card bawah (via OtpVerificationScreen) |
-| Lupa PIN — Verif TTL | Header teal (logo KEDOTA) + white card bawah |
-| Lupa PIN — Buat PIN Baru | Putih penuh + icon gembok + numpad |
-| PIN Reset Success | Gradient background + animasi centang |
-| Account Created | Gradient background + animasi centang |
+| Framework | Flutter 3.x (Dart) |
+| Backend | Supabase (PostgreSQL + Auth + Storage + Edge Functions) |
+| OAuth | Google Sign-In (Native SDK + Supabase) & Apple Sign-In (OAuth) |
+| HTTP Client | Dio + Retrofit (generated) |
+| Local Storage | `shared_preferences` |
+| Security | SHA-256 PIN Hashing + Phone Masking |
+| Server Functions | Supabase Edge Functions (Deno Runtime) |
+| API Spec | OpenAPI 3.0 (Swagger) — `swagger_supabase_api_spec.txt` |
+| Multi-Language | `AppLanguageScope` (Indonesia & English) |
+
+---
+
+## 🚀 Cara Menjalankan
+
+```bash
+# 1. Clone repository
+git clone https://github.com/Raihanhidayah12/Kedota-Physiotherapy-App.git
+cd kedotaapp
+
+# 2. Install dependencies
+flutter pub get
+
+# 3. Jalankan aplikasi
+flutter run
+```
 
 ---
 
