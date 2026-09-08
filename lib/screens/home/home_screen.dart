@@ -4,6 +4,10 @@ import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
 import 'edit_profile_screen.dart';
 import 'notification_screen.dart';
+import 'reservation_flow_screen.dart';
+import 'main_screen.dart';
+import 'appointment_detail_screen.dart';
+import 'history_screen.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _c900 = Color(0xFF004D47);
@@ -11,8 +15,8 @@ const _c700 = Color(0xFF007F78);
 const _c500 = Color(0xFF00A79D);
 const _c300 = Color(0xFF5ECFC9);
 const _c100 = Color(0xFFD4F5F3);
-const _bg   = Color(0xFFF0F7F7);
-const _ink  = Color(0xFF0E2C2F);
+const _bg = Color(0xFFF0F7F7);
+const _ink = Color(0xFF0E2C2F);
 const _ink3 = Color(0xFF8AA8AC);
 
 /// Konten tab Beranda — dirender oleh [MainScreen] di dalam IndexedStack.
@@ -23,8 +27,7 @@ class HomeBody extends StatefulWidget {
   State<HomeBody> createState() => _HomeBodyState();
 }
 
-class _HomeBodyState extends State<HomeBody>
-    with TickerProviderStateMixin {
+class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   String _fullName = 'Pasien Kedota';
   String? _profileImageUrl;
   bool _isProfileIncomplete = false;
@@ -32,12 +35,12 @@ class _HomeBodyState extends State<HomeBody>
   late AnimationController _headerCtrl;
   late Animation<double> _headerExpand; // height expand from top-to-bottom
   // header sub-element animations
-  late Animation<double>  _greetFade;
-  late Animation<Offset>  _greetSlide;
-  late Animation<double>  _avatarFade;
-  late Animation<Offset>  _avatarSlide;
-  late Animation<double>  _searchFadeAnim;
-  late Animation<Offset>  _searchSlide;
+  late Animation<double> _greetFade;
+  late Animation<Offset> _greetSlide;
+  late Animation<double> _avatarFade;
+  late Animation<Offset> _avatarSlide;
+  late Animation<double> _searchFadeAnim;
+  late Animation<Offset> _searchSlide;
   // staggered section animations
   late AnimationController _staggerCtrl;
   late List<Animation<double>> _sectionFades;
@@ -49,6 +52,7 @@ class _HomeBodyState extends State<HomeBody>
   int _promoPage = 0;
   bool _isSearching = false;
   String _searchQuery = '';
+  Map<String, dynamic>? _upcomingAppointment;
 
   // number of staggered sections:
   // 0=promo, 1=appointment, 2=services, 3=progress, 4=tips
@@ -60,53 +64,57 @@ class _HomeBodyState extends State<HomeBody>
 
     // header
     _headerCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 900));
-    _headerExpand = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _headerCtrl, curve: Curves.easeOutCubic),
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
     );
+    _headerExpand = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _headerCtrl, curve: Curves.easeOutCubic));
 
-    // greeting: slides in from left, starts at 0ms, ends at 500ms
     _greetFade = CurvedAnimation(
       parent: _headerCtrl,
       curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
     );
-    _greetSlide = Tween<Offset>(
-      begin: const Offset(-0.25, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _headerCtrl,
-      curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
-    ));
+    _greetSlide = Tween<Offset>(begin: const Offset(-0.25, 0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _headerCtrl,
+            curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
+          ),
+        );
 
     // avatar + notif: slides in from right, starts at 100ms (0.11), ends at 600ms
     _avatarFade = CurvedAnimation(
       parent: _headerCtrl,
       curve: const Interval(0.11, 0.66, curve: Curves.easeOut),
     );
-    _avatarSlide = Tween<Offset>(
-      begin: const Offset(0.3, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _headerCtrl,
-      curve: const Interval(0.11, 0.66, curve: Curves.easeOutCubic),
-    ));
+    _avatarSlide = Tween<Offset>(begin: const Offset(0.3, 0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _headerCtrl,
+            curve: const Interval(0.11, 0.66, curve: Curves.easeOutCubic),
+          ),
+        );
 
     // search bar: slides in from bottom, starts at 250ms (0.28), ends at 900ms
     _searchFadeAnim = CurvedAnimation(
       parent: _headerCtrl,
       curve: const Interval(0.28, 1.0, curve: Curves.easeOut),
     );
-    _searchSlide = Tween<Offset>(
-      begin: const Offset(0, 0.5),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _headerCtrl,
-      curve: const Interval(0.28, 1.0, curve: Curves.easeOutCubic),
-    ));
+    _searchSlide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _headerCtrl,
+            curve: const Interval(0.28, 1.0, curve: Curves.easeOutCubic),
+          ),
+        );
 
     // stagger: total 900 ms, each section 300 ms window, offset 120 ms
     _staggerCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1100));
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
 
     _sectionFades = List.generate(_kSections, (i) {
       final start = (i * 0.18).clamp(0.0, 1.0);
@@ -123,10 +131,12 @@ class _HomeBodyState extends State<HomeBody>
       return Tween<Offset>(
         begin: const Offset(0, 0.12),
         end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: _staggerCtrl,
-        curve: Interval(start, end, curve: Curves.easeOutCubic),
-      ));
+      ).animate(
+        CurvedAnimation(
+          parent: _staggerCtrl,
+          curve: Interval(start, end, curve: Curves.easeOutCubic),
+        ),
+      );
     });
 
     _promoCtrl = PageController();
@@ -146,6 +156,7 @@ class _HomeBodyState extends State<HomeBody>
       if (mounted) _staggerCtrl.forward();
     });
     _loadProfile();
+    _loadUpcomingAppointment();
   }
 
   @override
@@ -177,16 +188,17 @@ class _HomeBodyState extends State<HomeBody>
       final profile = await service.checkUserProfileExists();
       final metadata = user?.userMetadata ?? <String, dynamic>{};
       final profileName = profile?['full_name']?.toString().trim() ?? '';
-      final metadataName =
-          (metadata['full_name'] ?? metadata['name'])?.toString().trim();
-      final persistedImageUrl =
-          profile?['profile_photo_url']?.toString().trim();
-      final stableImageUrl =
-          persistedImageUrl?.isNotEmpty == true &&
-              !_isRateLimitedImageHost(persistedImageUrl!)
+      final metadataName = (metadata['full_name'] ?? metadata['name'])
+          ?.toString()
+          .trim();
+      final persistedImageUrl = profile?['profile_photo_url']
+          ?.toString()
+          .trim();
+      final stableImageUrl = persistedImageUrl?.isNotEmpty == true
           ? persistedImageUrl
           : null;
-      final imageUrl = stableImageUrl ??
+      final imageUrl =
+          stableImageUrl ??
           _firstNonEmpty([
             profile?['avatar_url'],
             profile?['photo_url'],
@@ -202,7 +214,7 @@ class _HomeBodyState extends State<HomeBody>
             ? profileName
             : (metadataName?.isNotEmpty == true ? metadataName! : _fullName);
         _profileImageUrl = imageUrl;
-        final nik     = profile?['nik']?.toString().trim() ?? '';
+        final nik = profile?['nik']?.toString().trim() ?? '';
         final address = profile?['address']?.toString().trim() ?? '';
         _isProfileIncomplete = nik.isEmpty || address.isEmpty;
       });
@@ -211,18 +223,53 @@ class _HomeBodyState extends State<HomeBody>
     }
   }
 
+  Future<void> _loadUpcomingAppointment() async {
+    try {
+      final service = SupabaseAuthService();
+      final user = service.client.auth.currentUser;
+      if (user == null) return;
+      final rows = await service.client
+          .from('appointments')
+          .select()
+          .eq('booker_id', user.id)
+          .order('appointment_date', ascending: true)
+          .order('appointment_time', ascending: true);
+      final now = DateTime.now();
+      Map<String, dynamic>? upcoming;
+      for (final raw in rows as List) {
+        final row = raw as Map<String, dynamic>;
+        final status = row['appointment_status']?.toString() ?? 'upcoming';
+        if (status == 'completed' || status == 'expired' || status == 'cancelled') {
+          continue;
+        }
+        final date = DateTime.tryParse(row['appointment_date']?.toString() ?? '');
+        if (date == null) continue;
+        final timeParts = (row['appointment_time']?.toString() ?? '00:00')
+            .split(':');
+        final appointment = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          int.tryParse(timeParts.first) ?? 0,
+          int.tryParse(timeParts.length > 1 ? timeParts[1] : '0') ?? 0,
+        );
+        if (appointment.isAfter(now)) {
+          upcoming = row;
+          break;
+        }
+      }
+      if (mounted) setState(() => _upcomingAppointment = upcoming);
+    } catch (error) {
+      debugPrint('Home upcoming appointment load failed: $error');
+    }
+  }
+
   String? _firstNonEmpty(List<dynamic> values) {
     for (final v in values) {
       final t = v?.toString().trim() ?? '';
-      if (t.isNotEmpty && !_isRateLimitedImageHost(t)) return t;
+      if (t.isNotEmpty) return t;
     }
     return null;
-  }
-
-  bool _isRateLimitedImageHost(String url) {
-    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
-    return host == 'googleusercontent.com' ||
-        host.endsWith('.googleusercontent.com');
   }
 
   void _handleProfileImageError() {
@@ -347,15 +394,38 @@ class _HomeBodyState extends State<HomeBody>
                       ],
                       _fadeSlide(0, _buildPromoBanner()),
                       const SizedBox(height: 28),
-                      _fadeSlide(1, _buildSectionRow(t(context, 'upcomingAppointment'), t(context, 'seeAll'))),
+                      _fadeSlide(
+                        1,
+                        _buildSectionRow(
+                          t(context, 'upcomingAppointment'),
+                          t(context, 'seeAll'),
+                          onAction: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const MainScreen(
+                                initialIndex: 2,
+                                initialHistoryFilter: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       _fadeSlide(1, _buildAppointmentCard()),
                       const SizedBox(height: 28),
-                      _fadeSlide(2, _buildSectionRow(t(context, 'ourServices'), null)),
+                      _fadeSlide(
+                        2,
+                        _buildSectionRow(t(context, 'ourServices'), null),
+                      ),
                       const SizedBox(height: 14),
                       _fadeSlide(2, _buildServicesGrid()),
                       const SizedBox(height: 28),
-                      _fadeSlide(3, _buildSectionRow(t(context, 'rehabProgress'), t(context, 'detail'))),
+                      _fadeSlide(
+                        3,
+                        _buildSectionRow(
+                          t(context, 'rehabProgress'),
+                          t(context, 'detail'),
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       _fadeSlide(3, _buildProgressCard()),
                       const SizedBox(height: 28),
@@ -366,8 +436,7 @@ class _HomeBodyState extends State<HomeBody>
               ],
             ),
             // search results overlay
-            if (_isSearching)
-              _buildSearchOverlay(),
+            if (_isSearching) _buildSearchOverlay(),
           ],
         ),
       ),
@@ -376,270 +445,303 @@ class _HomeBodyState extends State<HomeBody>
 
   // ── stagger helper ────────────────────────────────────────────────────────
   Widget _fadeSlide(int index, Widget child) => FadeTransition(
-        opacity: _sectionFades[index],
-        child: SlideTransition(
-          position: _sectionSlides[index],
-          child: child,
-        ),
-      );
+    opacity: _sectionFades[index],
+    child: SlideTransition(position: _sectionSlides[index], child: child),
+  );
 
   // ── sliver header ─────────────────────────────────────────────────────────
   Widget _buildSliverHeader() => SliverToBoxAdapter(
-        child: ClipRect(
-          child: AnimatedBuilder(
-            animation: _headerExpand,
-            builder: (context, child) {
-              return Align(
-                alignment: Alignment.topCenter,
-                heightFactor: _headerExpand.value,
-                child: child,
-              );
-            },
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [_c900, _c700, _c500],
-                ),
+    child: ClipRect(
+      child: AnimatedBuilder(
+        animation: _headerExpand,
+        builder: (context, child) {
+          return Align(
+            alignment: Alignment.topCenter,
+            heightFactor: _headerExpand.value,
+            child: child,
+          );
+        },
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [_c900, _c700, _c500],
+            ),
+          ),
+          child: Stack(
+            children: [
+              // decorative circles
+              Positioned(
+                right: -60,
+                top: -60,
+                child: _circle(220, Colors.white, 0.05),
               ),
-              child: Stack(
-                children: [
-                  // decorative circles
-                  Positioned(
-                    right: -60,
-                    top: -60,
-                    child: _circle(220, Colors.white, 0.05),
-                  ),
-                  Positioned(
-                    right: 40,
-                    top: 20,
-                    child: _circle(100, Colors.white, 0.07),
-                  ),
-                  Positioned(
-                    left: -40,
-                    bottom: -30,
-                    child: _circle(130, _c300, 0.15),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      MediaQuery.of(context).padding.top + 16,
-                      20,
-                      28,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              Positioned(
+                right: 40,
+                top: 20,
+                child: _circle(100, Colors.white, 0.07),
+              ),
+              Positioned(
+                left: -40,
+                bottom: -30,
+                child: _circle(130, _c300, 0.15),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + 16,
+                  20,
+                  28,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            // greeting — slides from left
-                            Expanded(
-                              child: FadeTransition(
-                                opacity: _greetFade,
-                                child: SlideTransition(
-                                  position: _greetSlide,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${_greeting(context)},',
-                                        style: const TextStyle(
-                                          color: _c100,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          letterSpacing: 0.2,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _firstName,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.w800,
-                                          height: 1.1,
-                                        ),
-                                      ),
-                                    ],
+                        // greeting — slides from left
+                        Expanded(
+                          child: FadeTransition(
+                            opacity: _greetFade,
+                            child: SlideTransition(
+                              position: _greetSlide,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${_greeting(context)},',
+                                    style: const TextStyle(
+                                      color: _c100,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.2,
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _firstName,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1.1,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            // avatar + notif — slides from right
-                            FadeTransition(
-                              opacity: _avatarFade,
-                              child: SlideTransition(
-                                position: _avatarSlide,
-                                child: Row(
-                                  children: [
-                                    _buildNotifButton(),
-                                    const SizedBox(width: 10),
-                                    _buildAvatar(),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                        const SizedBox(height: 22),
-                        // search bar — slides from bottom
+                        // avatar + notif — slides from right
                         FadeTransition(
-                          opacity: _searchFadeAnim,
+                          opacity: _avatarFade,
                           child: SlideTransition(
-                            position: _searchSlide,
-                            child: _buildSearchBar(),
+                            position: _avatarSlide,
+                            child: Row(
+                              children: [
+                                _buildNotifButton(),
+                                const SizedBox(width: 10),
+                                _buildAvatar(),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-  Widget _circle(double size, Color color, double opacity) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.withValues(alpha: opacity),
-        ),
-      );
-
-  Widget _buildNotifButton() => GestureDetector(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const NotificationScreen()),
-          );
-        },
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.25),
-            ),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              const Icon(Icons.notifications_outlined,
-                  color: Colors.white, size: 20),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFF6B6B),
-                    shape: BoxShape.circle,
-                  ),
+                    const SizedBox(height: 22),
+                    // search bar — slides from bottom
+                    FadeTransition(
+                      opacity: _searchFadeAnim,
+                      child: SlideTransition(
+                        position: _searchSlide,
+                        child: _buildSearchBar(),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
-      );
+      ),
+    ),
+  );
+
+  Widget _circle(double size, Color color, double opacity) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: color.withValues(alpha: opacity),
+    ),
+  );
+
+  Widget _buildNotifButton() => GestureDetector(
+    onTap: () {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const NotificationScreen()));
+    },
+    child: Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Icon(
+            Icons.notifications_outlined,
+            color: Colors.white,
+            size: 20,
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFF6B6B),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _buildAvatar() => Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: _c900.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: Colors.white, width: 2),
+      boxShadow: [
+        BoxShadow(
+          color: _c900.withValues(alpha: 0.3),
+          blurRadius: 8,
+          offset: const Offset(0, 3),
         ),
-        child: CircleAvatar(
-          radius: 20,
-          backgroundColor: _c300,
-          backgroundImage: _profileImageUrl == null
-              ? null
-              : NetworkImage(_profileImageUrl!),
-          onBackgroundImageError: _profileImageUrl == null
-              ? null
-              : (_, _) => _handleProfileImageError(),
-          child: _profileImageUrl == null
-              ? const Icon(Icons.person, color: Colors.white, size: 22)
-              : null,
-        ),
-      );
+      ],
+    ),
+    child: CircleAvatar(
+      radius: 20,
+      backgroundColor: _c300,
+      backgroundImage: _profileImageUrl == null
+          ? null
+          : NetworkImage(_profileImageUrl!),
+      onBackgroundImageError: _profileImageUrl == null
+          ? null
+          : (_, _) => _handleProfileImageError(),
+      child: _profileImageUrl == null
+          ? const Icon(Icons.person, color: Colors.white, size: 22)
+          : null,
+    ),
+  );
 
   Widget _buildSearchBar() => TextField(
-        controller: _searchCtrl,
-        focusNode: _searchFocus,
-        style: const TextStyle(color: Colors.white, fontSize: 13),
-        cursorColor: Colors.white,
-        decoration: InputDecoration(
-          hintText: t(context, 'searchHint'),
-          hintStyle: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
-            fontSize: 13,
-          ),
-          prefixIcon: Icon(Icons.search_rounded,
-              color: Colors.white.withValues(alpha: 0.7), size: 20),
-          suffixIcon: _searchCtrl.text.isNotEmpty
-              ? GestureDetector(
-                  onTap: () {
-                    _searchCtrl.clear();
-                    _searchFocus.unfocus();
-                  },
-                  child: Icon(Icons.close_rounded,
-                      color: Colors.white.withValues(alpha: 0.7), size: 18),
-                )
-              : null,
-          filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.15),
-          contentPadding:
-              const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide:
-                BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide:
-                BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide:
-                BorderSide(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
-          ),
+    controller: _searchCtrl,
+    focusNode: _searchFocus,
+    style: const TextStyle(color: Colors.white, fontSize: 13),
+    cursorColor: Colors.white,
+    decoration: InputDecoration(
+      hintText: t(context, 'searchHint'),
+      hintStyle: TextStyle(
+        color: Colors.white.withValues(alpha: 0.6),
+        fontSize: 13,
+      ),
+      prefixIcon: Icon(
+        Icons.search_rounded,
+        color: Colors.white.withValues(alpha: 0.7),
+        size: 20,
+      ),
+      suffixIcon: _searchCtrl.text.isNotEmpty
+          ? GestureDetector(
+              onTap: () {
+                _searchCtrl.clear();
+                _searchFocus.unfocus();
+              },
+              child: Icon(
+                Icons.close_rounded,
+                color: Colors.white.withValues(alpha: 0.7),
+                size: 18,
+              ),
+            )
+          : null,
+      filled: true,
+      fillColor: Colors.white.withValues(alpha: 0.15),
+      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: Colors.white.withValues(alpha: 0.6),
+          width: 1.5,
         ),
-      );
+      ),
+    ),
+  );
 
   // ── search data & overlay ─────────────────────────────────────────────────
 
-  List<({IconData icon, String label, String desc, Color color})> get _searchableServices => [
-    (icon: Icons.home_rounded,           label: t(context, 'homeCare'),  desc: t(context, 'homeCareDesc'),  color: const Color(0xFF007F78)),
-    (icon: Icons.local_hospital_rounded, label: t(context, 'klinik'),    desc: t(context, 'klinikDesc'),    color: const Color(0xFF5B5FC8)),
-    (icon: Icons.directions_run_rounded, label: t(context, 'rehab'),     desc: t(context, 'rehabDesc'),     color: const Color(0xFFE87040)),
-    (icon: Icons.favorite_rounded,       label: t(context, 'wellness'),  desc: t(context, 'wellnessDesc'),  color: const Color(0xFFD04080)),
+  List<({IconData icon, String label, String desc, Color color})>
+  get _searchableServices => [
+    (
+      icon: Icons.home_rounded,
+      label: t(context, 'homeCare'),
+      desc: t(context, 'homeCareDesc'),
+      color: const Color(0xFF007F78),
+    ),
+    (
+      icon: Icons.local_hospital_rounded,
+      label: t(context, 'klinik'),
+      desc: t(context, 'klinikDesc'),
+      color: const Color(0xFF5B5FC8),
+    ),
+    (
+      icon: Icons.directions_run_rounded,
+      label: t(context, 'rehab'),
+      desc: t(context, 'rehabDesc'),
+      color: const Color(0xFFE87040),
+    ),
+    (
+      icon: Icons.favorite_rounded,
+      label: t(context, 'wellness'),
+      desc: t(context, 'wellnessDesc'),
+      color: const Color(0xFFD04080),
+    ),
   ];
 
   List<({String name, String spec})> get _searchableTherapists => [
-    (name: 'Marvin McKinney', spec: '${t(context, 'homeCare')} · Fisioterapi Umum'),
-    (name: 'Sinta Dewi',      spec: '${t(context, 'klinik')} · Rehabilitasi Pasca Operasi'),
-    (name: 'Budi Santoso',    spec: '${t(context, 'homeCare')} · Fisioterapi Olahraga'),
-    (name: 'Rina Kusuma',     spec: '${t(context, 'wellness')} · Terapi Relaksasi'),
+    (
+      name: 'Marvin McKinney',
+      spec: '${t(context, 'homeCare')} · Fisioterapi Umum',
+    ),
+    (
+      name: 'Sinta Dewi',
+      spec: '${t(context, 'klinik')} · Rehabilitasi Pasca Operasi',
+    ),
+    (
+      name: 'Budi Santoso',
+      spec: '${t(context, 'homeCare')} · Fisioterapi Olahraga',
+    ),
+    (name: 'Rina Kusuma', spec: '${t(context, 'wellness')} · Terapi Relaksasi'),
   ];
 
   List<({String title, String body})> get _searchableTips => [
     (title: t(context, 'tipsStretch'), body: t(context, 'tipsStretchBody')),
-    (title: t(context, 'tipsWater'),   body: t(context, 'tipsWaterBody')),
-    (title: t(context, 'tipsRest'),    body: t(context, 'tipsRestBody')),
+    (title: t(context, 'tipsWater'), body: t(context, 'tipsWaterBody')),
+    (title: t(context, 'tipsRest'), body: t(context, 'tipsRestBody')),
   ];
 
   List<_SearchResult> get _searchResults {
@@ -648,32 +750,48 @@ class _HomeBodyState extends State<HomeBody>
     final results = <_SearchResult>[];
 
     for (final s in _searchableServices) {
-      if (s.label.toLowerCase().contains(q) || s.desc.toLowerCase().contains(q)) {
-        results.add(_SearchResult(
-          icon: s.icon, iconColor: s.color,
-          iconBg: s.color.withValues(alpha: 0.1),
-          title: s.label, subtitle: s.desc,
-          type: t(context, 'serviceCat'),
-        ));
+      if (s.label.toLowerCase().contains(q) ||
+          s.desc.toLowerCase().contains(q)) {
+        results.add(
+          _SearchResult(
+            icon: s.icon,
+            iconColor: s.color,
+            iconBg: s.color.withValues(alpha: 0.1),
+            title: s.label,
+            subtitle: s.desc,
+            type: t(context, 'serviceCat'),
+          ),
+        );
       }
     }
     for (final th in _searchableTherapists) {
-      if (th.name.toLowerCase().contains(q) || th.spec.toLowerCase().contains(q)) {
-        results.add(_SearchResult(
-          icon: Icons.person_rounded, iconColor: _c700, iconBg: _c100,
-          title: th.name, subtitle: th.spec,
-          type: t(context, 'therapistCat'),
-        ));
+      if (th.name.toLowerCase().contains(q) ||
+          th.spec.toLowerCase().contains(q)) {
+        results.add(
+          _SearchResult(
+            icon: Icons.person_rounded,
+            iconColor: _c700,
+            iconBg: _c100,
+            title: th.name,
+            subtitle: th.spec,
+            type: t(context, 'therapistCat'),
+          ),
+        );
       }
     }
     for (final tip in _searchableTips) {
-      if (tip.title.toLowerCase().contains(q) || tip.body.toLowerCase().contains(q)) {
-        results.add(_SearchResult(
-          icon: Icons.lightbulb_rounded,
-          iconColor: const Color(0xFFD4920A), iconBg: const Color(0xFFFFEEB0),
-          title: tip.title, subtitle: tip.body,
-          type: t(context, 'tipsCat'),
-        ));
+      if (tip.title.toLowerCase().contains(q) ||
+          tip.body.toLowerCase().contains(q)) {
+        results.add(
+          _SearchResult(
+            icon: Icons.lightbulb_rounded,
+            iconColor: const Color(0xFFD4920A),
+            iconBg: const Color(0xFFFFEEB0),
+            title: tip.title,
+            subtitle: tip.body,
+            type: t(context, 'tipsCat'),
+          ),
+        );
       }
     }
     return results;
@@ -709,13 +827,14 @@ class _HomeBodyState extends State<HomeBody>
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(24)),
+                    bottom: Radius.circular(24),
+                  ),
                 ),
                 child: _searchQuery.isEmpty
                     ? _buildSearchSuggestions()
                     : results.isEmpty
-                        ? _buildEmptySearch()
-                        : _buildResultsList(results),
+                    ? _buildEmptySearch()
+                    : _buildResultsList(results),
               ),
             ),
           ),
@@ -725,67 +844,86 @@ class _HomeBodyState extends State<HomeBody>
   }
 
   Widget _buildSearchSuggestions() => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(t(context, 'popularSearch'),
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700, color: _ink)),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                t(context, 'homeCare'),
-                t(context, 'rehab'),
-                t(context, 'wellness'),
-                t(context, 'klinik'),
-                'Marvin McKinney',
-              ]
-                  .map((s) => GestureDetector(
-                        onTap: () {
-                          _searchCtrl.text = s;
-                          _searchCtrl.selection = TextSelection.fromPosition(
-                              TextPosition(offset: s.length));
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: _c100,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(s,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: _c700)),
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ],
-        ),
-      );
-
-  Widget _buildEmptySearch() => Padding(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.search_off_rounded,
-                  size: 42, color: _ink3.withValues(alpha: 0.5)),
-              const SizedBox(height: 12),
-              Text('${t(context, 'noResultFor')} "$_searchQuery"',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: _ink3)),
-            ],
+    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          t(context, 'popularSearch'),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: _ink,
           ),
         ),
-      );
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children:
+              [
+                    t(context, 'homeCare'),
+                    t(context, 'rehab'),
+                    t(context, 'wellness'),
+                    t(context, 'klinik'),
+                    'Marvin McKinney',
+                  ]
+                  .map(
+                    (s) => GestureDetector(
+                      onTap: () {
+                        _searchCtrl.text = s;
+                        _searchCtrl.selection = TextSelection.fromPosition(
+                          TextPosition(offset: s.length),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _c100,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          s,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _c700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildEmptySearch() => Padding(
+    padding: const EdgeInsets.all(32),
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.search_off_rounded,
+            size: 42,
+            color: _ink3.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '${t(context, 'noResultFor')} "$_searchQuery"',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: _ink3),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _buildResultsList(List<_SearchResult> results) {
     // group by type
@@ -801,17 +939,22 @@ class _HomeBodyState extends State<HomeBody>
         for (final entry in grouped.entries) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-            child: Text(entry.key,
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: _ink3,
-                    letterSpacing: 0.5)),
+            child: Text(
+              entry.key,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: _ink3,
+                letterSpacing: 0.5,
+              ),
+            ),
           ),
           for (final r in entry.value)
             ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 2,
+              ),
               leading: Container(
                 width: 40,
                 height: 40,
@@ -821,17 +964,25 @@ class _HomeBodyState extends State<HomeBody>
                 ),
                 child: Icon(r.icon, color: r.iconColor, size: 20),
               ),
-              title: Text(r.title,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _ink)),
-              subtitle: Text(r.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: _ink3)),
-              trailing: const Icon(Icons.arrow_forward_ios_rounded,
-                  size: 13, color: _ink3),
+              title: Text(
+                r.title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: _ink,
+                ),
+              ),
+              subtitle: Text(
+                r.subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: _ink3),
+              ),
+              trailing: const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 13,
+                color: _ink3,
+              ),
               onTap: () => _searchFocus.unfocus(),
             ),
         ],
@@ -842,384 +993,138 @@ class _HomeBodyState extends State<HomeBody>
   // ── promo banner ─────────────────────────────────────────────────────────
   static const _promos = [
     (
-      tag: 'PROMO SPESIAL',
-      title: 'Diskon 30%\nHome Care',
-      subtitle: 'Berlaku sampai 31 Agustus 2026',
-      colors: [Color(0xFF007F78), Color(0xFF00C4B8)],
-      accentIcon: Icons.discount_rounded,
+      titleKey: 'promoNewPatientTitle',
+      subtitleKey: 'promoNewPatientSubtitle',
+      colors: [Color(0xFFE5F8F6), Color(0xFFD8F3F1)],
+      accentIcon: Icons.local_offer_outlined,
     ),
     (
-      tag: 'PAKET BARU',
-      title: 'Paket Rehab\nKomprehensif',
-      subtitle: '10 sesi dengan harga spesial',
-      colors: [Color(0xFF3D56B2), Color(0xFF6A82FB)],
-      accentIcon: Icons.auto_awesome_rounded,
-    ),
-    (
-      tag: 'REFERRAL',
-      title: 'Ajak Teman,\nDapat Bonus',
-      subtitle: 'Dapatkan 1 sesi gratis per referral',
-      colors: [Color(0xFFBF360C), Color(0xFFE87040)],
-      accentIcon: Icons.people_rounded,
+      titleKey: 'promoWhatsAppTitle',
+      subtitleKey: 'promoWhatsAppSubtitle',
+      colors: [Color(0xFFE5F8F6), Color(0xFFD8F3F1)],
+      accentIcon: Icons.chat_bubble_outline_rounded,
     ),
   ];
 
   Widget _buildPromoBanner() {
     final screenW = MediaQuery.of(context).size.width;
-    final bannerH = (screenW * 0.45).clamp(155.0, 190.0);
+    final bannerH = (screenW * 0.22).clamp(78.0, 92.0);
     return Column(
-        children: [
-          SizedBox(
-            height: bannerH,
-            child: PageView.builder(
-              controller: _promoCtrl,
-              itemCount: _promos.length,
-              onPageChanged: (i) => setState(() => _promoPage = i),
-              itemBuilder: (_, i) {
-                final p = _promos[i];
-                return _buildPromoItem(
-                  tag: p.tag,
-                  title: p.title,
-                  subtitle: p.subtitle,
-                  colors: p.colors,
-                  accentIcon: p.accentIcon,
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(_promos.length, (i) {
-              final active = i == _promoPage;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: active ? 20 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: active ? _c500 : _c100,
-                  borderRadius: BorderRadius.circular(3),
-                ),
+      children: [
+        SizedBox(
+          height: bannerH,
+          child: PageView.builder(
+            controller: _promoCtrl,
+            itemCount: _promos.length,
+            onPageChanged: (i) => setState(() => _promoPage = i),
+            itemBuilder: (_, i) {
+              final p = _promos[i];
+              return _buildPromoItem(
+                onTap: i == 0
+                    ? () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ReservationFlowScreen(
+                            clinicNewPatientPromo: true,
+                          ),
+                        ),
+                      )
+                    : null,
+                title: t(context, p.titleKey),
+                subtitle: t(context, p.subtitleKey),
+                colors: p.colors,
+                accentIcon: p.accentIcon,
               );
-            }),
+            },
           ),
-        ],
-      );
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(_promos.length, (i) {
+            final active = i == _promoPage;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: active ? 20 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: active ? _c500 : _c100,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
   }
 
   Widget _buildPromoItem({
-    required String tag,
+    VoidCallback? onTap,
     required String title,
     required String subtitle,
     required List<Color> colors,
     required IconData accentIcon,
-  }) =>
-      Container(
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: colors,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: colors.first.withValues(alpha: 0.35),
-              blurRadius: 18,
-              offset: const Offset(0, 7),
-            ),
-          ],
+  }) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(20),
+    child: Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: colors,
         ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -30,
-              top: -30,
-              child: Container(
-                width: 130,
-                height: 130,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 28,
-              bottom: -20,
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 16,
-              top: 0,
-              bottom: 0,
-              child: Align(
-                alignment: Alignment.center,
-                child: Icon(
-                  accentIcon,
-                  size: 80,
-                  color: Colors.white.withValues(alpha: 0.12),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-              child: Center(
-                child: SingleChildScrollView(
-                  physics: const NeverScrollableScrollPhysics(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.22),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(accentIcon,
-                            size: 10,
-                            color: Colors.white.withValues(alpha: 0.9)),
-                        const SizedBox(width: 5),
-                        Text(
-                          tag,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          subtitle,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Klaim',
-                          style: TextStyle(
-                            color: colors.first,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              ),
-             ),
-            ),
-          ],
-        ),
-      );
-
-  // ── section row ───────────────────────────────────────────────────────────
-  Widget _buildSectionRow(String title, String? action) => Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: _ink,
-              ),
-            ),
+        boxShadow: [
+          BoxShadow(
+            color: colors.first.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 7),
           ),
-          if (action != null)
-            Text(
-              action,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: _c500,
-              ),
-            ),
         ],
-      );
-
-  // ── appointment card ──────────────────────────────────────────────────────
-  Widget _buildAppointmentCard() => Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [_c700, _c500],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: _c700.withValues(alpha: 0.35),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Stack(
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
           children: [
-            Positioned(
-              right: -20,
-              bottom: -20,
-              child: _circle(110, Colors.white, 0.06),
+            Container(
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _c100,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(accentIcon, color: _c500, size: 25),
             ),
-            Padding(
-              padding: const EdgeInsets.all(20),
+            const SizedBox(width: 14),
+            Expanded(
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.medical_services_rounded,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Terapis Marvin McKinney',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                t(context, 'homeCare'),
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          t(context, 'statusUpcoming'),
-                          style: const TextStyle(
-                            color: _c700,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _c500,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 10,
-                          child: _apptInfoItem(
-                            Icons.calendar_month_outlined,
-                            'Selasa',
-                            '18 Agu 2026',
-                          ),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 36,
-                          color: Colors.white.withValues(alpha: 0.25),
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        Expanded(
-                          flex: 9,
-                          child: _apptInfoItem(
-                            Icons.access_time_rounded,
-                            '11:00',
-                            '12:00 WIB',
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.arrow_forward_rounded,
-                            color: _c700,
-                            size: 18,
-                          ),
-                        ),
-                      ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _ink3,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -1227,48 +1132,321 @@ class _HomeBodyState extends State<HomeBody>
             ),
           ],
         ),
-      );
+      ),
+    ),
+  );
 
-  Widget _apptInfoItem(IconData icon, String top, String bottom) => Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.8)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  top,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  bottom,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 10,
-                  ),
-                ),
-              ],
+  // ── section row ───────────────────────────────────────────────────────────
+  Widget _buildSectionRow(
+    String title,
+    String? action, {
+    VoidCallback? onAction,
+  }) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: _ink,
+          ),
+        ),
+      ),
+      if (action != null)
+        GestureDetector(
+          onTap: onAction,
+          child: Text(
+            action,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _c500,
             ),
           ),
-        ],
+        ),
+    ],
+  );
+
+  // ── appointment card ──────────────────────────────────────────────────────
+  Widget _buildAppointmentCard() {
+    final appointment = _upcomingAppointment;
+    if (appointment == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE1E9E8)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.event_available_rounded, color: _ink3, size: 28),
+            const SizedBox(width: 12),
+            Expanded(child: Text(t(context, 'noAppointments'), style: const TextStyle(color: _ink3))),
+          ],
+        ),
       );
+    }
+    final serviceType = appointment['service_type']?.toString() ?? 'Home Care';
+    final isClinic = serviceType == 'Klinik';
+    final date = DateTime.tryParse(appointment['appointment_date']?.toString() ?? '');
+    final dateLabel = date == null ? '-' : '${date.day.toString().padLeft(2, '0')} ${_monthName(date.month)} ${date.year}';
+    final rawTime = appointment['appointment_time']?.toString() ?? '-';
+    final timeLabel = rawTime.length >= 5 ? '${rawTime.substring(0, 5)} WIB' : rawTime;
+    return GestureDetector(
+      onTap: () => _openUpcomingDetail(appointment),
+      child: Container(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(20),
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [_c700, _c500],
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: _c700.withValues(alpha: 0.35),
+          blurRadius: 20,
+          offset: const Offset(0, 8),
+        ),
+      ],
+    ),
+    child: Stack(
+      children: [
+        Positioned(
+          right: -20,
+          bottom: -20,
+          child: _circle(110, Colors.white, 0.06),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.medical_services_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          appointment['therapist_name']?.toString().isNotEmpty == true
+                              ? appointment['therapist_name'].toString()
+                              : t(context, 'therapistDefault'),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            isClinic ? t(context, 'klinik') : t(context, 'homeCare'),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      t(context, 'statusUpcoming'),
+                      style: const TextStyle(
+                        color: _c700,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 10,
+                      child: _apptInfoItem(
+                        Icons.calendar_month_outlined,
+                        date == null ? '-' : _weekdayName(date.weekday),
+                        dateLabel,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 36,
+                      color: Colors.white.withValues(alpha: 0.25),
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    Expanded(
+                      flex: 9,
+                      child: _apptInfoItem(
+                        Icons.access_time_rounded,
+                        timeLabel,
+                        isClinic ? t(context, 'klinik') : t(context, 'homeCare'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _openUpcomingDetail(appointment),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: _c700,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+      ),
+    );
+  }
+
+  void _openUpcomingDetail(Map<String, dynamic> appointment) {
+    final rawStatus = appointment['appointment_status']?.toString();
+    final item = AppointmentItem(
+      id: appointment['id']?.toString() ?? '',
+      therapistName: appointment['therapist_name']?.toString().isNotEmpty == true
+          ? appointment['therapist_name'].toString()
+          : t(context, 'therapistDefault'),
+      serviceType: appointment['service_type']?.toString() ?? 'Home Care',
+      date: appointment['appointment_date']?.toString() ?? '-',
+      time: appointment['appointment_time']?.toString() ?? '- WIB',
+      patientName: appointment['patient_full_name']?.toString() ?? '',
+      medicalCode: appointment['patient_medical_code']?.toString() ?? '',
+      address: appointment['address']?.toString() ?? '',
+      complaint: appointment['patient_complaint']?.toString() ?? '',
+      clinicName: appointment['clinic_name']?.toString() ?? '',
+      sessionCount: int.tryParse(appointment['session_count']?.toString() ?? '') ?? 1,
+      status: rawStatus == 'completed'
+          ? AppointmentStatus.selesai
+          : rawStatus == 'expired'
+          ? AppointmentStatus.batasWaktu
+          : AppointmentStatus.mendatang,
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AppointmentDetailScreen(item: item)),
+    );
+  }
+
+  String _monthName(int month) => const [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+  ][month - 1];
+
+  String _weekdayName(int weekday) => const [
+    'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min',
+  ][weekday - 1];
+
+  Widget _apptInfoItem(IconData icon, String top, String bottom) => Row(
+    children: [
+      Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.8)),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              top,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              bottom,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
 
   // ── services grid ─────────────────────────────────────────────────────────
   Widget _buildServicesGrid() {
     final services = [
-      (icon: Icons.home_rounded,           label: t(context, 'homeCare'),  color: const Color(0xFF007F78)),
-      (icon: Icons.local_hospital_rounded, label: t(context, 'klinik'),    color: const Color(0xFF5B5FC8)),
-      (icon: Icons.directions_run_rounded, label: t(context, 'rehab'),     color: const Color(0xFFE87040)),
-      (icon: Icons.favorite_rounded,       label: t(context, 'wellness'),  color: const Color(0xFFD04080)),
+      (
+        icon: Icons.home_rounded,
+        label: t(context, 'homeCare'),
+        color: const Color(0xFF007F78),
+      ),
+      (
+        icon: Icons.local_hospital_rounded,
+        label: t(context, 'klinik'),
+        color: const Color(0xFF5B5FC8),
+      ),
+      (
+        icon: Icons.directions_run_rounded,
+        label: t(context, 'rehab'),
+        color: const Color(0xFFE87040),
+      ),
+      (
+        icon: Icons.favorite_rounded,
+        label: t(context, 'wellness'),
+        color: const Color(0xFFD04080),
+      ),
     ];
     return Row(
       children: services.map((s) {
@@ -1324,127 +1502,126 @@ class _HomeBodyState extends State<HomeBody>
 
   // ── progress card ─────────────────────────────────────────────────────────
   Widget _buildProgressCard() => Container(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: _ink.withValues(alpha: 0.06),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
+    padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      boxShadow: [
+        BoxShadow(
+          color: _ink.withValues(alpha: 0.06),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                const Text(
-                  'Pain Score',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: _ink,
-                  ),
-                ),
-                const Spacer(),
-                _weekChip(t(context, 'weeklyProgress'), true),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              t(context, 'tipsStretchBody'),
-              style: const TextStyle(fontSize: 11, color: _ink3),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 130,
-              child: CustomPaint(
-                painter: _ModernProgressPainter(),
-                child: const SizedBox.expand(),
+            const Text(
+              'Pain Score',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: _ink,
               ),
             ),
+            const Spacer(),
+            _weekChip(t(context, 'weeklyProgress'), true),
           ],
         ),
-      );
-
-  Widget _weekChip(String label, bool active) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: active ? _c100 : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+        const SizedBox(height: 4),
+        Text(
+          t(context, 'tipsStretchBody'),
+          style: const TextStyle(fontSize: 11, color: _ink3),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: active ? _c700 : _ink3,
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 130,
+          child: CustomPaint(
+            painter: _ModernProgressPainter(),
+            child: const SizedBox.expand(),
           ),
         ),
-      );
+      ],
+    ),
+  );
+
+  Widget _weekChip(String label, bool active) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: active ? _c100 : Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        color: active ? _c700 : _ink3,
+      ),
+    ),
+  );
 
   // ── tips card ─────────────────────────────────────────────────────────────
   Widget _buildTipsCard() => Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFBF0),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFFFE5A0)),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFFD700).withValues(alpha: 0.1),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFFBF0),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFFFE5A0)),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFFFFD700).withValues(alpha: 0.1),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFEEB0),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.lightbulb_rounded,
-                color: Color(0xFFD4920A),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    t(context, 'tipsTitle'),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF7A5500),
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    t(context, 'tipsStretchBody'),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF9A7020),
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+      ],
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFEEB0),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.lightbulb_rounded,
+            color: Color(0xFFD4920A),
+            size: 20,
+          ),
         ),
-      );
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t(context, 'tipsTitle'),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF7A5500),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                t(context, 'tipsStretchBody'),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF9A7020),
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 // ─── Search result model ──────────────────────────────────────────────────────
@@ -1505,9 +1682,12 @@ class _ModernProgressPainter extends CustomPainter {
     for (var i = 1; i < _data.length; i++) {
       final cpx = (xOf(i - 1) + xOf(i)) / 2;
       fillPath.cubicTo(
-        cpx, yOf(_data[i - 1]),
-        cpx, yOf(_data[i]),
-        xOf(i), yOf(_data[i]),
+        cpx,
+        yOf(_data[i - 1]),
+        cpx,
+        yOf(_data[i]),
+        xOf(i),
+        yOf(_data[i]),
       );
     }
     fillPath.lineTo(xOf(_data.length - 1), padT + chartH);
@@ -1518,10 +1698,7 @@ class _ModernProgressPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          _c500.withValues(alpha: 0.25),
-          _c500.withValues(alpha: 0.0),
-        ],
+        colors: [_c500.withValues(alpha: 0.25), _c500.withValues(alpha: 0.0)],
       ).createShader(Rect.fromLTWH(0, padT, size.width, chartH));
     canvas.drawPath(fillPath, fillPaint);
 
@@ -1531,9 +1708,12 @@ class _ModernProgressPainter extends CustomPainter {
     for (var i = 1; i < _data.length; i++) {
       final cpx = (xOf(i - 1) + xOf(i)) / 2;
       linePath.cubicTo(
-        cpx, yOf(_data[i - 1]),
-        cpx, yOf(_data[i]),
-        xOf(i), yOf(_data[i]),
+        cpx,
+        yOf(_data[i - 1]),
+        cpx,
+        yOf(_data[i]),
+        xOf(i),
+        yOf(_data[i]),
       );
     }
     final linePaint = Paint()
@@ -1577,10 +1757,7 @@ class _ModernProgressPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(
-        canvas,
-        Offset(xOf(i) - tp.width / 2, size.height - padB + 6),
-      );
+      tp.paint(canvas, Offset(xOf(i) - tp.width / 2, size.height - padB + 6));
     }
   }
 

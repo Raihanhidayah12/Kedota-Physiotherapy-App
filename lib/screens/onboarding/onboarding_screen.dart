@@ -17,18 +17,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   List<_OnboardingPageData> _pages(BuildContext context) => [
     _OnboardingPageData(
-      title: "Pesan Jadwal Tanpa Ribet!",
-      description: "Atur Jadwal Konsultasi dengan\nGampang dan Efisien!",
+      title: t(context, 'onboardingTitle1'),
+      description: t(context, 'onboardingDesc1'),
       imagePath: 'assets/image/Boarding/boarding 1.png',
     ),
     _OnboardingPageData(
-      title: "Pantau Kesehatan Lebih Mudah",
-      description: "Monitor Perkembangan Vital-mu\nSecara Real-time",
+      title: t(context, 'onboardingTitle2'),
+      description: t(context, 'onboardingDesc2'),
       imagePath: null, // Shows mockup placeholder box if no asset
     ),
     _OnboardingPageData(
-      title: "Perawatan Medis Dirumah Anda",
-      description: "Atur Jadwal Untuk Melakukan\nPerawatan Medis Dirumah",
+      title: t(context, 'onboardingTitle3'),
+      description: t(context, 'onboardingDesc3'),
       imagePath: null, // Shows mockup placeholder box if no asset
     ),
   ];
@@ -174,13 +174,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   )
                                 : LayoutBuilder(
                                     builder: (context, constraints) {
-                                      final sz = (constraints.maxWidth * 0.7).clamp(160.0, 240.0);
+                                      final sz = (constraints.maxWidth * 0.7)
+                                          .clamp(160.0, 240.0);
                                       return Container(
                                         width: sz,
                                         height: sz,
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFCBD5E1).withValues(alpha: 0.6),
-                                          borderRadius: BorderRadius.circular(8),
+                                          color: const Color(
+                                            0xFFCBD5E1,
+                                          ).withValues(alpha: 0.6),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                         child: Center(
                                           child: Icon(
@@ -211,7 +216,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 page.title,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: (MediaQuery.of(context).size.width * 0.056).clamp(17.0, 24.0),
+                                  fontSize:
+                                      (MediaQuery.of(context).size.width *
+                                              0.056)
+                                          .clamp(17.0, 24.0),
                                   fontWeight: FontWeight.bold,
                                   color: const Color(0xFF1E293B),
                                   height: 1.25,
@@ -225,7 +233,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 page.description,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: (MediaQuery.of(context).size.width * 0.037).clamp(12.0, 16.0),
+                                  fontSize:
+                                      (MediaQuery.of(context).size.width *
+                                              0.037)
+                                          .clamp(12.0, 16.0),
                                   fontWeight: FontWeight.w500,
                                   color: const Color(0xFF64748B),
                                   height: 1.45,

@@ -138,9 +138,15 @@ class _GoogleProfileCompletionScreenState
   bool _isValidIndonesianPhone(String input) {
     final digits = input.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return false;
-    if (digits.startsWith('628')) return digits.length >= 12 && digits.length <= 14;
-    if (digits.startsWith('08')) return digits.length >= 11 && digits.length <= 13;
-    if (digits.startsWith('8')) return digits.length >= 10 && digits.length <= 12;
+    if (digits.startsWith('628')) {
+      return digits.length >= 12 && digits.length <= 14;
+    }
+    if (digits.startsWith('08')) {
+      return digits.length >= 11 && digits.length <= 13;
+    }
+    if (digits.startsWith('8')) {
+      return digits.length >= 10 && digits.length <= 12;
+    }
     return false;
   }
 
@@ -171,7 +177,8 @@ class _GoogleProfileCompletionScreenState
 
     setState(() {
       _isNameError = name.isEmpty;
-      _isPhoneError = phoneInput.isEmpty || !_isValidIndonesianPhone(phoneInput);
+      _isPhoneError =
+          phoneInput.isEmpty || !_isValidIndonesianPhone(phoneInput);
       _isDobError = _selectedBirthDate == null;
     });
 
@@ -183,8 +190,8 @@ class _GoogleProfileCompletionScreenState
       CustomBottomSheet.show(
         context,
         type: BottomSheetType.error,
-        title: 'Informasi',
-        subtitle: 'Silakan menyetujui syarat dan ketentuan yang berlaku.',
+        title: t(context, 'infoTitle'),
+        subtitle: t(context, 'termsRequired'),
         singleButtonText: t(context, 'closeBtn'),
         onSinglePressed: () => Navigator.of(context).pop(),
       );
@@ -246,7 +253,7 @@ class _GoogleProfileCompletionScreenState
       CustomBottomSheet.show(
         context,
         type: BottomSheetType.error,
-        title: 'Informasi',
+        title: t(context, 'infoTitle'),
         subtitle: t(context, 'saveProfileFailed'),
         singleButtonText: t(context, 'closeBtn'),
         onSinglePressed: () => Navigator.of(context).pop(),
@@ -306,37 +313,42 @@ class _GoogleProfileCompletionScreenState
           children: [
             // Logo Header Top
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Column(
-                children: [
-                  Image.asset(
-                    'assets/image/logo 2.png',
-                    height: 52,
-                    fit: BoxFit.contain,
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Column(
+                    children: [
+                      Image.asset(
+                        'assets/image/logo 2.png',
+                        height: 52,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'K E D O T A',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF00A79D),
+                          letterSpacing: 4.0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'P H Y S I O T H E R A P Y',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(
+                            0xFF00A79D,
+                          ).withValues(alpha: 0.85),
+                          letterSpacing: 4.5,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'K E D O T A',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF00A79D),
-                      letterSpacing: 4.0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'P H Y S I O T H E R A P Y',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF00A79D).withValues(alpha: 0.85),
-                      letterSpacing: 4.5,
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fade(duration: 500.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
+                )
+                .animate()
+                .fade(duration: 500.ms)
+                .slideY(begin: 0.2, curve: Curves.easeOutQuad),
 
             // White Card Container Bottom
             Expanded(
@@ -350,298 +362,326 @@ class _GoogleProfileCompletionScreenState
                   padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Lengkapi Data Diri',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Pastikan informasi dibawah ini sesuai dengan identitas resmi Anda.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 22),
+                    children:
+                        [
+                              const Text(
+                                'Lengkapi Data Diri',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Pastikan informasi dibawah ini sesuai dengan identitas resmi Anda.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF64748B),
+                                  height: 1.45,
+                                ),
+                              ),
+                              const SizedBox(height: 22),
 
-                      // Nama Lengkap
-                      _buildFieldLabel('Nama Lengkap', isError: _isNameError),
-                      const SizedBox(height: 6),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _isNameError
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFFE2E8F0),
-                            width: _isNameError ? 1.5 : 1.0,
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: TextField(
-                          controller: _nameController,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E293B),
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'Masukkan Nama Lengkap',
-                            hintStyle: TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 14,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                              // Nama Lengkap
+                              _buildFieldLabel(
+                                'Nama Lengkap',
+                                isError: _isNameError,
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: _isNameError
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFFE2E8F0),
+                                    width: _isNameError ? 1.5 : 1.0,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: TextField(
+                                  controller: _nameController,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Masukkan Nama Lengkap',
+                                    hintStyle: TextStyle(
+                                      color: Color(0xFF94A3B8),
+                                      fontSize: 14,
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
 
-                      // Jenis Kelamin
-                      _buildFieldLabel('Jenis Kelamin'),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildGenderOption(
-                              label: 'Laki-Laki',
-                              value: 'Laki-Laki',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildGenderOption(
-                              label: 'Perempuan',
-                              value: 'Perempuan',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
+                              // Jenis Kelamin
+                              _buildFieldLabel('Jenis Kelamin'),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildGenderOption(
+                                      label: t(context, 'male'),
+                                      value: 'Laki-Laki',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildGenderOption(
+                                      label: t(context, 'female'),
+                                      value: 'Perempuan',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
 
-                      // Tanggal Lahir
-                      _buildFieldLabel('Tanggal Lahir', isError: _isDobError),
-                      const SizedBox(height: 6),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _isDobError
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFFE2E8F0),
-                            width: _isDobError ? 1.5 : 1.0,
-                          ),
-                        ),
-                        padding: const EdgeInsets.only(left: 16, right: 8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _dobController,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [DateInputFormatter()],
-                                style: const TextStyle(
-                                  fontSize: 14,
+                              // Tanggal Lahir
+                              _buildFieldLabel(
+                                'Tanggal Lahir',
+                                isError: _isDobError,
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: _isDobError
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFFE2E8F0),
+                                    width: _isDobError ? 1.5 : 1.0,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.only(
+                                  left: 16,
+                                  right: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _dobController,
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [DateInputFormatter()],
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1E293B),
+                                        ),
+                                        decoration: const InputDecoration(
+                                          hintText: 'dd/mm/yyyy',
+                                          hintStyle: TextStyle(
+                                            color: Color(0xFF94A3B8),
+                                            fontSize: 14,
+                                          ),
+                                          border: InputBorder.none,
+                                          contentPadding: EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      onPressed: _pickDate,
+                                      icon: const Icon(
+                                        Icons.calendar_today_rounded,
+                                        color: Color(0xFF00A79D),
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Nomor Telepon Input
+                              _buildFieldLabel(
+                                'No. Telp',
+                                isError: _isPhoneError,
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: _isPhoneError
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFFE2E8F0),
+                                    width: _isPhoneError ? 1.5 : 1.0,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: TextField(
+                                  controller: _phoneController,
+                                  keyboardType: TextInputType.phone,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                  decoration: const InputDecoration(
+                                    hintText: '08XX XXXX XXXX',
+                                    hintStyle: TextStyle(
+                                      color: Color(0xFF94A3B8),
+                                      fontSize: 14,
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Email (Readonly dari Google)
+                              const Text(
+                                'Email',
+                                style: TextStyle(
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: Color(0xFF1E293B),
                                 ),
-                                decoration: const InputDecoration(
-                                  hintText: 'dd/mm/yyyy',
-                                  hintStyle: TextStyle(
-                                    color: Color(0xFF94A3B8),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Text(
+                                  widget.email,
+                                  style: const TextStyle(
                                     fontSize: 14,
-                                  ),
-                                  border: InputBorder.none,
-                                  contentPadding:
-                                      EdgeInsets.symmetric(vertical: 14),
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: _pickDate,
-                              icon: const Icon(
-                                Icons.calendar_today_rounded,
-                                color: Color(0xFF00A79D),
-                                size: 20,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Nomor Telepon Input
-                      _buildFieldLabel('No. Telp', isError: _isPhoneError),
-                      const SizedBox(height: 6),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _isPhoneError
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFFE2E8F0),
-                            width: _isPhoneError ? 1.5 : 1.0,
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: TextField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E293B),
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: '08XX XXXX XXXX',
-                            hintStyle: TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 14,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Email (Readonly dari Google)
-                      const Text(
-                        'Email',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Text(
-                          widget.email,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Checkbox Syarat & Ketentuan
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Checkbox(
-                              value: _agreeTerms,
-                              activeColor: const Color(0xFF00A79D),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => _agreeTerms = val);
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'Saya setuju dengan syarat dan ketentuan yang berlaku.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF64748B),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Tombol Lanjut
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _submitProfile,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00A79D),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text(
-                                  'Lanjut',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF64748B),
                                   ),
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+                              ),
+                              const SizedBox(height: 16),
 
-                      // Tombol Kembali
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF1E293B),
-                            side: const BorderSide(
-                              color: Color(0xFFE2E8F0),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: const Text(
-                            'Kembali',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
+                              // Checkbox Syarat & Ketentuan
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Checkbox(
+                                      value: _agreeTerms,
+                                      activeColor: const Color(0xFF00A79D),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setState(() => _agreeTerms = val);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'Saya setuju dengan syarat dan ketentuan yang berlaku.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Tombol Lanjut
+                              SizedBox(
+                                width: double.infinity,
+                                height: 50,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _submitProfile,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF00A79D),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Lanjut',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Tombol Kembali
+                              SizedBox(
+                                width: double.infinity,
+                                height: 50,
+                                child: OutlinedButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).maybePop(),
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: const Color(0xFF1E293B),
+                                    side: const BorderSide(
+                                      color: Color(0xFFE2E8F0),
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Kembali',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ]
+                            .animate(interval: 50.ms)
+                            .fade(duration: 400.ms)
+                            .slideY(begin: 0.1, curve: Curves.easeOutQuad),
                   ),
                 ),
               ),
@@ -652,19 +692,14 @@ class _GoogleProfileCompletionScreenState
     );
   }
 
-  Widget _buildGenderOption({
-    required String label,
-    required String value,
-  }) {
+  Widget _buildGenderOption({required String label, required String value}) {
     final isSelected = _gender == value;
     return GestureDetector(
       onTap: () => setState(() => _gender = value),
       child: Container(
         height: 48,
         decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFFE8F6F4)
-              : Colors.white,
+          color: isSelected ? const Color(0xFFE8F6F4) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected

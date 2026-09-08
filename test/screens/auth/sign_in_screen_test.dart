@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kedotaapp/screens/auth/sign_in_screen.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
   // Supabase initialization requires binding to be initialized

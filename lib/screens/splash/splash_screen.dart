@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../l10n/app_language.dart';
+import '../../services/app_lock_service.dart';
 import '../onboarding/onboarding_screen.dart';
 import '../auth/google_profile_completion_screen.dart';
 import '../auth/pin_verification_screen.dart';
@@ -44,8 +45,7 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _subtitleOpacity;
   late Animation<Offset> _subtitleSlide;
 
-  Timer? _exitTimer;
-  Timer? _navTimer;
+
 
   @override
   void initState() {
@@ -161,6 +161,10 @@ class _SplashScreenState extends State<SplashScreen>
       Future.delayed(const Duration(milliseconds: 2850), () async {
         if (!mounted) return;
 
+        // App baru dibuka dari scratch → unlock dulu agar bisa masuk normal
+        // (lock hanya aktif saat app resume dari background)
+        await AppLockService.unlock();
+
         // Check user session and onboarding status
         final prefs = await SharedPreferences.getInstance();
         final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
@@ -177,12 +181,17 @@ class _SplashScreenState extends State<SplashScreen>
 
             final phone = (profile?['phone'] ?? '').toString().trim();
             final pinHash = (profile?['pin_hash'] ?? '').toString().trim();
-            final isCompleteFlag = profile?['is_profile_complete'] == true;
 
             // Hanya dianggap complete kalau phone DAN pin_hash ada di profiles table
             // Tidak pakai userMetadata['phone'] karena Google bisa isi itu tapi
             // user belum tentu sudah selesai registrasi di app kita
             final isComplete = phone.isNotEmpty && pinHash.isNotEmpty;
+
+            // Simpan phone number ke SharedPreferences untuk AppLockOverlay
+            if (mounted) {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('user_phone', phone);
+            }
 
             if (isComplete) {
               nextScreen = PinVerificationScreen(phoneNumber: phone);

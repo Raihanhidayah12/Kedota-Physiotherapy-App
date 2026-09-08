@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/app_language.dart';
+import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import 'account_created_screen.dart';
@@ -26,7 +27,8 @@ class PhoneCreatePinScreen extends StatefulWidget {
   State<PhoneCreatePinScreen> createState() => _PhoneCreatePinScreenState();
 }
 
-class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
+class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen>
+    with SecureScreenMixin {
   String _firstPin = '';
   String _confirmPin = '';
   bool _isConfirming = false;
@@ -151,50 +153,44 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
     }
   }
 
-  Widget _buildNumpadButton(String value) {
+  Widget _buildNumpadButton(String value, double btnSize) {
     if (value.isEmpty) {
-      return const SizedBox(height: 56);
+      return SizedBox(width: btnSize, height: btnSize);
     }
 
     final isBackspace = value == 'backspace';
 
-    return Center(
-      child: GestureDetector(
-        onTap: () => _onNumberPressed(value),
-        child: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: isBackspace ? BoxShape.rectangle : BoxShape.circle,
-            borderRadius: isBackspace ? BorderRadius.circular(16) : null,
-            border: isBackspace ? Border.all(color: const Color(0xFF00A79D), width: 2) : null,
-            boxShadow: isBackspace
-                ? null
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-          ),
-          child: Center(
-            child: isBackspace
-                ? const Icon(
-                    Icons.backspace_outlined,
-                    color: Color(0xFF00A79D),
-                    size: 22,
-                  )
-                : Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
-                    ),
+    return GestureDetector(
+      onTap: () => _onNumberPressed(value),
+      child: Container(
+        width: btnSize,
+        height: isBackspace ? btnSize * 0.76 : btnSize,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: isBackspace ? BoxShape.rectangle : BoxShape.circle,
+          borderRadius: isBackspace ? BorderRadius.circular(14) : null,
+          border: isBackspace ? Border.all(color: const Color(0xFF00A79D), width: 2) : null,
+          boxShadow: isBackspace
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-          ),
+                ],
+        ),
+        child: Center(
+          child: isBackspace
+              ? Icon(Icons.backspace_outlined, color: const Color(0xFF00A79D), size: btnSize * 0.33)
+              : Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: btnSize * 0.36,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1E293B),
+                  ),
+                ),
         ),
       ),
     );
@@ -274,18 +270,22 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
                       children: List.generate(6, (index) {
                         final isFilled = index < currentPin.length;
                         return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 5),
-                          width: 16,
-                          height: 16,
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          width: 28,
+                          height: 28,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: _isPinError
-                                ? (isFilled
-                                      ? const Color(0xFFEF4444)
-                                      : const Color(0xFFE2E8F0))
-                                : (isFilled
+                                ? (isFilled ? const Color(0xFFEF4444) : Colors.transparent)
+                                : (isFilled ? const Color(0xFF00A79D) : Colors.transparent),
+                            border: Border.all(
+                              color: _isPinError
+                                  ? const Color(0xFFEF4444)
+                                  : isFilled
                                       ? const Color(0xFF00A79D)
-                                      : const Color(0xFFE2E8F0)),
+                                      : const Color(0xFFCBD5E1),
+                              width: 2,
+                            ),
                           ),
                         );
                       }),
@@ -296,51 +296,45 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen> {
                 const SizedBox(height: 24),
 
                 // NUMERIC KEYPAD
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: _buildNumpadButton('1')),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNumpadButton('2')),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNumpadButton('3')),
-                        ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final w = MediaQuery.sizeOf(context).width;
+                    const bs = 100.0;
+                    const hGap = 16.0;
+                    const vGap = 16.0;
+                    final totalW = bs * 3 + hGap * 2;
+                    final hPad = (w - totalW) / 2;
+                    return Padding(
+                      padding: EdgeInsets.symmetric(horizontal: hPad),
+                      child: SizedBox(
+                        width: totalW,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: ['1','2','3'].map((v) => _buildNumpadButton(v, bs)).toList(),
+                            ),
+                            const SizedBox(height: vGap),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: ['4','5','6'].map((v) => _buildNumpadButton(v, bs)).toList(),
+                            ),
+                            const SizedBox(height: vGap),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: ['7','8','9'].map((v) => _buildNumpadButton(v, bs)).toList(),
+                            ),
+                            const SizedBox(height: vGap),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: ['','0','backspace'].map((v) => _buildNumpadButton(v, bs)).toList(),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: _buildNumpadButton('4')),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNumpadButton('5')),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNumpadButton('6')),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: _buildNumpadButton('7')),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNumpadButton('8')),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNumpadButton('9')),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: _buildNumpadButton('')),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNumpadButton('0')),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNumpadButton('backspace')),
-                        ],
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 36),

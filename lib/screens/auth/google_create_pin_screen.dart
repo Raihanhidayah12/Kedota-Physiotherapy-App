@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/app_language.dart';
+import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import 'account_created_screen.dart';
@@ -26,7 +27,8 @@ class GoogleCreatePinScreen extends StatefulWidget {
   State<GoogleCreatePinScreen> createState() => _GoogleCreatePinScreenState();
 }
 
-class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
+class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen>
+    with SecureScreenMixin {
   String _firstPin = '';
   String _confirmPin = '';
   bool _isConfirming = false;
@@ -145,9 +147,9 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
     }
   }
 
-  Widget _buildNumpadButton(String value) {
+  Widget _buildNumpadButton(String value, double btnSize) {
     if (value.isEmpty) {
-      return const SizedBox(width: 68, height: 68);
+      return SizedBox(width: btnSize, height: btnSize);
     }
 
     final isBackspace = value == 'backspace';
@@ -156,21 +158,18 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
       return GestureDetector(
         onTap: () => _onNumberPressed(value),
         child: Container(
-          width: 68,
-          height: 52,
+          width: btnSize,
+          height: btnSize * 0.76,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFF00A79D),
-              width: 2,
-            ),
+            border: Border.all(color: const Color(0xFF00A79D), width: 2),
           ),
-          child: const Center(
+          child: Center(
             child: Icon(
               Icons.backspace_outlined,
-              color: Color(0xFF00A79D),
-              size: 24,
+              color: const Color(0xFF00A79D),
+              size: btnSize * 0.33,
             ),
           ),
         ),
@@ -180,8 +179,8 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
     return GestureDetector(
       onTap: () => _onNumberPressed(value),
       child: Container(
-        width: 68,
-        height: 68,
+        width: btnSize,
+        height: btnSize,
         decoration: BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
@@ -196,10 +195,10 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
         child: Center(
           child: Text(
             value,
-            style: const TextStyle(
-              fontSize: 24,
+            style: TextStyle(
+              fontSize: btnSize * 0.36,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+              color: const Color(0xFF1E293B),
             ),
           ),
         ),
@@ -274,14 +273,22 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
               children: List.generate(6, (index) {
                 final isFilled = index < currentPin.length;
                 return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                  width: 16,
-                  height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: _isPinError
-                        ? (isFilled ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0))
-                        : (isFilled ? const Color(0xFF00A79D) : const Color(0xFFE2E8F0)),
+                        ? (isFilled ? const Color(0xFFEF4444) : Colors.transparent)
+                        : (isFilled ? const Color(0xFF00A79D) : Colors.transparent),
+                    border: Border.all(
+                      color: _isPinError
+                          ? const Color(0xFFEF4444)
+                          : isFilled
+                              ? const Color(0xFF00A79D)
+                              : const Color(0xFFCBD5E1),
+                      width: 2,
+                    ),
                   ),
                 );
               }),
@@ -290,44 +297,45 @@ class _GoogleCreatePinScreenState extends State<GoogleCreatePinScreen> {
             const Spacer(),
 
             // NUMERIC KEYPAD
-            Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNumpadButton('1'),
-                    _buildNumpadButton('2'),
-                    _buildNumpadButton('3'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNumpadButton('4'),
-                    _buildNumpadButton('5'),
-                    _buildNumpadButton('6'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNumpadButton('7'),
-                    _buildNumpadButton('8'),
-                    _buildNumpadButton('9'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNumpadButton(''),
-                    _buildNumpadButton('0'),
-                    _buildNumpadButton('backspace'),
-                  ],
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final w = MediaQuery.sizeOf(context).width;
+                const bs = 100.0;
+                const hGap = 16.0;
+                const vGap = 16.0;
+                final totalW = bs * 3 + hGap * 2;
+                final hPad = (w - totalW) / 2;
+                return Padding(
+                  padding: EdgeInsets.symmetric(horizontal: hPad),
+                  child: SizedBox(
+                    width: totalW,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: ['1','2','3'].map((v) => _buildNumpadButton(v, bs)).toList(),
+                        ),
+                        const SizedBox(height: vGap),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: ['4','5','6'].map((v) => _buildNumpadButton(v, bs)).toList(),
+                        ),
+                        const SizedBox(height: vGap),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: ['7','8','9'].map((v) => _buildNumpadButton(v, bs)).toList(),
+                        ),
+                        const SizedBox(height: vGap),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: ['','0','backspace'].map((v) => _buildNumpadButton(v, bs)).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
 
             const SizedBox(height: 36),

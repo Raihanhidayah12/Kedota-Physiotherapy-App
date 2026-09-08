@@ -1,90 +1,58 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_language.dart';
+import '../../services/supabase_auth_service.dart';
+import 'appointment_detail_screen.dart';
+import 'reservation_flow_screen.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
-const _c900 = Color(0xFF004D47);
 const _c700 = Color(0xFF007F78);
 const _c500 = Color(0xFF00A79D);
 const _c100 = Color(0xFFD4F5F3);
-const _bg   = Color(0xFFF0F7F7);
-const _ink  = Color(0xFF0E2C2F);
-const _ink2 = Color(0xFF3D6065);
+const _bg = Color(0xFFF5F8F8);
+const _ink = Color(0xFF0E2C2F);
 const _ink3 = Color(0xFF8AA8AC);
 
 // ─── Dummy data ───────────────────────────────────────────────────────────────
 
-enum AppointmentStatus { mendatang, selesai, batasWaktu, dibatalkan }
+enum AppointmentStatus { mendatang, selesai, batasWaktu }
 
 class AppointmentItem {
+  final String id;
   final String therapistName;
   final String serviceType;
   final String date;
   final String time;
+  final String patientName;
+  final String medicalCode;
+  final String address;
+  final String complaint;
+  final String clinicName;
+  final int sessionCount;
   final AppointmentStatus status;
 
   const AppointmentItem({
+    this.id = '',
     required this.therapistName,
     required this.serviceType,
     required this.date,
     required this.time,
+    this.patientName = '',
+    this.medicalCode = '',
+    this.address = '',
+    this.complaint = '',
+    this.clinicName = '',
+    this.sessionCount = 1,
     required this.status,
   });
 }
 
-final _dummyUpcoming = AppointmentItem(
-  therapistName: 'Terapis Marvin McKinney',
-  serviceType: 'Home Care',
-  date: 'Selasa, 18 Agustus 2026',
-  time: '11:00 – 12:00 WIB',
-  status: AppointmentStatus.mendatang,
-);
-
-final _dummyHistory = [
-  AppointmentItem(
-    therapistName: 'Terapis Marvin McKinney',
-    serviceType: 'Home Care',
-    date: 'Selasa, 11 Agustus 2026',
-    time: '11:00 – 12:00 WIB',
-    status: AppointmentStatus.selesai,
-  ),
-  AppointmentItem(
-    therapistName: 'Terapis Marvin McKinney',
-    serviceType: 'Home Care',
-    date: 'Selasa, 04 Agustus 2026',
-    time: '11:00 – 12:00 WIB',
-    status: AppointmentStatus.selesai,
-  ),
-  AppointmentItem(
-    therapistName: 'Terapis Sinta Dewi',
-    serviceType: 'Klinik',
-    date: 'Senin, 28 Juli 2026',
-    time: '09:00 – 10:00 WIB',
-    status: AppointmentStatus.batasWaktu,
-  ),
-  AppointmentItem(
-    therapistName: 'Terapis Sinta Dewi',
-    serviceType: 'Klinik',
-    date: 'Senin, 21 Juli 2026',
-    time: '09:00 – 10:00 WIB',
-    status: AppointmentStatus.selesai,
-  ),
-  AppointmentItem(
-    therapistName: 'Terapis Budi Santoso',
-    serviceType: 'Home Care',
-    date: 'Jumat, 10 Juli 2026',
-    time: '14:00 – 15:00 WIB',
-    status: AppointmentStatus.dibatalkan,
-  ),
-];
-
-// ─── Filter tab keys ──────────────────────────────────────────────────────────
-const _filterTabKeys = ['filterAll', 'filterUpcoming', 'filterDone', 'filterCancelled'];
-
 // ─── Body widget ──────────────────────────────────────────────────────────────
 
 class HistoryBody extends StatefulWidget {
-  const HistoryBody({super.key});
+  final int initialFilterIndex;
+
+  const HistoryBody({super.key, this.initialFilterIndex = 0});
 
   @override
   State<HistoryBody> createState() => _HistoryBodyState();
@@ -93,91 +61,162 @@ class HistoryBody extends StatefulWidget {
 class _HistoryBodyState extends State<HistoryBody>
     with TickerProviderStateMixin {
   int _filterIndex = 0;
-  String _sortKey = 'sortNewest';
+  List<AppointmentItem> _savedAppointments = [];
+  List<AppointmentItem> _savedUpcomingAppointments = [];
+  bool _loadingAppointments = false;
 
   // ── animation controllers ─────────────────────────────────────────────────
   late AnimationController _headerCtrl;
   late AnimationController _contentCtrl;
 
-  // header expand animation (height expand from top-to-bottom, not fade)
-  late Animation<double> _headerExpand;
-  
-  // header sub-elements
-  late Animation<double>  _titleFade;
-  late Animation<Offset>  _titleSlide;
-  late Animation<double>  _btnFade;
-  late Animation<Offset>  _btnSlide;
-  late Animation<double>  _chipsFade;
-  late Animation<Offset>  _chipsSlide;
+  late Animation<double> _titleFade;
+  late Animation<Offset> _titleSlide;
+  late Animation<double> _btnFade;
+  late Animation<Offset> _btnSlide;
+  late Animation<double> _chipsFade;
+  late Animation<Offset> _chipsSlide;
 
-  // content sections: 0=upcoming label, 1=upcoming card, 2=history label, 3-7=history cards
   static const _kContent = 8;
-  late List<Animation<double>>  _contentFades;
-  late List<Animation<Offset>>  _contentSlides;
+  late List<Animation<double>> _contentFades;
+  late List<Animation<Offset>> _contentSlides;
 
   @override
   void initState() {
     super.initState();
+    _filterIndex = widget.initialFilterIndex;
+    _setupAnimations();
+    _loadAppointments();
+    _headerCtrl.forward();
+    Future.delayed(const Duration(milliseconds: 280), () {
+      if (mounted) _contentCtrl.forward();
+    });
+  }
 
-    // ── header (800 ms) ─────────────────────────────────────────────────────
+  Future<void> _loadAppointments() async {
+    if (mounted) setState(() => _loadingAppointments = true);
+    try {
+      final service = SupabaseAuthService();
+      final user = service.client.auth.currentUser;
+      if (user == null) return;
+      final rows = await service.client
+          .from('appointments')
+          .select()
+          .eq('booker_id', user.id)
+          .order('appointment_date', ascending: false);
+      final appointments = (rows as List)
+          .map((row) => _appointmentFromRow(row as Map<String, dynamic>))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _savedAppointments = appointments;
+        _savedUpcomingAppointments = appointments
+            .where((item) => item.status == AppointmentStatus.mendatang)
+            .toList();
+      });
+    } catch (error) {
+      debugPrint('History appointments load failed: $error');
+    } finally {
+      if (mounted) setState(() => _loadingAppointments = false);
+    }
+  }
+
+  AppointmentItem _appointmentFromRow(Map<String, dynamic> row) {
+    final rawStatus = row['appointment_status']?.toString();
+    final appointmentDate = row['appointment_date']?.toString() ?? '';
+    final appointmentTime = row['appointment_time']?.toString() ?? '';
+    final scheduledAt = DateTime.tryParse('$appointmentDate $appointmentTime');
+    final status = switch (rawStatus) {
+      'completed' => AppointmentStatus.selesai,
+      'cancelled' => AppointmentStatus.batasWaktu,
+      'expired'
+          when scheduledAt != null && scheduledAt.isAfter(DateTime.now()) =>
+        AppointmentStatus.mendatang,
+      'expired' => AppointmentStatus.batasWaktu,
+      _ => AppointmentStatus.mendatang,
+    };
+    return AppointmentItem(
+      id: row['id']?.toString() ?? '',
+      therapistName: row['therapist_name']?.toString() ?? 'Kedota Therapist',
+      serviceType: row['service_type']?.toString() ?? 'Home Care',
+      date: row['appointment_date']?.toString() ?? '-',
+      time: row['appointment_time']?.toString() ?? '- WIB',
+      patientName: row['patient_full_name']?.toString() ?? '',
+      medicalCode: row['patient_medical_code']?.toString() ?? '',
+      address: row['address']?.toString() ?? '',
+      complaint: row['patient_complaint']?.toString() ?? '',
+      clinicName: row['clinic_name']?.toString() ?? '',
+      sessionCount: int.tryParse(row['session_count']?.toString() ?? '') ?? 1,
+      status: status,
+    );
+  }
+
+  void _setupAnimations() {
     _headerCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800));
-
-    _headerExpand = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _headerCtrl, curve: Curves.easeOutCubic),
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
     );
 
     _titleFade = CurvedAnimation(
-        parent: _headerCtrl,
-        curve: const Interval(0.0, 0.55, curve: Curves.easeOut));
-    _titleSlide = Tween<Offset>(
-            begin: const Offset(-0.25, 0), end: Offset.zero)
-        .animate(CurvedAnimation(
+      parent: _headerCtrl,
+      curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
+    );
+    _titleSlide = Tween<Offset>(begin: const Offset(-0.2, 0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
             parent: _headerCtrl,
-            curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic)));
+            curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
+          ),
+        );
 
     _btnFade = CurvedAnimation(
-        parent: _headerCtrl,
-        curve: const Interval(0.1, 0.65, curve: Curves.easeOut));
-    _btnSlide = Tween<Offset>(
-            begin: const Offset(0.3, 0), end: Offset.zero)
-        .animate(CurvedAnimation(
+      parent: _headerCtrl,
+      curve: const Interval(0.1, 0.65, curve: Curves.easeOut),
+    );
+    _btnSlide = Tween<Offset>(begin: const Offset(0.3, 0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
             parent: _headerCtrl,
-            curve: const Interval(0.1, 0.65, curve: Curves.easeOutCubic)));
+            curve: const Interval(0.1, 0.65, curve: Curves.easeOutCubic),
+          ),
+        );
 
     _chipsFade = CurvedAnimation(
-        parent: _headerCtrl,
-        curve: const Interval(0.3, 1.0, curve: Curves.easeOut));
-    _chipsSlide = Tween<Offset>(
-            begin: const Offset(0, 0.6), end: Offset.zero)
-        .animate(CurvedAnimation(
+      parent: _headerCtrl,
+      curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
+    );
+    _chipsSlide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
             parent: _headerCtrl,
-            curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic)));
+            curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+          ),
+        );
 
-    // ── content stagger (1200 ms) ─────────────────────────────────────────
     _contentCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200));
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
 
     _contentFades = List.generate(_kContent, (i) {
       final s = (i * 0.13).clamp(0.0, 1.0);
       final e = (s + 0.35).clamp(0.0, 1.0);
       return CurvedAnimation(
-          parent: _contentCtrl,
-          curve: Interval(s, e, curve: Curves.easeOut));
+        parent: _contentCtrl,
+        curve: Interval(s, e, curve: Curves.easeOut),
+      );
     });
     _contentSlides = List.generate(_kContent, (i) {
       final s = (i * 0.13).clamp(0.0, 1.0);
       final e = (s + 0.35).clamp(0.0, 1.0);
       return Tween<Offset>(
-              begin: const Offset(0, 0.15), end: Offset.zero)
-          .animate(CurvedAnimation(
-              parent: _contentCtrl,
-              curve: Interval(s, e, curve: Curves.easeOutCubic)));
-    });
-
-    _headerCtrl.forward();
-    Future.delayed(const Duration(milliseconds: 280), () {
-      if (mounted) _contentCtrl.forward();
+        begin: const Offset(0, 0.15),
+        end: Offset.zero,
+      ).animate(
+        CurvedAnimation(
+          parent: _contentCtrl,
+          curve: Interval(s, e, curve: Curves.easeOutCubic),
+        ),
+      );
     });
   }
 
@@ -191,7 +230,6 @@ class _HistoryBodyState extends State<HistoryBody>
   @override
   void didUpdateWidget(HistoryBody oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Trigger ulang animasi saat widget key berubah
     _headerCtrl.reset();
     _contentCtrl.reset();
     _headerCtrl.forward();
@@ -200,81 +238,90 @@ class _HistoryBodyState extends State<HistoryBody>
     });
   }
 
-  // ── stagger helper ─────────────────────────────────────────────────────────
+  // ── helpers ────────────────────────────────────────────────────────────────
   Widget _anim(int index, Widget child) => FadeTransition(
-        opacity: _contentFades[index],
-        child: SlideTransition(position: _contentSlides[index], child: child),
-      );
+    opacity: _contentFades[index],
+    child: SlideTransition(position: _contentSlides[index], child: child),
+  );
 
-  // ── filter logic ─────────────────────────────────────────────────────────
+  bool get _showUpcoming => _filterIndex == 0 || _filterIndex == 1;
+  bool get _showPreviousHistory => _filterIndex != 1;
+
   List<AppointmentItem> get _filteredHistory {
-    if (_filterIndex == 0) return _dummyHistory;
-    final target = switch (_filterIndex) {
-      1 => AppointmentStatus.mendatang,
-      2 => AppointmentStatus.selesai,
-      _ => AppointmentStatus.dibatalkan,
-    };
-    return _dummyHistory.where((e) => e.status == target).toList();
+    final history = _savedAppointments;
+    if (_filterIndex == 0) {
+      return history
+          .where((e) => e.status != AppointmentStatus.mendatang)
+          .toList();
+    }
+    if (_filterIndex == 1) {
+      return history
+          .where((e) => e.status == AppointmentStatus.mendatang)
+          .toList();
+    }
+    if (_filterIndex == 2) {
+      return history
+          .where((e) => e.status == AppointmentStatus.selesai)
+          .toList();
+    }
+    return history
+        .where((e) => e.status == AppointmentStatus.batasWaktu)
+        .toList();
   }
 
-  // ── status helpers ────────────────────────────────────────────────────────
+  Color _accentBorder(AppointmentStatus s) => switch (s) {
+    AppointmentStatus.mendatang => _c500,
+    AppointmentStatus.selesai => _c500,
+    AppointmentStatus.batasWaktu => const Color(0xFFD94F45),
+  };
 
-  String _statusLabel(BuildContext ctx, AppointmentStatus s) => switch (s) {
-        AppointmentStatus.mendatang  => t(ctx, 'statusUpcoming'),
-        AppointmentStatus.selesai    => t(ctx, 'statusDone'),
-        AppointmentStatus.batasWaktu => t(ctx, 'statusExpired'),
-        AppointmentStatus.dibatalkan => t(ctx, 'statusCancelled'),
-      };
-
-  Color _statusBg(AppointmentStatus s) => switch (s) {
-        AppointmentStatus.mendatang  => _c100,
-        AppointmentStatus.selesai    => _c500,
-        AppointmentStatus.batasWaktu => const Color(0xFFFFECEB),
-        AppointmentStatus.dibatalkan => const Color(0xFFF0F0F0),
-      };
-
-  Color _statusFg(AppointmentStatus s) => switch (s) {
-        AppointmentStatus.mendatang  => _c700,
-        AppointmentStatus.selesai    => Colors.white,
-        AppointmentStatus.batasWaktu => const Color(0xFFD94F45),
-        AppointmentStatus.dibatalkan => const Color(0xFF999999),
-      };
-
-  Color _avatarBg(AppointmentStatus s) => switch (s) {
-        AppointmentStatus.mendatang  => _c100,
-        AppointmentStatus.selesai    => const Color(0xFFE0F8F6),
-        AppointmentStatus.batasWaktu => const Color(0xFFFFE8E6),
-        AppointmentStatus.dibatalkan => const Color(0xFFF0F0F0),
-      };
-
-  Color _avatarFg(AppointmentStatus s) => switch (s) {
-        AppointmentStatus.mendatang  => _c700,
-        AppointmentStatus.selesai    => _c500,
-        AppointmentStatus.batasWaktu => const Color(0xFFD94F45),
-        AppointmentStatus.dibatalkan => const Color(0xFFAAAAAA),
-      };
-
-  // ── build ─────────────────────────────────────────────────────────────────
+  // ── build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final topPad = MediaQuery.of(context).padding.top;
     return ColoredBox(
       color: _bg,
       child: CustomScrollView(
         slivers: [
-          _buildSliverHeader(),
+          SliverToBoxAdapter(child: _buildHeader(topPad)),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                const SizedBox(height: 22),
-                _anim(0, _buildSectionLabel(t(context, 'upcomingAppointmentSection'))),
-                const SizedBox(height: 12),
-                _anim(1, _buildUpcomingCard(_dummyUpcoming)),
-                const SizedBox(height: 28),
-                _anim(2, _buildSectionLabel(t(context, 'previousHistory'))),
-                const SizedBox(height: 14),
-                ..._buildHistoryList(),
+                if (_showUpcoming) ...[
+                  const SizedBox(height: 24),
+                  _anim(
+                    0,
+                    _buildSectionLabel(
+                      t(context, 'upcomingAppointmentSection'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _anim(
+                    1,
+                    _savedUpcomingAppointments.isEmpty
+                        ? _buildUpcomingEmptyState()
+                        : Column(
+                            children: [
+                              for (final appointment
+                                  in _savedUpcomingAppointments) ...[
+                                _buildUpcomingCard(appointment),
+                                if (appointment !=
+                                    _savedUpcomingAppointments.last)
+                                  const SizedBox(height: 14),
+                              ],
+                            ],
+                          ),
+                  ),
+                  const SizedBox(height: 28),
+                ],
+                if (_showPreviousHistory) ...[
+                  if (!_showUpcoming) const SizedBox(height: 24),
+                  _anim(2, _buildSectionLabel(t(context, 'previousHistory'))),
+                  const SizedBox(height: 14),
+                  ..._buildHistoryList(),
+                ],
               ]),
             ),
           ),
@@ -283,387 +330,339 @@ class _HistoryBodyState extends State<HistoryBody>
     );
   }
 
-  // ── sliver header ─────────────────────────────────────────────────────────
+  // ── header ─────────────────────────────────────────────────────────────────
 
-  Widget _buildSliverHeader() => SliverToBoxAdapter(
-        child: ClipRect(
-          child: AnimatedBuilder(
-            animation: _headerExpand,
-            builder: (context, child) {
-              return Align(
-                alignment: Alignment.topCenter,
-                heightFactor: _headerExpand.value,
-                child: child,
-              );
-            },
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [_c900, _c700, _c500],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: -50,
-                    top: -50,
-                    child: _circle(180, Colors.white, 0.05),
-                  ),
-                  Positioned(
-                    left: -30,
-                    bottom: -20,
-                    child: _circle(120, Colors.white, 0.04),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      MediaQuery.of(context).padding.top + 16,
-                      20,
-                      0,
-                    ),
+  Widget _buildHeader(double topPad) {
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.fromLTRB(20, topPad + 20, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: FadeTransition(
+                  opacity: _titleFade,
+                  child: SlideTransition(
+                    position: _titleSlide,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // title row
-                        Row(
-                          children: [
-                            // title — slides from left
-                            Expanded(
-                              child: FadeTransition(
-                                opacity: _titleFade,
-                                child: SlideTransition(
-                                  position: _titleSlide,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        t(context, 'historyTitle'),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.w800,
-                                          height: 1.1,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        t(context, 'historySubtitle'),
-                                        style: const TextStyle(
-                                          color: _c100,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w400,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // sort + date — slides from right
-                            FadeTransition(
-                              opacity: _btnFade,
-                              child: SlideTransition(
-                                position: _btnSlide,
-                                child: Row(
-                                  children: [
-                                    _buildSortButton(),
-                                    const SizedBox(width: 8),
-                                    _buildDateButton(),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        // filter chips — slides from bottom
-                        FadeTransition(
-                          opacity: _chipsFade,
-                          child: SlideTransition(
-                            position: _chipsSlide,
-                            child: _buildFilterChips(),
+                        Text(
+                          t(context, 'historyTitle'),
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: _ink,
+                            height: 1.1,
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          t(context, 'historySubtitle'),
+                          style: const TextStyle(fontSize: 13, color: _ink3),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-  Widget _circle(double size, Color color, double opacity) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.withValues(alpha: opacity),
-        ),
-      );
-
-  Widget _buildSortButton() => GestureDetector(
-        onTap: _showSortSheet,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
-            border:
-                Border.all(color: Colors.white.withValues(alpha: 0.25)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.sort_rounded, color: Colors.white, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                t(context, _sortKey),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.keyboard_arrow_down_rounded,
-                  color: Colors.white, size: 16),
+              const SizedBox(width: 12),
+              FadeTransition(
+                opacity: _btnFade,
+                child: SlideTransition(
+                  position: _btnSlide,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildRefreshBtn(),
+                      const SizedBox(width: 8),
+                      _buildNewAppointmentBtn(),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
-        ),
-      );
+          const SizedBox(height: 16),
+          FadeTransition(
+            opacity: _chipsFade,
+            child: SlideTransition(
+              position: _chipsSlide,
+              child: _buildFilterChips(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Widget _buildDateButton() => Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-        ),
-        child: const Icon(Icons.calendar_month_outlined,
-            color: Colors.white, size: 18),
-      );
+  Widget _buildNewAppointmentBtn() => GestureDetector(
+    onTap: () => Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ReservationFlowScreen())),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: _c500,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.calendar_today_rounded,
+            color: Colors.white,
+            size: 15,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            t(context, 'buatJanjiTemu'),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
-  Widget _buildFilterChips() => SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(bottom: 20),
-        child: Row(
-          children: List.generate(_filterTabKeys.length, (i) {
-            final active = i == _filterIndex;
-            return GestureDetector(
-              onTap: () => setState(() => _filterIndex = i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: EdgeInsets.only(right: i < _filterTabKeys.length - 1 ? 8 : 0),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: active
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: active
-                        ? Colors.transparent
-                        : Colors.white.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Text(
-                  t(context, _filterTabKeys[i]),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: active ? _c700 : Colors.white,
-                  ),
+  Widget _buildRefreshBtn() => Tooltip(
+    message: t(context, 'refreshHistory'),
+    child: Material(
+      color: _c100,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: _loadingAppointments ? null : _loadAppointments,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Center(
+            child: _loadingAppointments
+                ? const SizedBox(
+                    width: 17,
+                    height: 17,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _c700,
+                    ),
+                  )
+                : const Icon(Icons.refresh_rounded, color: _c700, size: 20),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  // ── filter chips ──────────────────────────────────────────────────────────
+
+  Widget _buildFilterChips() {
+    final labels = [
+      t(context, 'filterAll'),
+      t(context, 'filterUpcoming'),
+      t(context, 'filterDone'),
+      t(context, 'filterNoShow'),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: List.generate(labels.length, (i) {
+          final active = i == _filterIndex;
+          return GestureDetector(
+            onTap: () => setState(() => _filterIndex = i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: EdgeInsets.only(right: i < labels.length - 1 ? 8 : 0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: active ? _c100 : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: active ? _c500 : const Color(0xFFCCD6D7),
+                  width: 1.5,
                 ),
               ),
-            );
-          }),
-        ),
-      );
+              child: Text(
+                labels[i],
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: active ? _c700 : _ink3,
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
 
   // ── section label ─────────────────────────────────────────────────────────
 
   Widget _buildSectionLabel(String label) => Text(
-        label,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          color: _ink,
+    label,
+    style: const TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w800,
+      color: _ink,
+    ),
+  );
+
+  Widget _buildUpcomingEmptyState() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xFFE1E9E8)),
+    ),
+    child: Column(
+      children: [
+        const Icon(Icons.event_available_rounded, color: _ink3, size: 34),
+        const SizedBox(height: 8),
+        Text(
+          t(context, 'noAppointments'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: _ink3,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      );
+      ],
+    ),
+  );
 
   // ── upcoming card ─────────────────────────────────────────────────────────
 
-  Widget _buildUpcomingCard(AppointmentItem item) => Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [_c700, _c500],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: _c700.withValues(alpha: 0.35),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -20,
-              bottom: -20,
-              child: _circle(100, Colors.white, 0.06),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // top row
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.medical_services_rounded,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.therapistName,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                item.serviceType,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          t(context, 'statusUpcoming'),
-                          style: const TextStyle(
-                            color: _c700,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // info box
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: _infoItem(Icons.calendar_month_outlined,
-                              item.date.split(', ').first, item.date.split(', ').last),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 34,
-                          color: Colors.white.withValues(alpha: 0.25),
-                          margin:
-                              const EdgeInsets.symmetric(horizontal: 10),
-                        ),
-                        Flexible(
-                          child: _infoItem(Icons.access_time_rounded,
-                              item.time.split(' – ').first,
-                              '– ${item.time.split(' – ').last}'),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.arrow_forward_rounded,
-                              color: _c700, size: 18),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-
-  Widget _infoItem(IconData icon, String top, String bottom) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.8)),
-          const SizedBox(width: 7),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(top,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700)),
-                Text(bottom,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontSize: 10)),
-              ],
-            ),
+  Widget _buildUpcomingCard(AppointmentItem item) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: const Border(left: BorderSide(color: _c500, width: 4)),
+        boxShadow: [
+          BoxShadow(
+            color: _ink.withValues(alpha: 0.07),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
-      );
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // avatar + info + badge
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildAvatar(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.serviceType,
+                        style: const TextStyle(
+                          color: _c700,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      _infoRow(
+                        Icons.calendar_month_outlined,
+                        _formatAppointmentDate(item.date),
+                      ),
+                      const SizedBox(height: 4),
+                      _infoRow(Icons.access_time_rounded, item.time),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _c500,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    t(context, 'statusUpcoming'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFF0F5F5)),
+            const SizedBox(height: 12),
+            // therapist row
+            Row(
+              children: [
+                Text(
+                  t(context, 'terapisLabel'),
+                  style: const TextStyle(fontSize: 12, color: _ink3),
+                ),
+                const Spacer(),
+                Text(
+                  item.therapistName,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _ink,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Lihat Detail button
+            SizedBox(
+              width: double.infinity,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => AppointmentDetailScreen(item: item),
+                  ),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                    color: _c500,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    t(context, 'lihatDetail'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
 
   // ── history list ──────────────────────────────────────────────────────────
 
@@ -671,22 +670,31 @@ class _HistoryBodyState extends State<HistoryBody>
     final items = _filteredHistory;
     if (items.isEmpty) {
       return [
-        _anim(3, Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 40),
-            child: Column(
-              children: [
-                Icon(Icons.history_toggle_off_rounded,
-                    size: 52, color: _ink3.withValues(alpha: 0.5)),
-                const SizedBox(height: 12),
-                Text(t(context, 'noAppointments'),
-                    style: const TextStyle(fontSize: 14, color: _ink3)),
-              ],
+        _anim(
+          3,
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.history_toggle_off_rounded,
+                    size: 52,
+                    color: _ink3.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    t(context, 'noHistoryLabel'),
+                    style: const TextStyle(fontSize: 14, color: _ink3),
+                  ),
+                ],
+              ),
             ),
           ),
-        )),
+        ),
       ];
     }
+
     final widgets = <Widget>[];
     for (var i = 0; i < items.length; i++) {
       final animIndex = (3 + i).clamp(0, _kContent - 1);
@@ -696,230 +704,208 @@ class _HistoryBodyState extends State<HistoryBody>
     return widgets;
   }
 
-  Widget _buildHistoryCard(AppointmentItem item) => Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: _ink.withValues(alpha: 0.05),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            // top colored accent bar
-            Container(
-              height: 4,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(18)),
-                color: _statusFg(item.status)
-                    .withValues(alpha: 0.6),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Column(
-                children: [
-                  // header row
-                  Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: _avatarBg(item.status),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          Icons.medical_services_rounded,
-                          color: _avatarFg(item.status),
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.therapistName,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: _ink,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              item.serviceType,
-                              style: const TextStyle(
-                                  fontSize: 11, color: _ink3),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: _statusBg(item.status),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          _statusLabel(context, item.status),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: _statusFg(item.status),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  // divider
-                  const Divider(height: 1, color: Color(0xFFF0F5F5)),
-                  const SizedBox(height: 12),
-                  // info + button row
-                  Row(
-                    children: [
-                      Icon(Icons.calendar_month_outlined,
-                          size: 14, color: _c500),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(item.date,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 11, color: _ink2)),
-                      ),
-                      const SizedBox(width: 10),
-                      Icon(Icons.access_time_rounded,
-                          size: 14, color: _c500),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(item.time,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 11, color: _ink2)),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () {},
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _c100,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                t(context, 'detail'),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: _c700,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              const Icon(Icons.arrow_forward_rounded,
-                                  size: 12, color: _c700),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+  Widget _buildHistoryCard(AppointmentItem item) {
+    final isSelesai = item.status == AppointmentStatus.selesai;
+    final accentColor = _accentBorder(item.status);
+    final serviceColor = isSelesai ? _c700 : _ink;
 
-  // ── sort bottom sheet ─────────────────────────────────────────────────────
+    final badgeBg = isSelesai ? Colors.transparent : const Color(0xFFFFECEB);
+    final badgeFg = isSelesai ? _c700 : const Color(0xFFD94F45);
+    final badgeBorder = isSelesai ? _c700 : const Color(0xFFD94F45);
+    final badgeLabel = isSelesai
+        ? t(context, 'statusDone')
+        : t(context, 'statusExpired');
 
-  void _showSortSheet() {
-    final sortOptions = [
-      ('sortNewest', Icons.arrow_downward_rounded),
-      ('sortOldest', Icons.arrow_upward_rounded),
-      ('sortByDate', Icons.category_rounded),
-    ];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border(left: BorderSide(color: accentColor, width: 4)),
+        boxShadow: [
+          BoxShadow(
+            color: _ink.withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDDE5E5),
-                  borderRadius: BorderRadius.circular(2),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildAvatar(size: 48),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.serviceType,
+                        style: TextStyle(
+                          color: serviceColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      _infoRow(
+                        Icons.calendar_month_outlined,
+                        _formatAppointmentDate(item.date),
+                        fontSize: 11,
+                      ),
+                      const SizedBox(height: 3),
+                      _infoRow(
+                        Icons.access_time_rounded,
+                        item.time,
+                        fontSize: 11,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              t(ctx, 'sortLabel'),
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: _ink,
-              ),
-            ),
-            const SizedBox(height: 12),
-            for (final opt in sortOptions)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
+                // badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
-                    color: _sortKey == opt.$1
-                        ? _c100
-                        : const Color(0xFFF5F8F8),
-                    borderRadius: BorderRadius.circular(10),
+                    color: badgeBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: badgeBorder, width: 1.2),
                   ),
-                  child: Icon(
-                    opt.$2,
-                    size: 16,
-                    color: _sortKey == opt.$1 ? _c700 : _ink3,
-                  ),
-                ),
-                title: Text(
-                  t(ctx, opt.$1),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: _sortKey == opt.$1 ? _c700 : _ink,
+                  child: Text(
+                    badgeLabel,
+                    style: TextStyle(
+                      color: badgeFg,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                trailing: _sortKey == opt.$1
-                    ? const Icon(Icons.check_circle_rounded, color: _c500)
-                    : null,
-                onTap: () {
-                  setState(() => _sortKey = opt.$1);
-                  Navigator.pop(ctx);
-                },
-              ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFF0F5F5)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text(
+                  t(context, 'terapisLabel'),
+                  style: const TextStyle(fontSize: 12, color: _ink3),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.therapistName,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _ink,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => AppointmentDetailScreen(item: item),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        t(context, 'lihatDetail'),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _c500,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 13,
+                        color: _c500,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
           ],
         ),
       ),
     );
   }
+
+  String _formatAppointmentDate(String rawDate) {
+    final parsed = DateTime.tryParse(rawDate);
+    if (parsed == null) return rawDate;
+    final isEnglish = AppLanguageScope.current(context) == AppLanguage.en;
+    final weekdays = isEnglish
+        ? const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        : const ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    final months = isEnglish
+        ? const [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+          ]
+        : const [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'Mei',
+            'Jun',
+            'Jul',
+            'Agu',
+            'Sep',
+            'Okt',
+            'Nov',
+            'Des',
+          ];
+    return '${weekdays[parsed.weekday - 1]}, ${parsed.day.toString().padLeft(2, '0')} ${months[parsed.month - 1]} ${parsed.year}';
+  }
+
+  // ── shared widgets ────────────────────────────────────────────────────────
+
+  Widget _buildAvatar({double size = 52}) => Container(
+    width: size,
+    height: size,
+    decoration: const BoxDecoration(
+      shape: BoxShape.circle,
+      color: Color(0xFFE8EFEF),
+    ),
+    child: const Icon(Icons.person_rounded, color: _ink3, size: 26),
+  );
+
+  Widget _infoRow(IconData icon, String text, {double fontSize = 12}) => Row(
+    children: [
+      Icon(icon, size: 13, color: _ink3),
+      const SizedBox(width: 5),
+      Flexible(
+        child: Text(
+          text,
+          style: TextStyle(fontSize: fontSize, color: _ink),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ],
+  );
 }

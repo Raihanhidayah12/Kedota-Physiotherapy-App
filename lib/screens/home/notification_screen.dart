@@ -1,5 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../l10n/app_language.dart';
 import '../../services/notification_service.dart';
+import '../../services/supabase_auth_service.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -10,48 +17,107 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen> {
   // Theme colors
-  static const _c900 = Color(0xFF004D47);
   static const _c700 = Color(0xFF007F78);
   static const _c500 = Color(0xFF00A79D);
-  static const _c100 = Color(0xFFD4F5F3);
-  static const _bg   = Color(0xFFF0F7F7);
-  static const _ink  = Color(0xFF0E2C2F);
+  static const _bg = Color(0xFFF0F7F7);
+  static const _ink = Color(0xFF0E2C2F);
   static const _ink2 = Color(0xFF436569);
   static const _ink3 = Color(0xFF8AA8AC);
+  List<Map<String, dynamic>> _appointmentNotifications = [];
+  bool _showWelcomeNotification = false;
+  bool _loading = true;
+  bool _notificationsEnabled = false;
 
-  // Dummy notifications
-  final List<Map<String, dynamic>> _notifications = [
-    {
-      'title': 'Jadwal Fisioterapi Besok',
-      'body': 'Jangan lupa jadwal sesi terapi Anda besok jam 10:00 WIB di Klinik Pusat.',
-      'time': 'Baru saja',
-      'icon': Icons.calendar_month_rounded,
-      'color': _c500,
-      'isUnread': true,
-    },
-    {
-      'title': 'Update Profil Berhasil',
-      'body': 'Data profil Anda telah berhasil diperbarui ke sistem kami.',
-      'time': '2 jam yang lalu',
-      'icon': Icons.check_circle_rounded,
-      'color': Colors.green,
-      'isUnread': true,
-    },
-    {
-      'title': 'Promo Spesial 20%',
-      'body': 'Dapatkan diskon 20% untuk paket terapi punggung. Berlaku hingga akhir bulan!',
-      'time': 'Kemarin',
-      'icon': Icons.local_offer_rounded,
-      'color': Colors.orange,
-      'isUnread': false,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _checkNotificationPermission();
+    _loadAppointmentNotifications();
+  }
+
+  Future<void> _checkNotificationPermission() async {
+    try {
+      if (!Platform.isAndroid && !Platform.isIOS) {
+        if (mounted) setState(() => _notificationsEnabled = true);
+        return;
+      }
+      final permission = await Permission.notification.status;
+      var enabled = permission.isGranted;
+      if (Platform.isAndroid && enabled) {
+        enabled =
+            await FlutterLocalNotificationsPlugin()
+                .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin
+                >()
+                ?.areNotificationsEnabled() ??
+            enabled;
+      }
+      if (mounted) setState(() => _notificationsEnabled = enabled);
+    } catch (error) {
+      debugPrint('Notification permission check failed: $error');
+    }
+  }
+
+  Future<void> _toggleNotifications(bool enabled) async {
+    if (!enabled) {
+      await openAppSettings();
+      return;
+    }
+
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      setState(() => _notificationsEnabled = true);
+      return;
+    }
+
+    final permission = await Permission.notification.request();
+    if (!mounted) return;
+    if (permission.isGranted) {
+      setState(() => _notificationsEnabled = true);
+      return;
+    }
+
+    if (permission.isPermanentlyDenied) {
+      await openAppSettings();
+    }
+    await _checkNotificationPermission();
+  }
+
+  Future<void> _loadAppointmentNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final welcomeSent = prefs.getBool('welcome_notification_sent') ?? false;
+      final service = SupabaseAuthService();
+      final user = service.client.auth.currentUser;
+      if (user == null) {
+        return;
+      }
+      final rows = await service.client
+          .from('appointments')
+          .select(
+            'service_type, appointment_date, appointment_time, appointment_status, created_at',
+          )
+          .eq('booker_id', user.id)
+          .order('created_at', ascending: false);
+      if (mounted) {
+        setState(() {
+          _showWelcomeNotification = welcomeSent;
+          _appointmentNotifications = (rows as List)
+              .map((row) => row as Map<String, dynamic>)
+              .toList();
+        });
+      }
+    } catch (error) {
+      debugPrint('Notifications load failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   void _triggerTestNotification() async {
     await NotificationService().showNotification(
       id: 101,
-      title: 'Halo dari Kedota!',
-      body: 'Ini adalah contoh notifikasi langsung dari aplikasi Anda.',
+      title: t(context, 'notificationTestTitle'),
+      body: t(context, 'notificationTestBody'),
       payload: 'test_payload',
     );
   }
@@ -72,9 +138,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
               icon: const Icon(Icons.arrow_back_rounded),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: const Text('Notifikasi',
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w800, color: _ink)),
+            title: const Text(
+              'Notifikasi',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: _ink,
+              ),
+            ),
             centerTitle: true,
             actions: [
               IconButton(
@@ -84,15 +155,48 @@ class _NotificationScreenState extends State<NotificationScreen> {
               ),
             ],
           ),
+          SliverToBoxAdapter(child: _buildNotificationToggle()),
           SliverPadding(
             padding: const EdgeInsets.all(20),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
-                  final notif = _notifications[index];
+                  if (_loading) {
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 32),
+                      child: Center(
+                        child: CircularProgressIndicator(color: _c500),
+                      ),
+                    );
+                  }
+                  if (_appointmentNotifications.isEmpty &&
+                      !_showWelcomeNotification) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 32),
+                      child: Center(
+                        child: Text(
+                          t(context, 'noNotifications'),
+                          style: const TextStyle(color: _ink3),
+                        ),
+                      ),
+                    );
+                  }
+                  final notif = _showWelcomeNotification && index == 0
+                      ? _buildWelcomeNotification(context)
+                      : _buildAppointmentNotification(
+                          context,
+                          _appointmentNotifications[index -
+                              (_showWelcomeNotification ? 1 : 0)],
+                        );
                   return _buildNotificationCard(notif);
                 },
-                childCount: _notifications.length,
+                childCount:
+                    _loading ||
+                        (_appointmentNotifications.isEmpty &&
+                            !_showWelcomeNotification)
+                    ? 1
+                    : _appointmentNotifications.length +
+                          (_showWelcomeNotification ? 1 : 0),
               ),
             ),
           ),
@@ -101,9 +205,105 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
+  Widget _buildNotificationToggle() => Container(
+    margin: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [
+        BoxShadow(
+          color: _ink.withValues(alpha: 0.04),
+          blurRadius: 14,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: _c500.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.notifications_active_outlined,
+            color: _c700,
+            size: 22,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t(context, 'notifPushTitle'),
+                style: const TextStyle(
+                  color: _ink,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                t(context, 'notifPushSubtitle'),
+                style: const TextStyle(color: _ink2, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        Switch.adaptive(
+          value: _notificationsEnabled,
+          activeThumbColor: _c500,
+          onChanged: _toggleNotifications,
+        ),
+      ],
+    ),
+  );
+
+  Map<String, dynamic> _buildAppointmentNotification(
+    BuildContext context,
+    Map<String, dynamic> row,
+  ) {
+    final service = row['service_type']?.toString() ?? 'Home Care';
+    final date = row['appointment_date']?.toString() ?? '-';
+    final time = row['appointment_time']?.toString() ?? '-';
+    final status = row['appointment_status']?.toString();
+    return {
+      'title': t(context, 'notificationReservationTitle'),
+      'body': t(context, 'notificationReservationBody')
+          .replaceFirst(
+            '{service}',
+            service == 'Klinik' ? t(context, 'klinik') : t(context, 'homeCare'),
+          )
+          .replaceFirst('{date}', date)
+          .replaceFirst('{time}', time),
+      'time': switch (status) {
+        'completed' => t(context, 'statusDone'),
+        'expired' => t(context, 'statusExpired'),
+        'cancelled' => t(context, 'statusCancelled'),
+        _ => t(context, 'statusUpcoming'),
+      },
+      'icon': Icons.calendar_month_rounded,
+      'color': _c500,
+      'isUnread': true,
+    };
+  }
+
+  Map<String, dynamic> _buildWelcomeNotification(BuildContext context) => {
+    'title': t(context, 'welcomeNotificationTitle'),
+    'body': t(context, 'welcomeNotificationBody'),
+    'time': t(context, 'notificationJustNow'),
+    'icon': Icons.celebration_rounded,
+    'color': _c500,
+    'isUnread': true,
+  };
+
   Widget _buildNotificationCard(Map<String, dynamic> notif) {
     final bool isUnread = notif['isUnread'];
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -115,7 +315,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
             color: _ink.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 4),
-          )
+          ),
         ],
       ),
       child: Row(
@@ -142,7 +342,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         notif['title'],
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: isUnread ? FontWeight.w800 : FontWeight.w700,
+                          fontWeight: isUnread
+                              ? FontWeight.w800
+                              : FontWeight.w700,
                           color: _ink,
                         ),
                       ),

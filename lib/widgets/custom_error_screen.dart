@@ -72,7 +72,7 @@ class CustomErrorScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (customAction != null) customAction!,
+                  ?customAction,
                   if (buttonText != null && onButtonPressed != null)
                     SizedBox(
                       width: double.infinity,

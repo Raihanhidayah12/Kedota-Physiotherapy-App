@@ -99,20 +99,27 @@ class _ProgressBodyState extends State<ProgressBody>
   // ── Data dummy ────────────────────────────────────────────────────────────
 
   final _weeklyData = [
-    // minggu ini
-    [8.0, 7.5, 6.5, 6.0, 5.0, 4.5, 4.0],
-    // minggu lalu
-    [9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0],
-    // 2 minggu lalu
-    [10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0],
+    // minggu ini (progress bagus, pain menurun tajam)
+    [8.0, 7.2, 6.5, 5.8, 4.5, 4.2, 4.0],
+    // minggu lalu (masih tinggi, progress lambat)
+    [9.5, 9.0, 8.8, 8.5, 8.2, 8.5, 8.0],
+    // 2 minggu lalu (awal terapi, pain score tinggi)
+    [10.0, 9.8, 9.5, 9.5, 9.2, 9.0, 9.5],
   ];
 
   final _sessionData = [
-    _SessionItem(date: 'Sel, 29 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 4.0, duration: '60 min', status: _SStatus.done),
-    _SessionItem(date: 'Sel, 22 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 5.0, duration: '60 min', status: _SStatus.done),
-    _SessionItem(date: 'Sel, 15 Agu', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 6.5, duration: '45 min', status: _SStatus.done),
-    _SessionItem(date: 'Sel, 08 Agu', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 7.0, duration: '45 min', status: _SStatus.done),
-    _SessionItem(date: 'Sel, 01 Agu', therapist: 'Budi Santoso',    service: 'Home Care', score: 8.0, duration: '60 min', status: _SStatus.done),
+    _SessionItem(date: 'Sen, 02 Sep', therapist: 'Marvin McKinney', service: 'Home Care', score: 4.0, duration: '60 min', status: _SStatus.done),
+    _SessionItem(date: 'Kam, 29 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 4.2, duration: '60 min', status: _SStatus.done),
+    _SessionItem(date: 'Sen, 26 Agu', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 4.5, duration: '45 min', status: _SStatus.done),
+    _SessionItem(date: 'Kam, 22 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 5.8, duration: '60 min', status: _SStatus.done),
+    _SessionItem(date: 'Sen, 19 Agu', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 6.5, duration: '45 min', status: _SStatus.done),
+    _SessionItem(date: 'Kam, 15 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 7.2, duration: '60 min', status: _SStatus.done),
+    _SessionItem(date: 'Sen, 12 Agu', therapist: 'Budi Santoso',    service: 'Home Care', score: 8.0, duration: '60 min', status: _SStatus.done),
+    _SessionItem(date: 'Kam, 08 Agu', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 8.5, duration: '45 min', status: _SStatus.done),
+    _SessionItem(date: 'Sen, 05 Agu', therapist: 'Budi Santoso',    service: 'Klinik',    score: 8.8, duration: '45 min', status: _SStatus.done),
+    _SessionItem(date: 'Kam, 01 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 9.0, duration: '60 min', status: _SStatus.done),
+    _SessionItem(date: 'Sen, 29 Jul', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 9.5, duration: '45 min', status: _SStatus.done),
+    _SessionItem(date: 'Kam, 25 Jul', therapist: 'Budi Santoso',    service: 'Home Care', score: 10.0, duration: '60 min', status: _SStatus.done),
   ];
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -135,7 +142,7 @@ class _ProgressBodyState extends State<ProgressBody>
                 const SizedBox(height: 20),
                 _anim(2, _buildStatRow()),
                 const SizedBox(height: 28),
-                _anim(3, _buildSectionLabel('Riwayat Sesi')),
+                _anim(3, _buildSectionLabel(t(context, 'progressSessionHistoryTitle'))),
                 const SizedBox(height: 14),
                 _anim(4, _buildSessionList()),
               ]),
@@ -187,9 +194,9 @@ class _ProgressBodyState extends State<ProgressBody>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Progress',
-                              style: TextStyle(
+                            Text(
+                              t(context, 'progressTitle'),
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 26,
                                 fontWeight: FontWeight.w800,
@@ -197,9 +204,9 @@ class _ProgressBodyState extends State<ProgressBody>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Pantau perkembangan rehabilitasi Anda',
+                              t(context, 'progressSubtitle'),
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
+                                color: Colors.white.withValues(alpha: 0.9),
                                 fontSize: 13,
                               ),
                             ),
@@ -208,13 +215,13 @@ class _ProgressBodyState extends State<ProgressBody>
                             Row(
                               children: [
                                 _buildHeaderChip(
-                                    Icons.event_available_rounded, '12', 'Total Sesi'),
+                                    Icons.event_available_rounded, '12', t(context, 'progressTotalSessions')),
                                 const SizedBox(width: 10),
                                 _buildHeaderChip(
-                                    Icons.trending_down_rounded, '4.0', 'Pain Score'),
+                                    Icons.trending_down_rounded, '4.0', t(context, 'progressPainScore')),
                                 const SizedBox(width: 10),
                                 _buildHeaderChip(
-                                    Icons.timer_outlined, '60 min', 'Rata-rata'),
+                                    Icons.timer_outlined, '55 min', t(context, 'progressAverage')),
                               ],
                             ),
                           ],
@@ -272,7 +279,11 @@ class _ProgressBodyState extends State<ProgressBody>
   // ── Week selector ─────────────────────────────────────────────────────────
 
   Widget _buildWeekSelector() {
-    final labels = ['Minggu Ini', 'Minggu Lalu', '2 Minggu Lalu'];
+    final labels = [
+      t(context, 'progressWeekThis'),
+      t(context, 'progressWeekLast'),
+      t(context, 'progressWeek2Ago'),
+    ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -333,18 +344,18 @@ class _ProgressBodyState extends State<ProgressBody>
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Pain Score',
-                          style: TextStyle(
+                      Text(t(context, 'progressPainChartTitle'),
+                          style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
                               color: _ink)),
-                      SizedBox(height: 2),
-                      Text('Skala 0–10 (lebih rendah lebih baik)',
-                          style: TextStyle(fontSize: 11, color: _ink3)),
+                      const SizedBox(height: 2),
+                      Text(t(context, 'progressPainChartDesc'),
+                          style: const TextStyle(fontSize: 11, color: _ink3)),
                     ],
                   ),
                 ),
@@ -361,7 +372,7 @@ class _ProgressBodyState extends State<ProgressBody>
                       const Icon(Icons.trending_down_rounded,
                           size: 13, color: _c700),
                       const SizedBox(width: 4),
-                      Text('−4.0 pts',
+                      Text(t(context, 'progressPainTrend'),
                           style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -388,14 +399,14 @@ class _ProgressBodyState extends State<ProgressBody>
   Widget _buildStatRow() => Row(
         children: [
           Expanded(child: _buildStatCard(
-              Icons.check_circle_rounded, '12', 'Sesi Selesai', _c500, _c100)),
+              Icons.check_circle_rounded, '12', t(context, 'progressStatCompleted'), _c500, _c100)),
           const SizedBox(width: 12),
           Expanded(child: _buildStatCard(
-              Icons.schedule_rounded, '2', 'Sesi Mendatang',
+              Icons.schedule_rounded, '2', t(context, 'progressStatUpcoming'),
               const Color(0xFFD4920A), const Color(0xFFFFEEB0))),
           const SizedBox(width: 12),
           Expanded(child: _buildStatCard(
-              Icons.sentiment_satisfied_rounded, '83%', 'Kepuasan',
+              Icons.sentiment_satisfied_rounded, '83%', t(context, 'progressStatSatisfaction'),
               const Color(0xFF5B5FC8), const Color(0xFFEEEFFF))),
         ],
       );
@@ -514,7 +525,9 @@ class _ProgressBodyState extends State<ProgressBody>
                             color: _c100,
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Text(item.service,
+                          child: Text(item.service == 'Home Care' 
+                              ? t(context, 'progressServiceHomeCare')
+                              : t(context, 'progressServiceKlinik'),
                               style: const TextStyle(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w700,
@@ -544,8 +557,8 @@ class _ProgressBodyState extends State<ProgressBody>
                       color: _c500,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text('Selesai',
-                        style: TextStyle(
+                    child: Text(t(context, 'progressSessionDone'),
+                        style: const TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
                             color: Colors.white)),

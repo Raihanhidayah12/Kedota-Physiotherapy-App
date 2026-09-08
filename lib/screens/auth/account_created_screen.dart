@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../l10n/app_language.dart';
+import '../../services/notification_service.dart';
 import '../home/main_screen.dart';
 
 class AccountCreatedScreen extends StatefulWidget {
@@ -10,21 +12,58 @@ class AccountCreatedScreen extends StatefulWidget {
   State<AccountCreatedScreen> createState() => _AccountCreatedScreenState();
 }
 
-class _AccountCreatedScreenState extends State<AccountCreatedScreen> {
-  int _countdown = 5;
+class _AccountCreatedScreenState extends State<AccountCreatedScreen>
+    with SingleTickerProviderStateMixin {
+  int _countdown = 3;
   Timer? _timer;
+  late final AnimationController _iconController;
+  late final Animation<double> _iconScale;
+  late final Animation<double> _iconFade;
 
   @override
   void initState() {
     super.initState();
+    _iconController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    );
+    _iconScale = CurvedAnimation(
+      parent: _iconController,
+      curve: Curves.elasticOut,
+    );
+    _iconFade = CurvedAnimation(
+      parent: _iconController,
+      curve: const Interval(0, 0.45, curve: Curves.easeOut),
+    );
+    _iconController.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sendWelcomeNotification();
+    });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) { timer.cancel(); return; }
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       setState(() => _countdown--);
       if (_countdown <= 0) {
         timer.cancel();
         _goToHome();
       }
     });
+  }
+
+  Future<void> _sendWelcomeNotification() async {
+    final title = t(context, 'welcomeNotificationTitle');
+    final body = t(context, 'welcomeNotificationBody');
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('welcome_notification_sent') ?? false) return;
+    await NotificationService().showNotification(
+      id: 200,
+      title: title,
+      body: body,
+      payload: 'welcome_new_patient_promo',
+    );
+    await prefs.setBool('welcome_notification_sent', true);
   }
 
   void _goToHome() {
@@ -38,195 +77,82 @@ class _AccountCreatedScreenState extends State<AccountCreatedScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _iconController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = t(
+      context,
+      'accountCreatedCountdown',
+    ).replaceFirst('%s', '$_countdown');
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9F9),
       body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            // Logo Header
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Column(
-                children: [
-                  Image.asset(
-                    'assets/image/logo 2.png',
-                    height: 56,
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'K E D O T A',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF00A79D),
-                      letterSpacing: 4.0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'P H Y S I O T H E R A P Y',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF00A79D).withValues(alpha: 0.85),
-                      letterSpacing: 4.5,
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fade(duration: 500.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
-
-            // White Card
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
-                  child: Column(
-                    children: [
-                      // Icon centang dalam lingkaran
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFFE8F6F4),
-                          border: Border.all(
-                            color: const Color(0xFF00A79D).withValues(alpha: 0.25),
-                            width: 2,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.check_circle_rounded,
-                          color: Color(0xFF00A79D),
-                          size: 60,
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      const Text(
-                        'Akun Berhasil Dibuat!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Selamat bergabung di Kedota Physiotherapy!\nAkun kamu sudah siap digunakan.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF64748B),
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 36),
-
-                      // Countdown bar
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 30,
-                              height: 30,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  CircularProgressIndicator(
-                                    value: _countdown / 5,
-                                    strokeWidth: 2.5,
-                                    backgroundColor: const Color(0xFFE2E8F0),
-                                    color: const Color(0xFF00A79D),
-                                  ),
-                                  Text(
-                                    '$_countdown',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: Color(0xFF00A79D),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            const Text(
-                              'Masuk ke beranda otomatis...',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-
-                      // Tombol Masuk Beranda dengan gradient
-                      SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF007F78), Color(0xFF00A79D)],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: ElevatedButton(
-                            onPressed: () {
-                              _timer?.cancel();
-                              _goToHome();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text(
-                              'Masuk Beranda',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FadeTransition(
+                  opacity: _iconFade,
+                  child: ScaleTransition(
+                    scale: _iconScale,
+                    child: _buildSuccessIcon(),
                   ),
                 ),
-              ),
+                const SizedBox(height: 18),
+                Text(
+                  t(context, 'accountCreatedTitle'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF00A79D),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    height: 1.5,
+                    color: Color(0xFF5F686A),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _buildSuccessIcon() => Container(
+    width: 120,
+    height: 120,
+    decoration: const BoxDecoration(
+      shape: BoxShape.circle,
+      color: Color(0xFFE5F4F0),
+    ),
+    padding: const EdgeInsets.all(10),
+    child: Container(
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFFBDE8D9),
+      ),
+      padding: const EdgeInsets.all(9),
+      child: Container(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: Color(0xFF43B67E),
+        ),
+        child: const Icon(Icons.check_rounded, color: Colors.white, size: 58),
+      ),
+    ),
+  );
 }

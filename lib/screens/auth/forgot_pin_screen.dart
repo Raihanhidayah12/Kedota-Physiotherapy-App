@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../l10n/app_language.dart';
+import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../utils/phone_validator.dart';
 import '../../widgets/custom_bottom_sheet.dart';
@@ -57,12 +58,20 @@ class ForgotPinAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       centerTitle: true,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF1E293B), size: 22),
+        icon: const Icon(
+          Icons.arrow_back_rounded,
+          color: Color(0xFF1E293B),
+          size: 22,
+        ),
         onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
       ),
-      title: const Text(
-        'Lupa PIN',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+      title: Text(
+        t(context, 'forgotPinTitle'),
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF1E293B),
+        ),
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(16),
@@ -77,7 +86,9 @@ class ForgotPinAppBar extends StatelessWidget implements PreferredSizeWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   height: 4,
                   decoration: BoxDecoration(
-                    color: isActive ? const Color(0xFF00A79D) : const Color(0xFFE2E8F0),
+                    color: isActive
+                        ? const Color(0xFF00A79D)
+                        : const Color(0xFFE2E8F0),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -150,7 +161,8 @@ class ForgotPinOtpScreen extends StatefulWidget {
   State<ForgotPinOtpScreen> createState() => _ForgotPinOtpScreenState();
 }
 
-class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen> {
+class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen>
+    with SecureScreenMixin {
   final _otpController = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _timer;
@@ -248,8 +260,8 @@ class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Title
-              const Text(
-                'Verifikasi OTP',
+              Text(
+                t(context, 'otpVerificationTitle'),
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -305,8 +317,10 @@ class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       // Tidak ada minimum clamp agar tidak overflow di layar sempit
-                      final boxSize = ((constraints.maxWidth - 36) / 4)
-                          .clamp(0.0, 72.0);
+                      final boxSize = ((constraints.maxWidth - 36) / 4).clamp(
+                        0.0,
+                        72.0,
+                      );
                       return Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(4, (index) {
@@ -316,8 +330,7 @@ class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen> {
                               : '';
 
                           return Container(
-                            margin:
-                                EdgeInsets.only(right: index == 3 ? 0 : 12),
+                            margin: EdgeInsets.only(right: index == 3 ? 0 : 12),
                             width: boxSize,
                             height: boxSize * 1.07,
                             decoration: BoxDecoration(
@@ -330,9 +343,10 @@ class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen> {
                                           ? const Color(0xFF00A79D)
                                           : const Color(0xFFE2E8F0)),
                                 width:
-                                    _isError || (isActive && _focusNode.hasFocus)
-                                        ? 1.5
-                                        : 1.0,
+                                    _isError ||
+                                        (isActive && _focusNode.hasFocus)
+                                    ? 1.5
+                                    : 1.0,
                               ),
                               boxShadow: [
                                 BoxShadow(
@@ -462,7 +476,8 @@ class _ForgotPinBlinkingCursor extends StatefulWidget {
   const _ForgotPinBlinkingCursor();
 
   @override
-  State<_ForgotPinBlinkingCursor> createState() => _ForgotPinBlinkingCursorState();
+  State<_ForgotPinBlinkingCursor> createState() =>
+      _ForgotPinBlinkingCursorState();
 }
 
 class _ForgotPinBlinkingCursorState extends State<_ForgotPinBlinkingCursor>
@@ -508,7 +523,8 @@ class ForgotPinScreen extends StatefulWidget {
   State<ForgotPinScreen> createState() => _ForgotPinScreenState();
 }
 
-class _ForgotPinScreenState extends State<ForgotPinScreen> {
+class _ForgotPinScreenState extends State<ForgotPinScreen>
+    with SecureScreenMixin {
   final _phoneController = TextEditingController();
   final _phoneFocusNode = FocusNode();
   bool _isLoading = false;
@@ -532,7 +548,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
     CustomBottomSheet.show(
       context,
       type: isError ? BottomSheetType.error : BottomSheetType.success,
-      title: isError ? 'Informasi' : 'Berhasil',
+      title: isError ? t(context, 'infoTitle') : t(context, 'successTitle'),
       subtitle: message,
       singleButtonText: t(context, 'closeBtn'),
       onSinglePressed: () => Navigator.of(context).pop(),
@@ -601,7 +617,10 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
       child: Column(
         children: [
           // Header teal
-          _buildLogoHeader(context).animate().fade(duration: 500.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
+          _buildLogoHeader(context)
+              .animate()
+              .fade(duration: 500.ms)
+              .slideY(begin: 0.2, curve: Curves.easeOutQuad),
           // White card bawah
           Expanded(
             child: Container(
@@ -614,144 +633,153 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Judul + deskripsi
-                    Text(
-                      t(context, 'enterPhoneNumberTitle'),
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      t(context, 'forgotPinDesc'),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
-                        height: 1.45,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Label
-                    Text(
-                      t(context, 'phoneNumber'),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Input nomor telepon — sama dengan sign_in_screen
-                    GestureDetector(
-                      onTap: () => _phoneFocusNode.requestFocus(),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _phoneFocusNode.hasFocus
-                                ? const Color(0xFF00A79D)
-                                : const Color(0xFFE2E8F0),
-                            width: _phoneFocusNode.hasFocus ? 1.5 : 1.0,
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            _buildIndonesianFlag(),
-                            const SizedBox(width: 8),
-                            const Text(
-                              '+62',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                  children:
+                      [
+                            // Judul + deskripsi
+                            Text(
+                              t(context, 'enterPhoneNumberTitle'),
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
                                 color: Color(0xFF1E293B),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Container(
-                              width: 1,
-                              height: 20,
-                              color: const Color(0xFFE2E8F0),
+                            const SizedBox(height: 6),
+                            Text(
+                              t(context, 'forgotPinDesc'),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF64748B),
+                                height: 1.45,
+                              ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: _phoneController,
-                                focusNode: _phoneFocusNode,
-                                keyboardType: TextInputType.phone,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(13),
-                                ],
-                                decoration: InputDecoration(
-                                  border: InputBorder.none,
-                                  hintText: t(context, 'phoneExample'),
-                                  hintStyle: const TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontSize: 14,
+                            const SizedBox(height: 24),
+                            // Label
+                            Text(
+                              t(context, 'phoneNumber'),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Input nomor telepon — sama dengan sign_in_screen
+                            GestureDetector(
+                              onTap: () => _phoneFocusNode.requestFocus(),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: _phoneFocusNode.hasFocus
+                                        ? const Color(0xFF00A79D)
+                                        : const Color(0xFFE2E8F0),
+                                    width: _phoneFocusNode.hasFocus ? 1.5 : 1.0,
                                   ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    _buildIndonesianFlag(),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      '+62',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      width: 1,
+                                      height: 20,
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _phoneController,
+                                        focusNode: _phoneFocusNode,
+                                        keyboardType: TextInputType.phone,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter
+                                              .digitsOnly,
+                                          LengthLimitingTextInputFormatter(13),
+                                        ],
+                                        decoration: InputDecoration(
+                                          border: InputBorder.none,
+                                          hintText: t(context, 'phoneExample'),
+                                          hintStyle: const TextStyle(
+                                            color: Color(0xFF94A3B8),
+                                            fontSize: 14,
+                                          ),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                vertical: 14,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Tombol Kirim OTP
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF007F78), Color(0xFF00A79D)],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _resetPin,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.4,
+                            const SizedBox(height: 20),
+                            // Tombol Kirim OTP
+                            SizedBox(
+                              width: double.infinity,
+                              height: 52,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF007F78),
+                                      Color(0xFF00A79D),
+                                    ],
                                   ),
-                                )
-                              : Text(
-                                  t(context, 'sendOtp'),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
-                        ),
-                      ),
-                    ),
-                    ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
-                  ),
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _resetPin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2.4,
+                                          ),
+                                        )
+                                      : Text(
+                                          t(context, 'sendOtp'),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ),
+                          ]
+                          .animate(interval: 50.ms)
+                          .fade(duration: 400.ms)
+                          .slideY(begin: 0.1, curve: Curves.easeOutQuad),
+                ),
               ),
             ),
           ),
@@ -759,10 +787,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
       ),
     );
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F9),
-      body: content,
-    );
+    return Scaffold(backgroundColor: const Color(0xFFF7F9F9), body: content);
   }
 
   Widget _buildIndonesianFlag() {
@@ -784,10 +809,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen> {
               ),
             ),
             Expanded(
-              child: Container(
-                width: double.infinity,
-                color: Colors.white,
-              ),
+              child: Container(width: double.infinity, color: Colors.white),
             ),
           ],
         ),
@@ -850,7 +872,7 @@ class _BirthDateVerificationScreenState
     CustomBottomSheet.show(
       context,
       type: isError ? BottomSheetType.error : BottomSheetType.success,
-      title: isError ? 'Informasi' : 'Berhasil',
+      title: isError ? t(context, 'infoTitle') : t(context, 'successTitle'),
       subtitle: message,
       singleButtonText: t(context, 'closeBtn'),
       onSinglePressed: () => Navigator.of(context).pop(),
@@ -953,17 +975,29 @@ class _BirthDateVerificationScreenState
             children: [
               const Text(
                 'Verifikasi Tanggal Lahir',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1E293B),
+                ),
               ),
               const SizedBox(height: 6),
               Text(
                 t(context, 'verifyBirthDateDesc'),
-                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.45),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF64748B),
+                  height: 1.45,
+                ),
               ),
               const SizedBox(height: 28),
               const Text(
                 'Tanggal Lahir',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E293B),
+                ),
               ),
               const SizedBox(height: 8),
               Container(
@@ -971,7 +1005,9 @@ class _BirthDateVerificationScreenState
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _isDobError ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0),
+                    color: _isDobError
+                        ? const Color(0xFFEF4444)
+                        : const Color(0xFFE2E8F0),
                     width: _isDobError ? 1.5 : 1.0,
                   ),
                 ),
@@ -986,10 +1022,17 @@ class _BirthDateVerificationScreenState
                           FilteringTextInputFormatter.allow(RegExp(r'[\d/]')),
                           LengthLimitingTextInputFormatter(10),
                         ],
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF1E293B)),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF1E293B),
+                        ),
                         decoration: const InputDecoration(
                           hintText: 'dd/mm/yyyy',
-                          hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                          hintStyle: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 14,
+                          ),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.symmetric(vertical: 14),
                         ),
@@ -997,7 +1040,11 @@ class _BirthDateVerificationScreenState
                     ),
                     IconButton(
                       onPressed: _pickDate,
-                      icon: const Icon(Icons.calendar_today_outlined, color: Color(0xFF00A79D), size: 20),
+                      icon: const Icon(
+                        Icons.calendar_today_outlined,
+                        color: Color(0xFF00A79D),
+                        size: 20,
+                      ),
                     ),
                   ],
                 ),
@@ -1006,7 +1053,10 @@ class _BirthDateVerificationScreenState
                 const SizedBox(height: 6),
                 Text(
                   t(context, 'selectBirthDateError'),
-                  style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFEF4444),
+                  ),
                 ),
               ],
               const SizedBox(height: 24),
@@ -1026,22 +1076,39 @@ class _BirthDateVerificationScreenState
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: ElevatedButton(
-                    onPressed: (_isLoading || _cooldownSeconds > 0) ? null : _verifyBirthDate,
+                    onPressed: (_isLoading || _cooldownSeconds > 0)
+                        ? null
+                        : _verifyBirthDate,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
                       foregroundColor: Colors.white,
                       disabledBackgroundColor: Colors.transparent,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                     ),
                     child: _isLoading
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
                         : Text(
                             _cooldownSeconds > 0
-                                ? t(context, 'wait30Seconds').replaceAll('{seconds}', '$_cooldownSeconds')
+                                ? t(
+                                    context,
+                                    'wait30Seconds',
+                                  ).replaceAll('{seconds}', '$_cooldownSeconds')
                                 : 'Konfirmasi',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                   ),
                 ),
@@ -1054,14 +1121,6 @@ class _BirthDateVerificationScreenState
   }
 }
 
-
-
-
-
-
-
-
-
 class ResetPinFormScreen extends StatefulWidget {
   final String phoneNumber;
 
@@ -1071,7 +1130,8 @@ class ResetPinFormScreen extends StatefulWidget {
   State<ResetPinFormScreen> createState() => _ResetPinFormScreenState();
 }
 
-class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
+class _ResetPinFormScreenState extends State<ResetPinFormScreen>
+    with SecureScreenMixin {
   String _firstPin = '';
   String _confirmPin = '';
   bool _isConfirming = false;
@@ -1094,7 +1154,7 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
     CustomBottomSheet.show(
       context,
       type: isError ? BottomSheetType.error : BottomSheetType.success,
-      title: isError ? 'Informasi' : 'Berhasil',
+      title: isError ? t(context, 'infoTitle') : t(context, 'successTitle'),
       subtitle: message,
       singleButtonText: t(context, 'closeBtn'),
       onSinglePressed: () => Navigator.of(context).pop(),
@@ -1106,13 +1166,10 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
 
     if (!_isConfirming) {
       if (_firstPin.length < 6) {
-        setState(() => _firstPin += val);
+        final nextPin = _firstPin + val;
+        setState(() => _firstPin = nextPin);
         if (_firstPin.length == 6) {
-          Future.delayed(const Duration(milliseconds: 200), () {
-            if (mounted) {
-              setState(() => _isConfirming = true);
-            }
-          });
+          _checkNewPin(nextPin);
         }
       }
     } else {
@@ -1122,6 +1179,39 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
           _handlePinSubmission();
         }
       }
+    }
+  }
+
+  Future<void> _checkNewPin(String pin) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final isSameAsOldPin = await SupabaseAuthService().isPinSameAsOld(
+        phone: widget.phoneNumber,
+        pin: pin,
+      );
+
+      if (!mounted) return;
+
+      if (isSameAsOldPin) {
+        _showNotificationSheet(t(context, 'sameAsOldPinError'), isError: true);
+        setState(() {
+          _firstPin = '';
+          _isPinError = false;
+        });
+      } else {
+        setState(() => _isConfirming = true);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _firstPin = '';
+          _isPinError = false;
+        });
+        _showNotificationSheet(t(context, 'resetPinFailed'), isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1160,7 +1250,6 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
       final success = await SupabaseAuthService().updateUserPin(
         phone: widget.phoneNumber,
         newPin: _firstPin,
-        allowSamePin: true,
       );
 
       if (!mounted) return;
@@ -1208,10 +1297,9 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
     }
   }
 
-  Widget _buildNumpadButton(String value) {
+  Widget _buildNumpadButton(String value, double btnSize) {
     if (value.isEmpty) {
-      // Placeholder transparan — ukuran mengikuti AspectRatio
-      return AspectRatio(aspectRatio: 1, child: const SizedBox.shrink());
+      return SizedBox(width: btnSize, height: btnSize);
     }
 
     final isBackspace = value == 'back';
@@ -1219,20 +1307,19 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
     if (isBackspace) {
       return GestureDetector(
         onTap: _onBackspace,
-        child: LayoutBuilder(
-          builder: (context, c) => Container(
-            height: c.maxWidth * 0.76,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF00A79D), width: 2),
-            ),
-            child: Center(
-              child: Icon(
-                Icons.backspace_outlined,
-                color: const Color(0xFF00A79D),
-                size: c.maxWidth * 0.35,
-              ),
+        child: Container(
+          width: btnSize,
+          height: btnSize,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF00A79D), width: 2),
+          ),
+          child: Center(
+            child: Icon(
+              Icons.backspace_outlined,
+              color: const Color(0xFF00A79D),
+              size: btnSize * 0.35,
             ),
           ),
         ),
@@ -1241,34 +1328,40 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
 
     return GestureDetector(
       onTap: () => _onNumpadTap(value),
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Center(
-            child: LayoutBuilder(
-              builder: (context, c) => Text(
-                value,
-                style: TextStyle(
-                  fontSize: c.maxWidth * 0.35,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1E293B),
-                ),
-              ),
+      child: Container(
+        width: btnSize,
+        height: btnSize,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: btnSize * 0.35,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1E293B),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildNumpadRow(List<String> values, double btnSize, double gap) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: values
+          .map((value) => _buildNumpadButton(value, btnSize))
+          .toList(),
     );
   }
 
@@ -1292,139 +1385,121 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen> {
         },
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              const SizedBox(height: 32),
-              
-              // Title
-              Text(
-                _isConfirming ? t(context, 'confirmPin') : t(context, 'createNewPin'),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 8),
-              
-              // Subtitle
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  _isConfirming
-                      ? t(context, 'confirmPinDesc')
-                      : t(context, 'createNewPinDesc'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF64748B),
-                    height: 1.45,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Error teks
-              if (_isPinError)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    _isSameAsOldPin
-                        ? t(context, 'sameAsOldPinError')
-                        : t(context, 'confirmPinMismatchError'),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFEF4444),
-                    ),
-                  ),
-                ),
-
-              // 6 PIN dots
-              Row(
+        child: Column(
+          children: [
+            // ── Atas: title + subtitle + dots ────────────────────────────
+            Expanded(
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(6, (index) {
-                  final isFilled = index < currentPin.length;
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _isPinError
-                          ? (isFilled
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFFE2E8F0))
-                          : (isFilled
-                                ? const Color(0xFF00A79D)
-                                : const Color(0xFFE2E8F0)),
+                children: [
+                  // Title
+                  Text(
+                    _isConfirming
+                        ? t(context, 'confirmPin')
+                        : t(context, 'createNewPin'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1E293B),
                     ),
-                  );
-                }),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Subtitle
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      _isConfirming
+                          ? t(context, 'confirmPinDesc')
+                          : t(context, 'createNewPinDesc'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Error teks
+                  if (_isPinError)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        _isSameAsOldPin
+                            ? t(context, 'sameAsOldPinError')
+                            : t(context, 'confirmPinMismatchError'),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFEF4444),
+                        ),
+                      ),
+                    ),
+
+                  // 6 PIN dots
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(6, (index) {
+                      final isFilled = index < currentPin.length;
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _isPinError
+                              ? (isFilled ? const Color(0xFFEF4444) : Colors.transparent)
+                              : (isFilled ? const Color(0xFF00A79D) : Colors.transparent),
+                          border: Border.all(
+                            color: _isPinError
+                                ? const Color(0xFFEF4444)
+                                : isFilled
+                                    ? const Color(0xFF00A79D)
+                                    : const Color(0xFFCBD5E1),
+                            width: 2,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
               ),
+            ),
 
-              const SizedBox(height: 48),
-
-              // Numpad
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 320),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+            // ── Bawah: numpad ─────────────────────────────────────────────
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final screenWidth = MediaQuery.sizeOf(context).width;
+                const btnSize = 100.0;
+                const hGap = 16.0;
+                const vGap = 16.0;
+                final totalW = btnSize * 3 + hGap * 2;
+                final hPad = (screenWidth - totalW) / 2;
+                return Padding(
+                  padding: EdgeInsets.symmetric(horizontal: hPad),
+                  child: SizedBox(
+                    width: totalW,
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(child: _buildNumpadButton('1')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildNumpadButton('2')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildNumpadButton('3')),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: _buildNumpadButton('4')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildNumpadButton('5')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildNumpadButton('6')),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: _buildNumpadButton('7')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildNumpadButton('8')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildNumpadButton('9')),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: _buildNumpadButton('')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildNumpadButton('0')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildNumpadButton('back')),
-                          ],
-                        ),
+                        _buildNumpadRow(['1', '2', '3'], btnSize, hGap),
+                        const SizedBox(height: vGap),
+                        _buildNumpadRow(['4', '5', '6'], btnSize, hGap),
+                        const SizedBox(height: vGap),
+                        _buildNumpadRow(['7', '8', '9'], btnSize, hGap),
+                        const SizedBox(height: vGap),
+                        _buildNumpadRow(['', '0', 'back'], btnSize, hGap),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
-                ),
-              ),
-
-              const SizedBox(height: 36),
-            ],
-          ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -1509,7 +1584,7 @@ class _PinResetSuccessScreenState extends State<PinResetSuccessScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                
+
                 // Title
                 const Text(
                   'PIN Baru Berhasil Dibuat',
@@ -1521,7 +1596,7 @@ class _PinResetSuccessScreenState extends State<PinResetSuccessScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Subtitle
                 const Text(
                   'Anda akan diarahkan ke halaman login dalam 3 detik untuk mencoba PIN Anda!',
@@ -1540,6 +1615,3 @@ class _PinResetSuccessScreenState extends State<PinResetSuccessScreen> {
     );
   }
 }
-
-
-

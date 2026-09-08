@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../widgets/custom_error_screen.dart';
-import '../../widgets/language_button.dart';
 import '../../l10n/app_language.dart';
 import '../auth/pin_verification_screen.dart';
 

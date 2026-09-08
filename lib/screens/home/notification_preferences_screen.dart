@@ -1,24 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:app_settings/app_settings.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../l10n/app_language.dart';
 
 class NotificationPreferencesScreen extends StatefulWidget {
   const NotificationPreferencesScreen({super.key});
 
   @override
-  State<NotificationPreferencesScreen> createState() => _NotificationPreferencesScreenState();
+  State<NotificationPreferencesScreen> createState() =>
+      _NotificationPreferencesScreenState();
 }
 
-class _NotificationPreferencesScreenState extends State<NotificationPreferencesScreen>
+class _NotificationPreferencesScreenState
+    extends State<NotificationPreferencesScreen>
     with WidgetsBindingObserver {
   // Theme colors
   static const _c700 = Color(0xFF007F78);
   static const _c500 = Color(0xFF00A79D);
-  static const _bg   = Color(0xFFF0F7F7);
-  static const _ink  = Color(0xFF0E2C2F);
+  static const _bg = Color(0xFFF0F7F7);
+  static const _ink = Color(0xFF0E2C2F);
   static const _ink2 = Color(0xFF436569);
   static const _ink3 = Color(0xFF8AA8AC);
 
@@ -51,17 +54,46 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([
-      _checkSystemPermission(),
-      _loadPreferences(),
-    ]);
+    await Future.wait([_checkSystemPermission(), _loadPreferences()]);
     if (mounted) setState(() => _isLoading = false);
   }
 
   Future<void> _checkSystemPermission() async {
-    final status = await Permission.notification.status;
+    bool granted;
+    try {
+      if (Platform.isAndroid) {
+        // Langsung cek status permission — bekerja di semua versi Android
+        // Android < 13: permission selalu GRANTED secara default
+        // Android >= 13: butuh runtime permission
+        final status = await Permission.notification.status;
+        if (status.isGranted) {
+          // Juga cek apakah benar-benar enabled di sistem
+          final notificationsEnabled = await FlutterLocalNotificationsPlugin()
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >()
+              ?.areNotificationsEnabled();
+          granted = notificationsEnabled ?? true;
+        } else {
+          granted = false;
+        }
+      } else if (Platform.isIOS) {
+        final status = await Permission.notification.status;
+        granted = status.isGranted;
+      } else {
+        granted = true;
+      }
+    } catch (_) {
+      granted = true;
+    }
     if (mounted) {
-      setState(() => _systemPermissionGranted = status.isGranted);
+      setState(() {
+        _systemPermissionGranted = granted;
+        if (!granted) _pushEnabled = false;
+      });
+      if (!granted) {
+        await _savePreference('pref_notif_push', false);
+      }
     }
   }
 
@@ -69,10 +101,10 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        _pushEnabled     = prefs.getBool('pref_notif_push')     ?? true;
-        _promoEnabled    = prefs.getBool('pref_notif_promo')    ?? true;
+        _pushEnabled = prefs.getBool('pref_notif_push') ?? true;
+        _promoEnabled = prefs.getBool('pref_notif_promo') ?? true;
         _reminderEnabled = prefs.getBool('pref_notif_reminder') ?? true;
-        _emailEnabled    = prefs.getBool('pref_notif_email')    ?? false;
+        _emailEnabled = prefs.getBool('pref_notif_email') ?? false;
       });
     }
   }
@@ -85,19 +117,29 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
   /// Handle toggle utama "Izinkan Notifikasi"
   Future<void> _handlePushToggle(bool val) async {
     if (val) {
-      // User mau nyalakan → minta izin ke sistem
-      final status = await Permission.notification.request();
-      if (status.isGranted) {
+      bool granted;
+      try {
+        if (Platform.isAndroid || Platform.isIOS) {
+          final status = await Permission.notification.request();
+          if (status.isPermanentlyDenied) {
+            if (mounted) _showGoToSettingsDialog();
+            return;
+          }
+          granted = status.isGranted;
+        } else {
+          granted = true;
+        }
+      } catch (_) {
+        granted = true;
+      }
+
+      if (granted) {
         setState(() {
           _systemPermissionGranted = true;
           _pushEnabled = true;
         });
         await _savePreference('pref_notif_push', true);
-      } else if (status.isPermanentlyDenied) {
-        // User sudah permanently denied → buka pengaturan HP
-        if (mounted) _showGoToSettingsDialog();
       }
-      // Kalau denied biasa, biarkan toggle tetap off
     } else {
       // User mau matikan → arahkan ke pengaturan HP
       if (mounted) _showGoToSettingsDialog(isDisabling: true);
@@ -110,9 +152,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          isDisabling
-              ? 'Matikan Notifikasi?'
-              : 'Izin Notifikasi Diperlukan',
+          isDisabling ? 'Matikan Notifikasi?' : 'Izin Notifikasi Diperlukan',
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w800,
@@ -134,14 +174,11 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
             onPressed: () {
               Navigator.of(ctx).pop();
               // Buka halaman notifikasi langsung di pengaturan HP
-              AppSettings.openAppSettings(type: AppSettingsType.notification);
+              openAppSettings();
             },
             child: Text(
               'Buka Pengaturan',
-              style: TextStyle(
-                color: _c700,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: _c700, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -167,7 +204,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
             color: _ink.withValues(alpha: disabled ? 0.02 : 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
-          )
+          ),
         ],
       ),
       child: Row(
@@ -221,7 +258,11 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
       ),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Color(0xFFE65100), size: 20),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFE65100),
+            size: 20,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -245,7 +286,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
           ),
           const SizedBox(width: 8),
           GestureDetector(
-            onTap: () => AppSettings.openAppSettings(type: AppSettingsType.notification),
+            onTap: () => openAppSettings(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -284,7 +325,10 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
         title: Text(
           t(context, 'menuNotificationSub'),
           style: const TextStyle(
-              fontSize: 18, fontWeight: FontWeight.w800, color: _ink),
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: _ink,
+          ),
         ),
       ),
       body: _isLoading
@@ -300,7 +344,10 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                   Text(
                     t(context, 'notifSectionPush'),
                     style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w800, color: _c700),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: _c700,
+                    ),
                   ),
                   const SizedBox(height: 12),
 
@@ -340,7 +387,10 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                   Text(
                     t(context, 'notifSectionEmail'),
                     style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w800, color: _c700),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: _c700,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _buildSwitchItem(

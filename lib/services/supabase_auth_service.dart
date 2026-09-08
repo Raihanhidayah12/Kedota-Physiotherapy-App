@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -472,7 +473,7 @@ class SupabaseAuthService {
     final user = client.auth.currentUser;
     if (user == null) throw Exception('Not logged in');
 
-    final ext       = contentType.contains('png') ? 'png' : 'jpg';
+    final ext = contentType.contains('png') ? 'png' : 'jpg';
     final photoPath = '${user.id}/profile.$ext';
 
     await client.storage
@@ -1142,6 +1143,59 @@ class SupabaseAuthService {
     }
   }
 
+  Future<bool> isPinSameAsOld({
+    required String phone,
+    required String pin,
+  }) async {
+    final profile = await _findProfileByPhone(phone);
+    if (profile == null) return false;
+
+    final oldPinHash = (profile['pin_hash'] ?? '').toString();
+    return oldPinHash.isNotEmpty && hashPin(pin) == oldPinHash;
+  }
+
+  Future<int> newPinCooldownRemaining({required String phone}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = _newPinRateLimitKey(phone, 'until');
+    final until = prefs.getInt(key) ?? 0;
+    final remaining = ((until - DateTime.now().millisecondsSinceEpoch) / 1000)
+        .ceil();
+    if (remaining <= 0) {
+      await prefs.remove(key);
+      return 0;
+    }
+    return remaining;
+  }
+
+  Future<int> recordSameAsOldPinAttempt({required String phone}) async {
+    final remaining = await newPinCooldownRemaining(phone: phone);
+    if (remaining > 0) return remaining;
+
+    final prefs = await SharedPreferences.getInstance();
+    final attemptsKey = _newPinRateLimitKey(phone, 'attempts');
+    final levelKey = _newPinRateLimitKey(phone, 'level');
+    final attempts = (prefs.getInt(attemptsKey) ?? 0) + 1;
+    if (attempts < 3) {
+      await prefs.setInt(attemptsKey, attempts);
+      return 0;
+    }
+
+    final level = prefs.getInt(levelKey) ?? 0;
+    final duration = 30 * (1 << level);
+    await prefs.setInt(attemptsKey, 0);
+    await prefs.setInt(levelKey, level + 1);
+    await prefs.setInt(
+      _newPinRateLimitKey(phone, 'until'),
+      DateTime.now().add(Duration(seconds: duration)).millisecondsSinceEpoch,
+    );
+    return duration;
+  }
+
+  String _newPinRateLimitKey(String phone, String suffix) {
+    final normalizedPhone = phone.replaceAll(RegExp(r'\D'), '');
+    return 'new_pin_rate_limit_${normalizedPhone}_$suffix';
+  }
+
   Future<void> _signInProfileAccount(
     Map<String, dynamic> profile,
     String phone,
@@ -1281,10 +1335,13 @@ class SupabaseAuthService {
 
     try {
       // 1. Tandai dulu sebagai recycled (soft delete sementara)
-      await client.from('profiles').update({
-        'status'    : 'recycled',
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', user.id);
+      await client
+          .from('profiles')
+          .update({
+            'status': 'recycled',
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', user.id);
 
       // 2. Hapus row profil
       await client.from('profiles').delete().eq('id', user.id);

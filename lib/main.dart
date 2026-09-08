@@ -4,8 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'l10n/app_language.dart';
-import 'screens/splash/splash_screen.dart';
 import 'services/notification_service.dart';
+import 'screens/splash/splash_screen.dart';
+import 'widgets/app_lock_overlay.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +42,7 @@ class KedotaApp extends StatelessWidget {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'Kedota Physiotherapy',
+        navigatorKey: appNavigatorKey, // ← Key untuk push lock screen dari observer
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFF007F78),
@@ -70,7 +72,9 @@ class KedotaApp extends StatelessWidget {
             ),
           ),
         ),
-        home: const SplashScreen(),
+        home: AppLockWrapper(
+          child: const SplashScreen(),
+        ),
       ),
     );
   }

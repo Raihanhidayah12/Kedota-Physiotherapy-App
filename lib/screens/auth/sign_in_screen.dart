@@ -170,7 +170,7 @@ class _SignInScreenState extends State<SignInScreen> {
       CustomBottomSheet.show(
         context,
         type: BottomSheetType.error,
-        title: 'Informasi',
+        title: t(context, 'infoTitle'),
         subtitle: phone.isEmpty
             ? t(context, 'enterPhoneError')
             : t(context, 'validPhoneError'),
@@ -201,7 +201,7 @@ class _SignInScreenState extends State<SignInScreen> {
       CustomBottomSheet.show(
         context,
         type: BottomSheetType.error,
-        title: 'Gagal Masuk',
+        title: t(context, 'signInFailedTitle'),
         subtitle: '${t(context, 'googleSignInFailed')}: $e',
         singleButtonText: t(context, 'closeBtn'),
         onSinglePressed: () => Navigator.of(context).pop(),
@@ -221,7 +221,7 @@ class _SignInScreenState extends State<SignInScreen> {
         context,
         type: BottomSheetType.error,
         title: t(context, 'googleSignInFailed'),
-        subtitle: 'Apple Sign-In failed: $e',
+        subtitle: '${t(context, 'appleSignInFailed')}: $e',
         singleButtonText: t(context, 'closeBtn'),
         onSinglePressed: () => Navigator.of(context).pop(),
       );
@@ -247,10 +247,7 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ),
             Expanded(
-              child: Container(
-                width: double.infinity,
-                color: Colors.white,
-              ),
+              child: Container(width: double.infinity, color: Colors.white),
             ),
           ],
         ),
@@ -279,35 +276,43 @@ class _SignInScreenState extends State<SignInScreen> {
             padding: EdgeInsets.symmetric(
               vertical: MediaQuery.of(context).size.height < 640 ? 16 : 28,
             ),
-            child: Column(
-              children: [
-                Image.asset(
-                  'assets/image/logo 2.png',
-                  height: (MediaQuery.of(context).size.height * 0.08).clamp(48.0, 68.0),
-                  fit: BoxFit.contain,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'K E D O T A',
-                  style: TextStyle(
-                    fontSize: (MediaQuery.of(context).size.width * 0.05).clamp(16.0, 22.0),
-                    fontWeight: FontWeight.w900,
-                    color: _accentGreen,
-                    letterSpacing: 4.0,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'P H Y S I O T H E R A P Y',
-                  style: TextStyle(
-                    fontSize: (MediaQuery.of(context).size.width * 0.026).clamp(9.0, 12.0),
-                    fontWeight: FontWeight.w600,
-                    color: _accentGreen.withValues(alpha: 0.85),
-                    letterSpacing: 4.0,
-                  ),
-                ),
-              ],
-            ).animate().fade(duration: 500.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
+            child:
+                Column(
+                      children: [
+                        Image.asset(
+                          'assets/image/logo 2.png',
+                          height: (MediaQuery.of(context).size.height * 0.08)
+                              .clamp(48.0, 68.0),
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'K E D O T A',
+                          style: TextStyle(
+                            fontSize: (MediaQuery.of(context).size.width * 0.05)
+                                .clamp(16.0, 22.0),
+                            fontWeight: FontWeight.w900,
+                            color: _accentGreen,
+                            letterSpacing: 4.0,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'P H Y S I O T H E R A P Y',
+                          style: TextStyle(
+                            fontSize:
+                                (MediaQuery.of(context).size.width * 0.026)
+                                    .clamp(9.0, 12.0),
+                            fontWeight: FontWeight.w600,
+                            color: _accentGreen.withValues(alpha: 0.85),
+                            letterSpacing: 4.0,
+                          ),
+                        ),
+                      ],
+                    )
+                    .animate()
+                    .fade(duration: 500.ms)
+                    .slideY(begin: 0.2, curve: Curves.easeOutQuad),
           ),
           Expanded(
             child: Container(
@@ -320,245 +325,269 @@ class _SignInScreenState extends State<SignInScreen> {
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: '${t(context, 'welcome')} di ',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E293B),
+                  children:
+                      [
+                            Center(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: '${t(context, 'welcome')} di ',
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const TextSpan(
+                                      text: 'Kedota!',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                        color: _accentGreen,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
                               ),
                             ),
-                            const TextSpan(
-                              text: 'Kedota!',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: _accentGreen,
+                            const SizedBox(height: 8),
+                            Center(
+                              child: Text(
+                                t(context, 'signInSubtitle'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF64748B),
+                                  height: 1.45,
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        t(context, 'signInSubtitle'),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
-                          height: 1.45,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    // Label nomor telepon dengan tanda *
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: t(context, 'phoneNumber'),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
-                          const TextSpan(
-                            text: ' *',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFFEF4444),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Field telepon dengan 3 state: normal / focused / error
-                    GestureDetector(
-                      onTap: () => _phoneFocusNode.requestFocus(),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _phoneBorderColor,
-                            width: _phoneBorderWidth,
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            _buildIndonesianFlag(),
-                            const SizedBox(width: 8),
-                            const Text(
-                              '+62',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E293B),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Container(
-                              width: 1,
-                              height: 20,
-                              color: const Color(0xFFE2E8F0),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: _phoneController,
-                                focusNode: _phoneFocusNode,
-                                keyboardType: TextInputType.phone,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(13),
-                                ],
-                                decoration: const InputDecoration(
-                                  border: InputBorder.none,
-                                  hintText: '08XX XXXX XXXX',
-                                  hintStyle: TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontSize: 14,
+                            const SizedBox(height: 28),
+                            // Label nomor telepon dengan tanda *
+                            Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: t(context, 'phoneNumber'),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF1E293B),
+                                    ),
                                   ),
-                                  contentPadding: EdgeInsets.symmetric(
-                                    vertical: 14,
+                                  const TextSpan(
+                                    text: ' *',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFFEF4444),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Field telepon dengan 3 state: normal / focused / error
+                            GestureDetector(
+                              onTap: () => _phoneFocusNode.requestFocus(),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: _phoneBorderColor,
+                                    width: _phoneBorderWidth,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    _buildIndonesianFlag(),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      '+62',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      width: 1,
+                                      height: 20,
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _phoneController,
+                                        focusNode: _phoneFocusNode,
+                                        keyboardType: TextInputType.phone,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter
+                                              .digitsOnly,
+                                          LengthLimitingTextInputFormatter(13),
+                                        ],
+                                        decoration: const InputDecoration(
+                                          border: InputBorder.none,
+                                          hintText: '08XX XXXX XXXX',
+                                          hintStyle: TextStyle(
+                                            color: Color(0xFF94A3B8),
+                                            fontSize: 14,
+                                          ),
+                                          contentPadding: EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            // Button "Masuk" dengan gradient (issue #3)
+                            SizedBox(
+                              width: double.infinity,
+                              height: 52,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF007F78),
+                                      Color(0xFF00A79D),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: ElevatedButton(
+                                  onPressed: _validateAndSubmitPhone,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    t(context, 'signIn'),
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Button "Masuk" dengan gradient (issue #3)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF007F78), Color(0xFF00A79D)],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: _validateAndSubmitPhone,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                            const SizedBox(height: 24),
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Divider(color: Color(0xFFE2E8F0)),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Text(
+                                    t(context, 'orContinueWith'),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF94A3B8),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const Expanded(
+                                  child: Divider(color: Color(0xFFE2E8F0)),
+                                ),
+                              ],
                             ),
-                          ),
-                          child: Text(
-                            t(context, 'signIn'),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(
-                            t(context, 'orContinueWith'),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF94A3B8),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: OutlinedButton(
-                        onPressed: _signInWithGoogle,
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF1E293B),
-                          side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            GoogleLogoIcon(size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Google',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E293B),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: OutlinedButton(
+                                onPressed: _signInWithGoogle,
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: const Color(0xFF1E293B),
+                                  side: const BorderSide(
+                                    color: Color(0xFFE2E8F0),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    GoogleLogoIcon(size: 20),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Google',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: OutlinedButton(
-                        onPressed: _signInWithApple,
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF1E293B),
-                          side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.apple, color: Color(0xFF1E293B), size: 22),
-                            SizedBox(width: 8),
-                            Text(
-                              'Apple',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E293B),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: OutlinedButton(
+                                onPressed: _signInWithApple,
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: const Color(0xFF1E293B),
+                                  side: const BorderSide(
+                                    color: Color(0xFFE2E8F0),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.apple,
+                                      color: Color(0xFF1E293B),
+                                      size: 22,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Apple',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
+                          ]
+                          .animate(interval: 50.ms)
+                          .fade(duration: 400.ms)
+                          .slideY(begin: 0.1, curve: Curves.easeOutQuad),
                 ),
               ),
             ),
@@ -567,9 +596,6 @@ class _SignInScreenState extends State<SignInScreen> {
       ),
     );
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F9),
-      body: content,
-    );
+    return Scaffold(backgroundColor: const Color(0xFFF7F9F9), body: content);
   }
 }
