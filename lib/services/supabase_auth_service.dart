@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -10,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'supabase_api_client.dart';
+import 'client_error_log_service.dart';
 
 String get _supabasePublishableKey =>
     dotenv.env['SUPABASE_ANON_KEY'] ??
@@ -44,6 +46,27 @@ class SupabaseAuthService {
 
   SupabaseApiClient get apiClient {
     final dio = Dio();
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (error, handler) {
+          final statusCode = error.response?.statusCode;
+          if (statusCode != null && statusCode >= 500 && statusCode <= 599) {
+            debugPrint(
+              'Client received server error: $statusCode ${error.requestOptions.method} ${error.requestOptions.path}',
+            );
+            unawaited(
+              const ClientErrorLogService().sendServerError(
+                method: error.requestOptions.method,
+                path: error.requestOptions.path,
+                statusCode: statusCode,
+                message: error.message,
+              ),
+            );
+          }
+          handler.next(error);
+        },
+      ),
+    );
     dio.options.headers['apikey'] = _supabasePublishableKey;
     dio.options.headers['Content-Type'] = 'application/json';
     final supabaseUrl =

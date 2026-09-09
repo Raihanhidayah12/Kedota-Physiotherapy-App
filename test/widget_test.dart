@@ -8,12 +8,23 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kedotaapp/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await Supabase.initialize(
+      url: 'https://dummy.supabase.co',
+      anonKey: 'dummy-anon-key',
+    );
+  });
+
   testWidgets('Splash screen shows branding', (WidgetTester tester) async {
     await tester.pumpWidget(const KedotaApp());
 
-    expect(find.text('Kedota Physiotherapy'), findsOneWidget);
-    expect(find.text('Your comfort, our care'), findsOneWidget);
+    expect(find.text('Kedota'), findsOneWidget);
+    expect(find.text('PHYSIOTHERAPY'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
   });
 }

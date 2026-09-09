@@ -1329,6 +1329,12 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
 
   Future<void> _openUpcomingDetail(Map<String, dynamic> appointment) async {
     final rawStatus = appointment['appointment_status']?.toString();
+    final scheduledAt = DateTime.tryParse(
+      '${appointment['appointment_date']} ${appointment['appointment_time']}',
+    );
+    final locallyExpired =
+        scheduledAt != null &&
+        !scheduledAt.add(const Duration(minutes: 15)).isAfter(DateTime.now());
     final item = AppointmentItem(
       id: appointment['id']?.toString() ?? '',
       therapistName:
@@ -1352,6 +1358,8 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       status: rawStatus == 'completed'
           ? AppointmentStatus.selesai
           : rawStatus == 'expired'
+          ? AppointmentStatus.batasWaktu
+          : locallyExpired
           ? AppointmentStatus.batasWaktu
           : AppointmentStatus.mendatang,
     );

@@ -141,7 +141,7 @@ class TermsScreen extends StatelessWidget {
   Widget build(BuildContext context) => _ArticleScreen(
     title: t(context, 'menuTerms'),
     sections: [
-      (t(context, 'termsUpdated'), t(context, 'termsIntro')),
+      (_lastUpdatedLabel(context), t(context, 'termsIntro')),
       (t(context, 'termsSection1'), t(context, 'termsBody1')),
       (t(context, 'termsSection2'), t(context, 'termsBody2')),
       (t(context, 'termsSection3'), t(context, 'termsBody3')),
@@ -161,7 +161,7 @@ class PrivacyScreen extends StatelessWidget {
   Widget build(BuildContext context) => _ArticleScreen(
     title: t(context, 'menuPrivacy'),
     sections: [
-      (t(context, 'privacyUpdated'), t(context, 'privacyIntro')),
+      (_lastUpdatedLabel(context), t(context, 'privacyIntro')),
       (t(context, 'privacySection1'), t(context, 'privacyBody1')),
       (t(context, 'privacySection2'), t(context, 'privacyBody2')),
       (t(context, 'privacySection3'), t(context, 'privacyBody3')),
@@ -173,6 +173,15 @@ class PrivacyScreen extends StatelessWidget {
   );
 }
 
+String _lastUpdatedLabel(BuildContext context) {
+  final now = DateTime.now();
+  final date =
+      '${now.day.toString().padLeft(2, '0')}/'
+      '${now.month.toString().padLeft(2, '0')}/'
+      '${now.year}';
+  return t(context, 'lastUpdated').replaceFirst('{date}', date);
+}
+
 class _ArticleScreen extends StatelessWidget {
   final String title;
   final List<(String, String)> sections;
@@ -181,15 +190,100 @@ class _ArticleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final intro = sections.first;
+    final articleSections = sections.skip(1).toList();
+
     return _InfoScaffold(
       title: title,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(26, 16, 26, 32),
         children: [
-          for (final section in sections) ...[
-            _ArticleSection(title: section.$1, body: section.$2),
-            const SizedBox(height: 14),
-          ],
+          _Panel(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    intro.$1,
+                    style: const TextStyle(
+                      color: _teal,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    intro.$2,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 13,
+                      height: 1.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _Panel(
+            child: Column(
+              children: [
+                for (var i = 0; i < articleSections.length; i++) ...[
+                  ExpansionTile(
+                    tilePadding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+                    childrenPadding: const EdgeInsets.fromLTRB(68, 0, 20, 20),
+                    shape: const RoundedRectangleBorder(),
+                    collapsedShape: const RoundedRectangleBorder(),
+                    backgroundColor: const Color(0xFFF8FCFC),
+                    iconColor: _teal,
+                    collapsedIconColor: _muted,
+                    leading: Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: _tealLight,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Text(
+                        '${i + 1}'.padLeft(2, '0'),
+                        style: const TextStyle(
+                          color: _teal,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      articleSections[i].$1,
+                      style: const TextStyle(
+                        color: _ink,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
+                    ),
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          articleSections[i].$2,
+                          style: const TextStyle(
+                            color: _muted,
+                            fontSize: 13,
+                            height: 1.55,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (i < articleSections.length - 1)
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -445,39 +539,6 @@ class _ContentHeader extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-class _ArticleSection extends StatelessWidget {
-  final String title;
-  final String body;
-
-  const _ArticleSection({required this.title, required this.body});
-
-  @override
-  Widget build(BuildContext context) => _Panel(
-    child: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: _ink,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            body,
-            style: const TextStyle(fontSize: 13, color: _muted, height: 1.6),
-          ),
-        ],
-      ),
-    ),
   );
 }
 

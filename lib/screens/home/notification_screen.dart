@@ -25,6 +25,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
   static const _ink3 = Color(0xFF8AA8AC);
   List<Map<String, dynamic>> _appointmentNotifications = [];
   bool _showWelcomeNotification = false;
+  DateTime? _welcomeNotificationCreatedAt;
+  int _welcomeIndex = -1;
   bool _loading = true;
   bool _notificationsRead = false;
 
@@ -38,6 +40,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final welcomeSent = prefs.getBool('welcome_notification_sent') ?? false;
+      final welcomeCreatedAt = DateTime.tryParse(
+        prefs.getString('welcome_notification_created_at') ?? '',
+      );
       final notificationsRead =
           prefs.getBool('notifications_marked_as_read') ?? false;
       final service = SupabaseAuthService();
@@ -122,16 +127,35 @@ class _NotificationScreenState extends State<NotificationScreen> {
               .toList()
               .reversed
               .toList();
+      final notifications = [
+        ...paymentEvents,
+        ...rescheduleEvents,
+        ...reminderEvents,
+        ...(rows as List).map((row) => row as Map<String, dynamic>),
+      ];
+      notifications.sort(
+        (first, second) => _notificationCreatedAt(
+          second,
+        ).compareTo(_notificationCreatedAt(first)),
+      );
+      final welcomeIndex = welcomeSent
+          ? welcomeCreatedAt == null
+                ? 0
+                : notifications
+                      .where(
+                        (notification) => _notificationCreatedAt(
+                          notification,
+                        ).isAfter(welcomeCreatedAt),
+                      )
+                      .length
+          : -1;
       if (mounted) {
         setState(() {
           _showWelcomeNotification = welcomeSent;
+          _welcomeNotificationCreatedAt = welcomeCreatedAt;
+          _welcomeIndex = welcomeIndex;
           _notificationsRead = notificationsRead;
-          _appointmentNotifications = [
-            ...paymentEvents,
-            ...rescheduleEvents,
-            ...reminderEvents,
-            ...(rows as List).map((row) => row as Map<String, dynamic>),
-          ];
+          _appointmentNotifications = notifications;
         });
       }
     } catch (error) {
@@ -220,12 +244,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       ),
                     );
                   }
-                  final notif = _showWelcomeNotification && index == 0
+                  final notif =
+                      _showWelcomeNotification && index == _welcomeIndex
                       ? _buildWelcomeNotification(context)
                       : _buildAppointmentNotification(
                           context,
                           _appointmentNotifications[index -
-                              (_showWelcomeNotification ? 1 : 0)],
+                              (_showWelcomeNotification && index > _welcomeIndex
+                                  ? 1
+                                  : 0)],
                         );
                   return _buildNotificationCard(notif);
                 },
@@ -251,7 +278,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final service = row['service_type']?.toString() ?? 'Home Care';
     final date = row['appointment_date']?.toString() ?? '-';
     final time = row['appointment_time']?.toString() ?? '-';
-    final status = row['appointment_status']?.toString();
     final isRescheduled = row['notification_type'] == 'rescheduled';
     final isPaymentCompleted = row['notification_type'] == 'payment_completed';
     final isReminder = row['notification_type'] == 'reminder';
@@ -297,18 +323,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 )
                 .replaceFirst('{date}', date)
                 .replaceFirst('{time}', time),
-      'time': isReminder
-          ? t(context, 'notificationJustNow')
-          : isPaymentCompleted || isRescheduled
-          ? t(context, 'notificationJustNow')
-          : hasOutstandingPayment
-          ? t(context, 'paymentPending')
-          : switch (status) {
-              'completed' => t(context, 'statusDone'),
-              'expired' => t(context, 'statusExpired'),
-              'cancelled' => t(context, 'statusCancelled'),
-              _ => t(context, 'statusUpcoming'),
-            },
+      'time': _formatRelativeTime(context, _notificationCreatedAt(row)),
       'icon': isReminder
           ? Icons.alarm_rounded
           : isPaymentCompleted
@@ -329,6 +344,34 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   String _formatDateTime(String date, String time) => '$date, $time WIB';
+
+  DateTime _notificationCreatedAt(Map<String, dynamic> row) {
+    return DateTime.tryParse(row['created_at']?.toString() ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  String _formatRelativeTime(BuildContext context, DateTime createdAt) {
+    final elapsed = DateTime.now().difference(createdAt);
+    final duration = elapsed.isNegative ? Duration.zero : elapsed;
+    if (duration.inMinutes < 1) return t(context, 'notificationJustNow');
+    if (duration.inHours < 1) {
+      return t(
+        context,
+        'notificationMinutesAgo',
+      ).replaceFirst('{minutes}', '${duration.inMinutes}');
+    }
+    if (duration.inHours < 24) {
+      return t(
+        context,
+        'notificationHoursAgo',
+      ).replaceFirst('{hours}', '${duration.inHours}');
+    }
+    if (duration.inHours < 48) return t(context, 'notificationYesterday');
+    return t(
+      context,
+      'notificationDaysAgo',
+    ).replaceFirst('{days}', '${duration.inDays}');
+  }
 
   Future<void> _openPayment(Map<String, dynamic> row) async {
     final item = AppointmentItem(
@@ -364,6 +407,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
           .maybeSingle();
       if (row == null || !mounted) return;
       final rawStatus = row['appointment_status']?.toString();
+      final scheduledAt = DateTime.tryParse(
+        '${row['appointment_date']} ${row['appointment_time']}',
+      );
+      final locallyExpired =
+          scheduledAt != null &&
+          !scheduledAt.add(const Duration(minutes: 15)).isAfter(DateTime.now());
       final item = AppointmentItem(
         id: row['id']?.toString() ?? appointmentId,
         therapistName: row['therapist_name']?.toString() ?? 'Kedota Therapist',
@@ -383,6 +432,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
             ? AppointmentStatus.selesai
             : rawStatus == 'expired'
             ? AppointmentStatus.batasWaktu
+            : locallyExpired
+            ? AppointmentStatus.batasWaktu
             : AppointmentStatus.mendatang,
       );
       await Navigator.of(context).push(
@@ -396,7 +447,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Map<String, dynamic> _buildWelcomeNotification(BuildContext context) => {
     'title': t(context, 'welcomeNotificationTitle'),
     'body': t(context, 'welcomeNotificationBody'),
-    'time': t(context, 'notificationJustNow'),
+    'time': _formatRelativeTime(
+      context,
+      _welcomeNotificationCreatedAt ?? DateTime.now(),
+    ),
     'icon': Icons.celebration_rounded,
     'color': _c500,
     'isUnread': !_notificationsRead,

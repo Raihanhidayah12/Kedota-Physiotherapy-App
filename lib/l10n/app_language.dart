@@ -162,6 +162,7 @@ const _translations = {
     'notificationTherapyBody':
         'Do not forget your therapy session tomorrow at 10:00 AM at Central Clinic.',
     'notificationJustNow': 'Just now',
+    'notificationMinutesAgo': '{minutes} minutes ago',
     'notificationProfileTitle': 'Profile Updated Successfully',
     'notificationReservationTitle': 'Appointment Reserved',
     'notificationReservationBody':
@@ -180,6 +181,7 @@ const _translations = {
     'notificationPromoBody':
         'Get 20% off a back therapy package. Valid until the end of the month!',
     'notificationYesterday': 'Yesterday',
+    'notificationDaysAgo': '{days} days ago',
     'notificationTestTitle': 'Hello from Kedota!',
     'notificationTestBody': 'This is a sample notification from your app.',
     'otherGender': 'Other',
@@ -768,7 +770,7 @@ const _translations = {
     'progressDaySun': 'Sun',
 
     'termsHeading': 'Terms and Conditions',
-    'termsUpdated': 'Last updated: 01/09/2026',
+    'lastUpdated': 'Last updated: {date}',
     'termsIntro':
         'These Terms and Conditions govern your use of the Kedota application ("Application") provided by [Kedota Business Entity] ("Kedota", "we", or "us"). By creating an account and using the Application, you ("User") are considered to have read, understood, and agreed to all of the following terms.',
     'termsSection1': 'Using Kedota',
@@ -796,7 +798,6 @@ const _translations = {
     'termsBody8':
         'These Terms and Conditions are governed by the laws of the Republic of Indonesia. Disputes will first be resolved through discussion and, if no agreement is reached, according to applicable Indonesian law.',
     'privacyHeading': 'Privacy Policy',
-    'privacyUpdated': 'Last updated: 01/09/2026',
     'privacyIntro':
         'This Privacy Policy explains how Kedota collects, uses, stores, and protects User personal data in accordance with Law Number 27 of 2022 on Personal Data Protection (PDP Law).',
     'privacySection1': '1.1 Data we collect',
@@ -942,6 +943,7 @@ Device information, application activity logs, and usage data for security and s
     'notificationTherapyBody':
         'Jangan lupa jadwal sesi terapi Anda besok jam 10:00 WIB di Klinik Pusat.',
     'notificationJustNow': 'Baru saja',
+    'notificationMinutesAgo': '{minutes} menit yang lalu',
     'notificationProfileTitle': 'Update Profil Berhasil',
     'notificationReservationTitle': 'Janji Temu Berhasil Dipesan',
     'notificationReservationBody':
@@ -960,6 +962,7 @@ Device information, application activity logs, and usage data for security and s
     'notificationPromoBody':
         'Dapatkan diskon 20% untuk paket terapi punggung. Berlaku hingga akhir bulan!',
     'notificationYesterday': 'Kemarin',
+    'notificationDaysAgo': '{days} hari yang lalu',
     'notificationTestTitle': 'Halo dari Kedota!',
     'notificationTestBody':
         'Ini adalah contoh notifikasi langsung dari aplikasi Anda.',
@@ -1553,7 +1556,7 @@ Device information, application activity logs, and usage data for security and s
     'progressDaySun': 'Min',
 
     'termsHeading': 'Syarat dan Ketentuan',
-    'termsUpdated': 'Terakhir diperbarui: 01/09/2026',
+    'lastUpdated': 'Terakhir diperbarui: {date}',
     'termsIntro':
         'Syarat dan Ketentuan ini mengatur penggunaan aplikasi Kedota ("Aplikasi") yang disediakan oleh [Nama Badan Usaha Kedota] ("Kedota", "kami"). Dengan membuat akun dan menggunakan Aplikasi, Anda ("Pengguna") dianggap telah membaca, memahami, dan menyetujui seluruh ketentuan berikut.',
     'termsSection1': '1.1 Definisi',
@@ -1597,7 +1600,6 @@ Device information, application activity logs, and usage data for security and s
     'termsBody8':
         'Syarat dan Ketentuan ini diatur dan ditafsirkan berdasarkan hukum Republik Indonesia. Segala perselisihan yang timbul akan diselesaikan melalui musyawarah, dan apabila tidak tercapai kesepakatan, akan diselesaikan sesuai ketentuan hukum yang berlaku di Indonesia.',
     'privacyHeading': 'Kebijakan Privasi',
-    'privacyUpdated': 'Terakhir diperbarui: 01/09/2026',
     'privacyIntro':
         'Kebijakan Privasi ini menjelaskan bagaimana Kedota mengumpulkan, menggunakan, menyimpan, dan melindungi data pribadi Pengguna sesuai dengan Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP).',
     'privacySection1': '1.1 Data yang Kami Kumpulkan',

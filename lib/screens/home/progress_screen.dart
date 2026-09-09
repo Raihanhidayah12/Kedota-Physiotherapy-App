@@ -146,8 +146,15 @@ class _ProgressBodyState extends State<ProgressBody>
       .where((appointment) => appointment['appointment_status'] == 'upcoming')
       .length;
 
+  int get _expiredSessions => _appointments
+      .where((appointment) => appointment['appointment_status'] == 'expired')
+      .length;
+
   int get _remainingSessions =>
-      (_totalSessions - _completedSessions).clamp(0, _totalSessions);
+      (_totalSessions - _completedSessions - _expiredSessions).clamp(
+        0,
+        _totalSessions,
+      );
 
   double get _progressValue => _totalSessions == 0
       ? 0

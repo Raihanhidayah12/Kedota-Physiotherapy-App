@@ -68,6 +68,10 @@ class _AccountCreatedScreenState extends State<AccountCreatedScreen>
       payload: 'welcome_new_patient_promo',
     );
     await prefs.setBool('welcome_notification_sent', true);
+    await prefs.setString(
+      'welcome_notification_created_at',
+      DateTime.now().toIso8601String(),
+    );
   }
 
   void _goToHome() {

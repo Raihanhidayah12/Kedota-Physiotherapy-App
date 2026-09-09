@@ -252,8 +252,15 @@ class _RescheduleAppointmentScreenState
           'p_appointment_time': time,
         },
       );
+      final prefs = await SharedPreferences.getInstance();
+      final expiredNotifications =
+          prefs.getStringList('expired_notifications_sent') ?? [];
+      expiredNotifications.remove(widget.appointment.id);
+      await prefs.setStringList(
+        'expired_notifications_sent',
+        expiredNotifications,
+      );
       try {
-        final prefs = await SharedPreferences.getInstance();
         final events = prefs.getStringList('reschedule_notifications') ?? [];
         events.add(
           jsonEncode({

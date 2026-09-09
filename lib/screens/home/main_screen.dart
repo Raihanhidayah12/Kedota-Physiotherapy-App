@@ -46,6 +46,43 @@ class _MainScreenState extends State<MainScreen> {
     final user = service.client.auth.currentUser;
     if (user == null) return;
     try {
+      final expiredTitle = t(context, 'expiredAppointmentTitle');
+      final expiredBody = t(context, 'expiredAppointmentBody');
+      final now = DateTime.now();
+      final rowsBeforeExpire = await service.client
+          .from('appointments')
+          .select('id, appointment_date, appointment_time, appointment_status')
+          .eq('booker_id', user.id)
+          .eq('appointment_status', 'upcoming');
+      final expiredCandidates = (rowsBeforeExpire as List)
+          .cast<Map<String, dynamic>>()
+          .where((row) {
+            final scheduled = DateTime.tryParse(
+              '${row['appointment_date']} ${row['appointment_time']}',
+            );
+            return scheduled != null &&
+                !scheduled.add(const Duration(minutes: 15)).isAfter(now);
+          })
+          .toList();
+      await service.expireOverdueAppointments();
+      final prefs = await SharedPreferences.getInstance();
+      final notifiedExpired =
+          prefs.getStringList('expired_notifications_sent')?.toSet() ?? {};
+      for (final row in expiredCandidates) {
+        final id = row['id']?.toString() ?? '';
+        if (id.isEmpty || notifiedExpired.contains(id)) continue;
+        await NotificationService().showNotification(
+          id: DateTime.now().millisecondsSinceEpoch.remainder(2147483647),
+          title: expiredTitle,
+          body: expiredBody,
+          payload: 'expired:$id',
+        );
+        notifiedExpired.add(id);
+      }
+      await prefs.setStringList(
+        'expired_notifications_sent',
+        notifiedExpired.toList(),
+      );
       await NotificationService().cancelAllAppointmentReminders();
       final rows = await service.client
           .from('appointments')
@@ -55,8 +92,6 @@ class _MainScreenState extends State<MainScreen> {
       if (!mounted) return;
       final reminderTitle = t(context, 'appointmentReminderTitle');
       final reminderBody = t(context, 'appointmentReminderBody');
-      final expiredTitle = t(context, 'expiredAppointmentTitle');
-      final expiredBody = t(context, 'expiredAppointmentBody');
       for (final row in (rows as List).cast<Map<String, dynamic>>()) {
         await NotificationService().scheduleAppointmentReminder(
           appointmentId: row['id'].toString(),

@@ -12,6 +12,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../screens/home/history_screen.dart';
 import '../screens/home/appointment_detail_screen.dart';
 import '../screens/home/settle_payment_screen.dart';
+import 'supabase_auth_service.dart';
 import '../widgets/app_lock_overlay.dart';
 
 class NotificationService {
@@ -347,6 +348,8 @@ class NotificationService {
   Future<void> _openAppointmentDetail(String appointmentId) async {
     if (appointmentId.isEmpty) return;
     try {
+      final service = SupabaseAuthService();
+      await service.expireOverdueAppointments();
       final row = await Supabase.instance.client
           .from('appointments')
           .select()

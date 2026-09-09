@@ -146,6 +146,9 @@ class _HistoryBodyState extends State<HistoryBody>
     final appointmentDate = row['appointment_date']?.toString() ?? '';
     final appointmentTime = row['appointment_time']?.toString() ?? '';
     final scheduledAt = DateTime.tryParse('$appointmentDate $appointmentTime');
+    final locallyExpired =
+        scheduledAt != null &&
+        !scheduledAt.add(const Duration(minutes: 15)).isAfter(DateTime.now());
     final status = switch (rawStatus) {
       'completed' => AppointmentStatus.selesai,
       'cancelled' => AppointmentStatus.batasWaktu,
@@ -153,6 +156,7 @@ class _HistoryBodyState extends State<HistoryBody>
           when scheduledAt != null && scheduledAt.isAfter(DateTime.now()) =>
         AppointmentStatus.mendatang,
       'expired' => AppointmentStatus.batasWaktu,
+      _ when locallyExpired => AppointmentStatus.batasWaktu,
       _ => AppointmentStatus.mendatang,
     };
     return AppointmentItem(
