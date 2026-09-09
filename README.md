@@ -20,13 +20,19 @@
 | 🔑 Ganti PIN (Settings) | 🟢 Selesai | Verifikasi PIN Lama → Input PIN Baru → Konfirmasi PIN Baru (Rate limit 3x) |
 | 👤 Edit Profil | 🟢 Selesai | Ubah Nama, TTL, Gender, Upload/Hapus Foto Profil Supabase Storage |
 | 👁️ Privasi Nomor HP | 🟢 Selesai | Default hidden (`+628••••9436`) + Eye Icon toggle di Settings & Edit Profile |
-| 🔔 Preferensi Notifikasi | 🟢 Selesai | Push Notif, Pengingat Terapi (H-1 & 2 jam), Promo, Update Email |
+| 🔔 Preferensi Notifikasi | 🟢 Selesai | Push notif, reminder 1 jam sebelum janji, notifikasi DP/expired, dan deep-link ke detail atau pelunasan |
 | ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan Lengkap + Hapus Akun Permanen (Verifikasi PIN 6-digit) |
 | 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → cooldown 30 detik |
 | 💤 Dormant Account | 🟢 Selesai | Deteksi akun >60 hari tidak aktif → verifikasi via email |
 | 🎨 UI & Layout Stability | 🟢 Selesai | Numpad, DatePicker & Flex Badge responsive 0 overflow di mobile/web |
 | ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (`update-pin` Deno runtime) |
-| 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan Bottom Navigation 5 tab (Beranda, Progress, Reservasi, Riwayat, Pengaturan) |
+| 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
+| 📅 Reservasi & Paket Sesi | 🟢 Selesai | Paket 1, 3, 6, atau 9 sesi dengan harga paket tetap |
+| 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, notifikasi perubahan, dan reminder baru |
+| 💳 DP & Pelunasan | 🟢 Selesai (Demo Gateway) | Instruksi pembayaran, konfirmasi, screen sukses, redirect History 3 detik, dan RPC pelunasan |
+| 🧾 Identitas Pasien & Booking | 🟢 Selesai | `medical_code` sebagai ID pasien tetap dan `booking_code` unik berurutan untuk setiap reservasi |
+| ⏱️ Auto Expire | 🟢 Selesai | Janji berubah menjadi `expired` 15 menit setelah waktu mulai dan mengirim push ke pengguna |
+| 🔒 Proteksi Slot | 🟢 Selesai | Unique index mencegah dua janji aktif memakai slot yang sama |
 
 ---
 
@@ -117,7 +123,46 @@ Sign In → Continue with Google
 
 ---
 
-### 6. 🔓 Lupa PIN Flow
+### 6. 📅 Reservasi, Paket Sesi & Janji Temu
+
+- Pilihan paket terapi:
+  - 1 sesi — Rp225.000
+  - 3 sesi — Rp660.000
+  - 6 sesi — Rp1.290.000
+  - 9 sesi — Rp1.890.000
+- Setiap record `appointments` merepresentasikan satu jadwal pertemuan.
+- `session_count` menyimpan jumlah sesi dalam paket dan dipakai untuk menghitung Progress.
+- Slot divalidasi berdasarkan tanggal, jam, layanan, dan lokasi.
+- Slot lama terbuka kembali setelah reschedule, sedangkan slot baru dikunci oleh unique index database.
+- Screen reschedule terpisah memakai kalender custom dan pemilih jam yang sama dengan reservasi utama.
+- Janji yang belum selesai otomatis menjadi `expired` setelah 15 menit dari waktu mulai ketika data dimuat.
+- Setiap pasien memiliki `medical_code` tetap berformat `KED-` + 12 karakter acak heksadesimal, yang ditampilkan sebagai **ID Pasien** di profil.
+- Setiap reservasi memiliki `booking_code` unik berurutan, dimulai dari `KDT-2026000001`.
+- Tab Janji Temu dan Beranda menampilkan penanda merah untuk appointment dengan DP yang belum lunas.
+- Screen Atur Jadwal Ulang memakai date picker dan time picker dengan validasi slot tersedia.
+- Saat reschedule, reminder lama dibatalkan dan reminder baru dijadwalkan ulang.
+- Teks UI terbaru, pesan WhatsApp CS, dan metode pembayaran mengikuti localization ID/EN.
+
+### 7. 💳 Pembayaran DP & Pelunasan
+
+- Reservasi penuh menyimpan `payment_status = paid`.
+- Reservasi DP menyimpan `payment_status = pending` dan `amount_due` sebagai sisa pembayaran.
+- Detail janji, Beranda, dan tab Janji Temu menampilkan badge merah **Pembayaran Tertunda** serta nominal sisa pembayaran.
+- Pelunasan menyediakan metode yang sama dengan reservasi: QRIS, OVO, GoPay, ShopeePay, BCA, BNI, BRI, Permata, Mandiri, kartu, dan tunai.
+- Setelah memilih metode, pengguna melihat instruksi pembayaran dan nomor rekening/QRIS sebelum konfirmasi.
+- Konfirmasi pelunasan menggunakan RPC `settle_appointment_payment`.
+- Setelah berhasil, aplikasi menampilkan screen sukses dengan countdown 3 detik lalu kembali ke tab History.
+- Notifikasi DP belum lunas tersedia di dalam aplikasi dan sebagai notifikasi HP; tap notifikasi membuka screen pelunasan appointment terkait.
+- Reminder appointment dikirim ke HP satu jam sebelum jadwal; appointment yang dibuat kurang dari satu jam akan mendapat reminder segera.
+- Reminder lama dibersihkan dan menggunakan ID stabil agar tidak muncul berulang setelah aplikasi dibuka atau jadwal diubah.
+- Lima belas menit setelah jadwal dimulai, appointment yang belum selesai mendapat notifikasi expired; tap notifikasi membuka detail dengan pilihan **Ubah Jadwal** atau **Hubungi CS**.
+- Tombol **Hubungi CS** membuka WhatsApp dengan kode booking, tanggal, dan jam appointment.
+- Pembayaran sukses dikirim sebagai notifikasi HP dan notifikasi in-app.
+- Pembayaran masih berstatus demo sampai payment gateway/webhook diterapkan.
+
+---
+
+### 8. 🔓 Lupa PIN Flow
 
 ```
 PIN Verification → Lupa PIN
@@ -132,7 +177,7 @@ PIN Verification → Lupa PIN
 
 ---
 
-### 7. 🛡️ Keamanan & Stabilitas Layout
+### 9. 🛡️ Keamanan & Stabilitas Layout
 
 | Mekanisme | Detail |
 |---|---|
@@ -218,6 +263,37 @@ supabase functions deploy update-pin
 
 ## 🗃️ Schema Supabase Database
 
+### Tabel `appointments`
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| `id` | uuid | Primary key janji temu |
+| `booker_id` | uuid | Pemilik janji, terhubung ke `auth.users` |
+| `service_type` | text | `Klinik` atau `Home Care` |
+| `clinic_name` | text | Klinik/lokasi layanan |
+| `appointment_date` | date | Tanggal pertemuan |
+| `appointment_time` | time | Jam pertemuan |
+| `session_count` | integer | Jumlah sesi dalam paket |
+| `appointment_status` | text | `upcoming`, `completed`, `expired`, atau `cancelled` |
+| `payment_plan` | text | `full` atau `deposit` |
+| `payment_status` | text | `paid`, `pending`, `failed`, atau `expired` |
+| `amount_due` | numeric | Sisa pembayaran |
+| `booking_code` | text | Kode unik reservasi dengan format `KDT-2026XXXXXX` |
+| `assigned_therapist_id` | uuid | Terapis yang ditugaskan, jika tersedia |
+| `created_at` / `updated_at` | timestamptz | Waktu pembuatan/perubahan |
+
+Status `completed` seharusnya diubah oleh terapis atau admin melalui RPC, bukan oleh pasien.
+
+### Migration operasional penting
+
+- `20260909000000_add_staff_appointment_status.sql` — role terapis/admin dan RPC update status.
+- `20260909000100_prevent_duplicate_appointment_slots.sql` — mencegah slot aktif ganda.
+- `20260909000200_expire_overdue_appointments.sql` — auto-expire 15 menit setelah jadwal.
+- `20260909000300_reschedule_appointment_rpc.sql` — reschedule aman oleh pemilik janji.
+- `20260909000400_settle_appointment_payment_rpc.sql` — RPC pelunasan pembayaran.
+- `20260909000000_add_booking_code.sql` — sequence dan kolom kode booking unik.
+- `20260909000500_secure_patient_medical_codes.sql` — migrasi ID pasien lama ke kode acak dan unique index.
+
 ### Tabel `profiles`
 
 | Kolom | Tipe | Keterangan |
@@ -234,6 +310,7 @@ supabase functions deploy update-pin
 | `signup_method` | text | `phone` / `google` / `apple` |
 | `status` | text | `active` / `deactivated` / `recycled` |
 | `is_profile_complete` | bool | Flag kelengkapan profil |
+| `medical_code` | text | ID pasien/nomor rekam medis yang tetap untuk pengguna |
 | `last_login_at` | timestamptz | Untuk deteksi akun dormant (>60 hari) |
 | `created_at` | timestamptz | Waktu registrasi |
 | `updated_at` | timestamptz | Waktu perbaruan terakhir |
@@ -294,9 +371,10 @@ lib/
 │   │   ├── edit_profile_screen.dart         # Edit profil, foto, hide phone, hapus akun
 │   │   ├── history_screen.dart              # Riwayat aktivitas & medis
 │   │   ├── home_screen.dart                 # Dashboard utama pasien Kedota
-│   │   ├── main_screen.dart                 # Bottom Navigation Bar (5 tab)
+│   │   ├── main_screen.dart                 # Bottom Navigation Bar (4 tab)
 │   │   ├── notification_preferences_screen.dart # Preferensi notifikasi
 │   │   ├── notification_screen.dart         # Halaman daftar notifikasi
+│   │   ├── settle_payment_screen.dart        # Instruksi dan pelunasan pembayaran
 │   │   ├── progress_screen.dart             # Monitor perkembangan kesehatan
 │   │   └── settings_screen.dart             # Settings, toggle bahasa, header profil
 │   ├── onboarding/
@@ -305,6 +383,7 @@ lib/
 │       └── splash_screen.dart               # Auto-routing berdasarkan sesi
 ├── services/
 │   ├── supabase_auth_service.dart           # Service logika autentikasi & profile DB
+│   ├── notification_service.dart             # Push notification, reminder, dan deep-link
 │   ├── supabase_api_client.dart             # Retrofit API client
 │   └── supabase_api_client.g.dart           # Code-generated Retrofit client
 ├── supabase/

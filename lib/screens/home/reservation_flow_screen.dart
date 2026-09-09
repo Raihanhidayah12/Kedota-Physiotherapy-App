@@ -23,8 +23,12 @@ const _ink = Color(0xFF172B2D);
 const _muted = Color(0xFF7C8C8E);
 const _homeCareService = 'home_care';
 const _clinicService = 'clinic';
-const _clinicSessionPrice = 100000;
-const _homeCareSessionPrice = 150000;
+const _sessionPackagePrices = <int, int>{
+  1: 225000,
+  3: 660000,
+  6: 1290000,
+  9: 1890000,
+};
 const _homeCareTravelFee = 25000;
 const _depositPercent = 30;
 
@@ -176,7 +180,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       final savedMedicalCode =
           profile?['medical_code']?.toString().trim() ?? '';
       final medicalCode =
-          RegExp(r'^KED-2026000\d{4}$').hasMatch(savedMedicalCode)
+          RegExp(r'^KED-[A-F0-9]{12}$').hasMatch(savedMedicalCode)
           ? savedMedicalCode
           : await _generateUniqueMedicalCode();
       _medicalCodeController.text = medicalCode;
@@ -241,11 +245,13 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   }
 
   String _generateMedicalCode() {
-    final randomNumber = Random.secure()
-        .nextInt(10000)
-        .toString()
-        .padLeft(4, '0');
-    return 'KED-2026000$randomNumber';
+    const alphabet = '0123456789ABCDEF';
+    final random = Random.secure();
+    final suffix = List.generate(
+      12,
+      (_) => alphabet[random.nextInt(alphabet.length)],
+    ).join();
+    return 'KED-$suffix';
   }
 
   Future<String> _generateUniqueMedicalCode() async {
@@ -357,6 +363,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       context,
       'appointmentReminderBody',
     ).replaceFirst('{time}', _formatTime(appointmentTime));
+    final pendingPaymentTitle = t(context, 'paymentPendingNotificationTitle');
+    final pendingPaymentBody = t(context, 'paymentPendingNotificationBody');
+    final expiredTitle = t(context, 'expiredAppointmentTitle');
+    final expiredBody = t(context, 'expiredAppointmentBody');
     final slotAvailable = await _isAppointmentTimeAvailable(
       appointmentDate,
       appointmentTime,
@@ -395,7 +405,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         'session_count': _sessionCount,
         'payment_plan': _paymentPlan,
         'payment_method': _paymentMethod,
-        'payment_status': 'paid',
+        'payment_status': _paymentPlan == 'full' ? 'paid' : 'pending',
         'appointment_status': 'upcoming',
         'patient_complaint': _complaintController.text.trim(),
         'base_price': _basePrice,
@@ -418,7 +428,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           final insertedRows = await _service.client
               .from('appointments')
               .insert(payload)
-              .select('id');
+              .select('id, booking_code');
           if (insertedRows.isNotEmpty) {
             appointmentId = insertedRows.first['id']?.toString();
           }
@@ -443,6 +453,21 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           title: reminderTitle,
           body: reminderBody,
         );
+        await NotificationService().scheduleExpirationNotice(
+          appointmentId: appointmentId,
+          date: payload['appointment_date'].toString(),
+          time: payload['appointment_time'].toString(),
+          title: expiredTitle,
+          body: expiredBody,
+        );
+        if (_paymentPlan == 'deposit') {
+          await NotificationService().showNotification(
+            id: DateTime.now().millisecondsSinceEpoch.remainder(2147483647),
+            title: pendingPaymentTitle,
+            body: pendingPaymentBody,
+            payload: 'deposit:$appointmentId',
+          );
+        }
       }
       if (mounted) {
         await NotificationService().showNotification(
@@ -547,6 +572,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
             10,
           ),
           'appointment_time': _formatTime(_appointmentTime!),
+          'updated': true,
         });
       }
     } catch (error) {
@@ -559,11 +585,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   String _formatTime(TimeOfDay time) =>
       '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00';
 
-  int get _sessionPrice => _serviceType == _homeCareService
-      ? _homeCareSessionPrice
-      : _clinicSessionPrice;
+  int _packagePrice(int count) => _sessionPackagePrices[count] ?? 225000;
 
-  int get _basePrice => _sessionPrice * _sessionCount;
+  int get _basePrice => _packagePrice(_sessionCount);
 
   int get _travelFee =>
       _serviceType == _homeCareService ? _homeCareTravelFee : 0;
@@ -1187,6 +1211,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         _field(
           _nikController,
           t(context, 'reservationNik'),
+          readOnly: _forSelf,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           maxLength: 16,
@@ -1203,6 +1228,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         _field(
           _nameController,
           t(context, 'reservationFullName'),
+          readOnly: _forSelf,
           icon: Icons.person_outline_rounded,
         ),
         _dateField(
@@ -1662,7 +1688,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
           childAspectRatio: 2.25,
-          children: [1, 2, 4, 8].map((count) => _sessionCard(count)).toList(),
+          children: [1, 3, 6, 9].map((count) => _sessionCard(count)).toList(),
         ),
       ],
     ),
@@ -1670,7 +1696,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
 
   Widget _sessionCard(int count) {
     final selected = _sessionCount == count;
-    final price = _sessionPrice * count;
+    final price = _packagePrice(count);
     return InkWell(
       onTap: () => setState(() => _sessionCount = count),
       borderRadius: BorderRadius.circular(14),

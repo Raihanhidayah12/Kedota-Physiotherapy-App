@@ -40,6 +40,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   String? _gender;
   String? _phone;
   String? _email;
+  String _medicalCode = '-';
   String? _profileImageUrl;
   bool _isLoading = false;
   bool _isUploading = false;
@@ -120,6 +121,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         _nikCtr.text = profile['nik']?.toString().trim() ?? '';
         _addressCtr.text = profile['address']?.toString().trim() ?? '';
         _email = profile['email']?.toString().trim();
+        _medicalCode = profile['medical_code']?.toString().trim() ?? '-';
         _phone = displayPhone;
         _birthDate = bd;
         _gender = profile['gender']?.toString();
@@ -482,6 +484,11 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     ),
   );
 
+  Future<void> _copyMedicalCode() async {
+    await Clipboard.setData(ClipboardData(text: _medicalCode));
+    if (mounted) _snack(t(context, 'patientIdCopied'));
+  }
+
   // ── build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -579,6 +586,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                 actionIcon: _hidePhone
                                     ? Icons.visibility_off_outlined
                                     : Icons.visibility_outlined,
+                                maskValue: true,
                               ),
                               _divider(),
                               _readOnlyField(
@@ -587,6 +595,16 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                     ? _email!
                                     : '-',
                                 icon: Icons.email_outlined,
+                              ),
+                              _divider(),
+                              _readOnlyField(
+                                label: t(context, 'patientIdLabel'),
+                                value: _medicalCode,
+                                icon: Icons.badge_outlined,
+                                onActionTap: _medicalCode == '-'
+                                    ? null
+                                    : _copyMedicalCode,
+                                actionIcon: Icons.copy_outlined,
                               ),
                             ],
                           ),
@@ -826,6 +844,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     required IconData icon,
     VoidCallback? onActionTap,
     IconData? actionIcon,
+    bool maskValue = false,
   }) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     child: Row(
@@ -860,9 +879,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: _ink,
-                  letterSpacing: (onActionTap != null && _hidePhone)
-                      ? 1.0
-                      : 0.0,
+                  letterSpacing: (maskValue && _hidePhone) ? 1.0 : 0.0,
                 ),
               ),
             ],

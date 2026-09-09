@@ -66,6 +66,7 @@ class _SettingsBodyState extends State<SettingsBody>
   String _fullName = 'Pasien Kedota';
   String? _profileImageUrl;
   String _phone = '-';
+  String _medicalCode = '-';
   bool _hidePhone = true;
   bool _isProfileIncomplete = false; // true jika NIK atau alamat kosong
   bool _biometricEnabled = false;
@@ -153,6 +154,7 @@ class _SettingsBodyState extends State<SettingsBody>
             metadata['phone']?.toString().trim() ??
             user?.phone ??
             '-';
+        _medicalCode = profile?['medical_code']?.toString().trim() ?? '-';
         // Cek NIK dan alamat — jika salah satu kosong, tampilkan banner
         final nik = profile?['nik']?.toString().trim() ?? '';
         final address = profile?['address']?.toString().trim() ?? '';
@@ -217,13 +219,14 @@ class _SettingsBodyState extends State<SettingsBody>
     // Tampilkan dialog konfirmasi sebelum meminta izin
     final proceed = await _showBiometricPermissionDialog();
     if (!proceed || !mounted) return;
+    final biometricReason = t(context, 'biometricReason');
 
     try {
       // Disable FLAG_SECURE sementara agar system biometric prompt bisa muncul
       await ScreenSecurityService.disable();
 
       final authenticated = await auth.authenticate(
-        localizedReason: t(context, 'biometricReason'),
+        localizedReason: biometricReason,
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,
@@ -404,7 +407,21 @@ class _SettingsBodyState extends State<SettingsBody>
   void _snack(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: _c700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+  }
+
+  Future<void> _copyMedicalCode() async {
+    await Clipboard.setData(ClipboardData(text: _medicalCode));
+    if (mounted) _snack(t(context, 'patientIdCopied'));
   }
 
   String? _firstNonEmpty(List<dynamic> values) {
@@ -783,6 +800,36 @@ class _SettingsBodyState extends State<SettingsBody>
                       size: 16,
                       color: _ink3,
                     ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.badge_outlined, size: 14, color: _c700),
+                  const SizedBox(width: 5),
+                  Text(
+                    '${t(context, 'patientIdLabel')}: ',
+                    style: const TextStyle(fontSize: 11, color: _ink3),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _medicalCode,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: _c700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _medicalCode == '-' ? null : _copyMedicalCode,
+                    tooltip: t(context, 'copyPatientId'),
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.copy_outlined, size: 16),
+                    color: _c700,
                   ),
                 ],
               ),

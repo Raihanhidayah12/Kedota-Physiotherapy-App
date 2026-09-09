@@ -17,6 +17,15 @@ const _ink3 = Color(0xFF8AA8AC);
 
 enum AppointmentStatus { mendatang, selesai, batasWaktu }
 
+String appointmentBookingCode(String appointmentId) {
+  final normalizedId = appointmentId.replaceAll('-', '').toUpperCase();
+  if (normalizedId.isEmpty) return 'KDT-2026000000';
+  final codePart = normalizedId.length > 8
+      ? normalizedId.substring(0, 8)
+      : normalizedId.padRight(8, '0');
+  return 'KDT-2026$codePart';
+}
+
 class AppointmentItem {
   final String id;
   final String therapistName;
@@ -29,6 +38,10 @@ class AppointmentItem {
   final String complaint;
   final String clinicName;
   final int sessionCount;
+  final String paymentStatus;
+  final String paymentPlan;
+  final int amountDue;
+  final String bookingCode;
   final AppointmentStatus status;
 
   const AppointmentItem({
@@ -43,8 +56,15 @@ class AppointmentItem {
     this.complaint = '',
     this.clinicName = '',
     this.sessionCount = 1,
+    this.paymentStatus = 'paid',
+    this.paymentPlan = 'full',
+    this.amountDue = 0,
+    this.bookingCode = '',
     required this.status,
   });
+
+  String get displayBookingCode =>
+      bookingCode.isEmpty ? appointmentBookingCode(id) : bookingCode;
 }
 
 // ─── Body widget ──────────────────────────────────────────────────────────────
@@ -98,6 +118,7 @@ class _HistoryBodyState extends State<HistoryBody>
       final service = SupabaseAuthService();
       final user = service.client.auth.currentUser;
       if (user == null) return;
+      await service.expireOverdueAppointments();
       final rows = await service.client
           .from('appointments')
           .select()
@@ -146,6 +167,10 @@ class _HistoryBodyState extends State<HistoryBody>
       complaint: row['patient_complaint']?.toString() ?? '',
       clinicName: row['clinic_name']?.toString() ?? '',
       sessionCount: int.tryParse(row['session_count']?.toString() ?? '') ?? 1,
+      paymentStatus: row['payment_status']?.toString() ?? 'paid',
+      paymentPlan: row['payment_plan']?.toString() ?? 'full',
+      amountDue: int.tryParse(row['amount_due']?.toString() ?? '') ?? 0,
+      bookingCode: row['booking_code']?.toString() ?? '',
       status: status,
     );
   }
@@ -542,11 +567,22 @@ class _HistoryBodyState extends State<HistoryBody>
   // ── upcoming card ─────────────────────────────────────────────────────────
 
   Widget _buildUpcomingCard(AppointmentItem item) {
+    final paymentStatus = item.paymentStatus.toLowerCase();
+    final paymentPlan = item.paymentPlan.toLowerCase();
+    final hasOutstandingPayment =
+        (paymentPlan == 'deposit' && paymentStatus != 'paid') ||
+        (item.amountDue > 0 && paymentStatus != 'paid');
+    const paymentWarning = Color(0xFFD94F45);
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: const Border(left: BorderSide(color: _c500, width: 4)),
+        border: Border(
+          left: BorderSide(
+            color: hasOutstandingPayment ? paymentWarning : _c500,
+            width: 4,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: _ink.withValues(alpha: 0.07),
@@ -585,6 +621,11 @@ class _HistoryBodyState extends State<HistoryBody>
                       ),
                       const SizedBox(height: 4),
                       _infoRow(Icons.access_time_rounded, item.time),
+                      const SizedBox(height: 4),
+                      _infoRow(
+                        Icons.confirmation_number_outlined,
+                        item.displayBookingCode,
+                      ),
                     ],
                   ),
                 ),
@@ -594,11 +635,13 @@ class _HistoryBodyState extends State<HistoryBody>
                     vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: _c500,
+                    color: hasOutstandingPayment ? paymentWarning : _c500,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    t(context, 'statusUpcoming'),
+                    hasOutstandingPayment
+                        ? t(context, 'paymentPending')
+                        : t(context, 'statusUpcoming'),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 10,
@@ -634,15 +677,18 @@ class _HistoryBodyState extends State<HistoryBody>
             SizedBox(
               width: double.infinity,
               child: GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => AppointmentDetailScreen(item: item),
-                  ),
-                ),
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => AppointmentDetailScreen(item: item),
+                    ),
+                  );
+                  if (mounted) _loadAppointments();
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   decoration: BoxDecoration(
-                    color: _c500,
+                    color: hasOutstandingPayment ? paymentWarning : _c500,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
@@ -706,13 +752,30 @@ class _HistoryBodyState extends State<HistoryBody>
 
   Widget _buildHistoryCard(AppointmentItem item) {
     final isSelesai = item.status == AppointmentStatus.selesai;
+    final hasOutstandingPayment =
+        (item.paymentPlan == 'deposit' && item.paymentStatus != 'paid') ||
+        (item.amountDue > 0 && item.paymentStatus != 'paid');
     final accentColor = _accentBorder(item.status);
     final serviceColor = isSelesai ? _c700 : _ink;
 
-    final badgeBg = isSelesai ? Colors.transparent : const Color(0xFFFFECEB);
-    final badgeFg = isSelesai ? _c700 : const Color(0xFFD94F45);
-    final badgeBorder = isSelesai ? _c700 : const Color(0xFFD94F45);
-    final badgeLabel = isSelesai
+    final badgeBg = hasOutstandingPayment
+        ? const Color(0xFFFFECEB)
+        : isSelesai
+        ? Colors.transparent
+        : const Color(0xFFFFECEB);
+    final badgeFg = hasOutstandingPayment
+        ? const Color(0xFFD94F45)
+        : isSelesai
+        ? _c700
+        : const Color(0xFFD94F45);
+    final badgeBorder = hasOutstandingPayment
+        ? const Color(0xFFD94F45)
+        : isSelesai
+        ? _c700
+        : const Color(0xFFD94F45);
+    final badgeLabel = hasOutstandingPayment
+        ? t(context, 'paymentPending')
+        : isSelesai
         ? t(context, 'statusDone')
         : t(context, 'statusExpired');
 
@@ -763,6 +826,12 @@ class _HistoryBodyState extends State<HistoryBody>
                         item.time,
                         fontSize: 11,
                       ),
+                      const SizedBox(height: 3),
+                      _infoRow(
+                        Icons.confirmation_number_outlined,
+                        item.displayBookingCode,
+                        fontSize: 11,
+                      ),
                     ],
                   ),
                 ),
@@ -791,6 +860,27 @@ class _HistoryBodyState extends State<HistoryBody>
             const SizedBox(height: 14),
             const Divider(height: 1, color: Color(0xFFF0F5F5)),
             const SizedBox(height: 10),
+            if (hasOutstandingPayment) ...[
+              Row(
+                children: [
+                  const Icon(
+                    Icons.receipt_long_outlined,
+                    size: 15,
+                    color: Color(0xFFD94F45),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${t(context, 'remainingPayment')}: ${_formatRupiah(item.amountDue)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFD94F45),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
             Row(
               children: [
                 Text(
@@ -810,11 +900,14 @@ class _HistoryBodyState extends State<HistoryBody>
                   ),
                 ),
                 GestureDetector(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => AppointmentDetailScreen(item: item),
-                    ),
-                  ),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AppointmentDetailScreen(item: item),
+                      ),
+                    );
+                    if (mounted) _loadAppointments();
+                  },
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -842,6 +935,16 @@ class _HistoryBodyState extends State<HistoryBody>
         ),
       ),
     );
+  }
+
+  String _formatRupiah(int amount) {
+    final digits = amount.toString();
+    final groups = <String>[];
+    for (var end = digits.length; end > 0; end -= 3) {
+      final start = (end - 3).clamp(0, end);
+      groups.insert(0, digits.substring(start, end));
+    }
+    return 'Rp ${groups.join('.')}';
   }
 
   String _formatAppointmentDate(String rawDate) {

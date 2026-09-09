@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
@@ -10,14 +12,17 @@ import 'appointment_detail_screen.dart';
 import 'history_screen.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
-const _c900 = Color(0xFF004D47);
 const _c700 = Color(0xFF007F78);
 const _c500 = Color(0xFF00A79D);
 const _c300 = Color(0xFF5ECFC9);
 const _c100 = Color(0xFFD4F5F3);
 const _bg = Color(0xFFF0F7F7);
 const _ink = Color(0xFF0E2C2F);
+const _ink2 = Color(0xFF3D6065);
 const _ink3 = Color(0xFF8AA8AC);
+final _whatsappConsultationUri = Uri.parse(
+  'https://api.whatsapp.com/send/?phone=6281645460939&text=Halo+Kedota%21+Saya+mempunyai+keluhan+fungsi+gerak%2C+dan+ingin+konsultasi+fisioterapi.&type=phone_number&app_absent=0',
+);
 
 /// Konten tab Beranda — dirender oleh [MainScreen] di dalam IndexedStack.
 class HomeBody extends StatefulWidget {
@@ -39,8 +44,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   late Animation<Offset> _greetSlide;
   late Animation<double> _avatarFade;
   late Animation<Offset> _avatarSlide;
-  late Animation<double> _searchFadeAnim;
-  late Animation<Offset> _searchSlide;
   // staggered section animations
   late AnimationController _staggerCtrl;
   late List<Animation<double>> _sectionFades;
@@ -53,6 +56,8 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   bool _isSearching = false;
   String _searchQuery = '';
   Map<String, dynamic>? _upcomingAppointment;
+  bool _hasUnreadNotifications = true;
+  final Set<int> _completedTasks = {0};
 
   // number of staggered sections:
   // 0=promo, 1=appointment, 2=services, 3=progress, 4=tips
@@ -94,19 +99,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
           CurvedAnimation(
             parent: _headerCtrl,
             curve: const Interval(0.11, 0.66, curve: Curves.easeOutCubic),
-          ),
-        );
-
-    // search bar: slides in from bottom, starts at 250ms (0.28), ends at 900ms
-    _searchFadeAnim = CurvedAnimation(
-      parent: _headerCtrl,
-      curve: const Interval(0.28, 1.0, curve: Curves.easeOut),
-    );
-    _searchSlide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _headerCtrl,
-            curve: const Interval(0.28, 1.0, curve: Curves.easeOutCubic),
           ),
         );
 
@@ -157,6 +149,16 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     });
     _loadProfile();
     _loadUpcomingAppointment();
+    _loadNotificationReadState();
+  }
+
+  Future<void> _loadNotificationReadState() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _hasUnreadNotifications =
+          !(prefs.getBool('notifications_marked_as_read') ?? false);
+    });
   }
 
   @override
@@ -228,6 +230,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       final service = SupabaseAuthService();
       final user = service.client.auth.currentUser;
       if (user == null) return;
+      await service.expireOverdueAppointments();
       final rows = await service.client
           .from('appointments')
           .select()
@@ -239,10 +242,14 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       for (final raw in rows as List) {
         final row = raw as Map<String, dynamic>;
         final status = row['appointment_status']?.toString() ?? 'upcoming';
-        if (status == 'completed' || status == 'expired' || status == 'cancelled') {
+        if (status == 'completed' ||
+            status == 'expired' ||
+            status == 'cancelled') {
           continue;
         }
-        final date = DateTime.tryParse(row['appointment_date']?.toString() ?? '');
+        final date = DateTime.tryParse(
+          row['appointment_date']?.toString() ?? '',
+        );
         if (date == null) continue;
         final timeParts = (row['appointment_time']?.toString() ?? '00:00')
             .split(':');
@@ -357,15 +364,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     );
   }
 
-  // ── greeting helper ─────────────────────────────────────────────────────────
-  String _greeting(BuildContext context) {
-    final h = DateTime.now().hour;
-    if (h < 12) return t(context, 'greetingMorning');
-    if (h < 15) return t(context, 'greetingAfternoon');
-    if (h < 18) return t(context, 'greetingEvening');
-    return t(context, 'greetingNight');
-  }
-
   String get _firstName => _fullName.split(' ').first;
 
   // ── build ────────────────────────────────────────────────────────────────────
@@ -414,10 +412,10 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                       const SizedBox(height: 28),
                       _fadeSlide(
                         2,
-                        _buildSectionRow(t(context, 'ourServices'), null),
+                        _buildSectionRow(t(context, 'independentTasks'), null),
                       ),
                       const SizedBox(height: 14),
-                      _fadeSlide(2, _buildServicesGrid()),
+                      _fadeSlide(2, _buildTasksCard()),
                       const SizedBox(height: 28),
                       _fadeSlide(
                         3,
@@ -462,31 +460,20 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
           );
         },
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [_c900, _c700, _c500],
-            ),
+          margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: _ink.withValues(alpha: 0.05),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
           child: Stack(
             children: [
-              // decorative circles
-              Positioned(
-                right: -60,
-                top: -60,
-                child: _circle(220, Colors.white, 0.05),
-              ),
-              Positioned(
-                right: 40,
-                top: 20,
-                child: _circle(100, Colors.white, 0.07),
-              ),
-              Positioned(
-                left: -40,
-                bottom: -30,
-                child: _circle(130, _c300, 0.15),
-              ),
               Padding(
                 padding: EdgeInsets.fromLTRB(
                   20,
@@ -499,7 +486,15 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                   children: [
                     Row(
                       children: [
-                        // greeting — slides from left
+                        // Avatar sits beside the greeting, matching the reference layout.
+                        FadeTransition(
+                          opacity: _avatarFade,
+                          child: SlideTransition(
+                            position: _avatarSlide,
+                            child: _buildAvatar(),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: FadeTransition(
                             opacity: _greetFade,
@@ -509,22 +504,20 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '${_greeting(context)},',
+                                    t(context, 'welcomeGreeting'),
                                     style: const TextStyle(
-                                      color: _c100,
+                                      color: _c700,
                                       fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      letterSpacing: 0.2,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     _firstName,
                                     style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 26,
+                                      color: _ink,
+                                      fontSize: 13,
                                       fontWeight: FontWeight.w800,
-                                      height: 1.1,
                                     ),
                                   ),
                                 ],
@@ -532,31 +525,17 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
-                        // avatar + notif — slides from right
+                        const SizedBox(width: 10),
                         FadeTransition(
                           opacity: _avatarFade,
                           child: SlideTransition(
                             position: _avatarSlide,
-                            child: Row(
-                              children: [
-                                _buildNotifButton(),
-                                const SizedBox(width: 10),
-                                _buildAvatar(),
-                              ],
-                            ),
+                            child: _buildNotifButton(),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 22),
-                    // search bar — slides from bottom
-                    FadeTransition(
-                      opacity: _searchFadeAnim,
-                      child: SlideTransition(
-                        position: _searchSlide,
-                        child: _buildSearchBar(),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -577,39 +556,39 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   );
 
   Widget _buildNotifButton() => GestureDetector(
-    onTap: () {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const NotificationScreen()));
+    onTap: () async {
+      final markedAsRead = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const NotificationScreen()),
+      );
+      if (markedAsRead == true && mounted) {
+        setState(() => _hasUnreadNotifications = false);
+      }
     },
     child: Container(
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+        color: _c100,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+        border: Border.all(color: _c500.withValues(alpha: 0.2)),
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          const Icon(
-            Icons.notifications_outlined,
-            color: Colors.white,
-            size: 20,
-          ),
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              width: 7,
-              height: 7,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFF6B6B),
-                shape: BoxShape.circle,
+          const Icon(Icons.notifications_outlined, color: _c700, size: 20),
+          if (_hasUnreadNotifications)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFF6B6B),
+                  shape: BoxShape.circle,
+                ),
               ),
             ),
-          ),
         ],
       ),
     ),
@@ -618,10 +597,10 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   Widget _buildAvatar() => Container(
     decoration: BoxDecoration(
       shape: BoxShape.circle,
-      border: Border.all(color: Colors.white, width: 2),
+      border: Border.all(color: _c100, width: 2),
       boxShadow: [
         BoxShadow(
-          color: _c900.withValues(alpha: 0.3),
+          color: _ink.withValues(alpha: 0.12),
           blurRadius: 8,
           offset: const Offset(0, 3),
         ),
@@ -639,56 +618,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       child: _profileImageUrl == null
           ? const Icon(Icons.person, color: Colors.white, size: 22)
           : null,
-    ),
-  );
-
-  Widget _buildSearchBar() => TextField(
-    controller: _searchCtrl,
-    focusNode: _searchFocus,
-    style: const TextStyle(color: Colors.white, fontSize: 13),
-    cursorColor: Colors.white,
-    decoration: InputDecoration(
-      hintText: t(context, 'searchHint'),
-      hintStyle: TextStyle(
-        color: Colors.white.withValues(alpha: 0.6),
-        fontSize: 13,
-      ),
-      prefixIcon: Icon(
-        Icons.search_rounded,
-        color: Colors.white.withValues(alpha: 0.7),
-        size: 20,
-      ),
-      suffixIcon: _searchCtrl.text.isNotEmpty
-          ? GestureDetector(
-              onTap: () {
-                _searchCtrl.clear();
-                _searchFocus.unfocus();
-              },
-              child: Icon(
-                Icons.close_rounded,
-                color: Colors.white.withValues(alpha: 0.7),
-                size: 18,
-              ),
-            )
-          : null,
-      filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.15),
-      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(
-          color: Colors.white.withValues(alpha: 0.6),
-          width: 1.5,
-        ),
-      ),
     ),
   );
 
@@ -1028,7 +957,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                           ),
                         ),
                       )
-                    : null,
+                    : _openWhatsAppConsultation,
                 title: t(context, p.titleKey),
                 subtitle: t(context, p.subtitleKey),
                 colors: p.colors,
@@ -1056,6 +985,18 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
         ),
       ],
     );
+  }
+
+  Future<void> _openWhatsAppConsultation() async {
+    final opened = await launchUrl(
+      _whatsappConsultationUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t(context, 'whatsappOpenFailed'))));
+    }
   }
 
   Widget _buildPromoItem({
@@ -1184,182 +1125,214 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
           children: [
             const Icon(Icons.event_available_rounded, color: _ink3, size: 28),
             const SizedBox(width: 12),
-            Expanded(child: Text(t(context, 'noAppointments'), style: const TextStyle(color: _ink3))),
+            Expanded(
+              child: Text(
+                t(context, 'noAppointments'),
+                style: const TextStyle(color: _ink3),
+              ),
+            ),
           ],
         ),
       );
     }
     final serviceType = appointment['service_type']?.toString() ?? 'Home Care';
     final isClinic = serviceType == 'Klinik';
-    final date = DateTime.tryParse(appointment['appointment_date']?.toString() ?? '');
-    final dateLabel = date == null ? '-' : '${date.day.toString().padLeft(2, '0')} ${_monthName(date.month)} ${date.year}';
+    final paymentStatus =
+        appointment['payment_status']?.toString().toLowerCase() ?? 'paid';
+    final paymentPlan =
+        appointment['payment_plan']?.toString().toLowerCase() ?? 'full';
+    final amountDue =
+        int.tryParse(appointment['amount_due']?.toString() ?? '') ?? 0;
+    final hasOutstandingPayment =
+        (paymentPlan == 'deposit' && paymentStatus != 'paid') ||
+        (amountDue > 0 && paymentStatus != 'paid');
+    final date = DateTime.tryParse(
+      appointment['appointment_date']?.toString() ?? '',
+    );
+    final dateLabel = date == null
+        ? '-'
+        : '${date.day.toString().padLeft(2, '0')} ${_monthName(date.month)} ${date.year}';
     final rawTime = appointment['appointment_time']?.toString() ?? '-';
-    final timeLabel = rawTime.length >= 5 ? '${rawTime.substring(0, 5)} WIB' : rawTime;
+    final timeLabel = rawTime.length >= 5
+        ? '${rawTime.substring(0, 5)} WIB'
+        : rawTime;
     return GestureDetector(
       onTap: () => _openUpcomingDetail(appointment),
       child: Container(
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(20),
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [_c700, _c500],
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: _c700.withValues(alpha: 0.35),
-          blurRadius: 20,
-          offset: const Offset(0, 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          border: Border.all(
+            color: hasOutstandingPayment ? const Color(0xFFD94F45) : _c500,
+            width: hasOutstandingPayment ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _ink.withValues(alpha: 0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
-      ],
-    ),
-    child: Stack(
-      children: [
-        Positioned(
-          right: -20,
-          bottom: -20,
-          child: _circle(110, Colors.white, 0.06),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        child: Stack(
+          children: [
+            Positioned(
+              right: -20,
+              bottom: -20,
+              child: _circle(110, Colors.white, 0.06),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.medical_services_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          appointment['therapist_name']?.toString().isNotEmpty == true
-                              ? appointment['therapist_name'].toString()
-                              : t(context, 'therapistDefault'),
-                          style: TextStyle(
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: _c100,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.medical_services_rounded,
+                          color: _c700,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              appointment['therapist_name']
+                                          ?.toString()
+                                          .isNotEmpty ==
+                                      true
+                                  ? appointment['therapist_name'].toString()
+                                  : t(context, 'therapistDefault'),
+                              style: TextStyle(
+                                color: _ink,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _c100,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                isClinic
+                                    ? t(context, 'klinik')
+                                    : t(context, 'homeCare'),
+                                style: TextStyle(
+                                  color: _c700,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: hasOutstandingPayment
+                              ? const Color(0xFFD94F45)
+                              : _c500,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          hasOutstandingPayment
+                              ? t(context, 'paymentPending')
+                              : t(context, 'statusUpcoming'),
+                          style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 15,
+                            fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: _bg,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 10,
+                          child: _apptInfoItem(
+                            Icons.calendar_month_outlined,
+                            date == null ? '-' : _weekdayName(date.weekday),
+                            dateLabel,
+                          ),
+                        ),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
+                          width: 1,
+                          height: 36,
+                          color: const Color(0xFFE0EAEA),
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        Expanded(
+                          flex: 9,
+                          child: _apptInfoItem(
+                            Icons.access_time_rounded,
+                            timeLabel,
+                            isClinic
+                                ? t(context, 'klinik')
+                                : t(context, 'homeCare'),
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            isClinic ? t(context, 'klinik') : t(context, 'homeCare'),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => _openUpcomingDetail(appointment),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: _c100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.arrow_forward_rounded,
+                              color: _c700,
+                              size: 18,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      t(context, 'statusUpcoming'),
-                      style: const TextStyle(
-                        color: _c700,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 10,
-                      child: _apptInfoItem(
-                        Icons.calendar_month_outlined,
-                        date == null ? '-' : _weekdayName(date.weekday),
-                        dateLabel,
-                      ),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 36,
-                      color: Colors.white.withValues(alpha: 0.25),
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    Expanded(
-                      flex: 9,
-                      child: _apptInfoItem(
-                        Icons.access_time_rounded,
-                        timeLabel,
-                        isClinic ? t(context, 'klinik') : t(context, 'homeCare'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => _openUpcomingDetail(appointment),
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.arrow_forward_rounded,
-                          color: _c700,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
-    ),
       ),
     );
   }
 
-  void _openUpcomingDetail(Map<String, dynamic> appointment) {
+  Future<void> _openUpcomingDetail(Map<String, dynamic> appointment) async {
     final rawStatus = appointment['appointment_status']?.toString();
     final item = AppointmentItem(
       id: appointment['id']?.toString() ?? '',
-      therapistName: appointment['therapist_name']?.toString().isNotEmpty == true
+      therapistName:
+          appointment['therapist_name']?.toString().isNotEmpty == true
           ? appointment['therapist_name'].toString()
           : t(context, 'therapistDefault'),
       serviceType: appointment['service_type']?.toString() ?? 'Home Care',
@@ -1370,30 +1343,45 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       address: appointment['address']?.toString() ?? '',
       complaint: appointment['patient_complaint']?.toString() ?? '',
       clinicName: appointment['clinic_name']?.toString() ?? '',
-      sessionCount: int.tryParse(appointment['session_count']?.toString() ?? '') ?? 1,
+      sessionCount:
+          int.tryParse(appointment['session_count']?.toString() ?? '') ?? 1,
+      paymentStatus: appointment['payment_status']?.toString() ?? 'paid',
+      paymentPlan: appointment['payment_plan']?.toString() ?? 'full',
+      amountDue: int.tryParse(appointment['amount_due']?.toString() ?? '') ?? 0,
+      bookingCode: appointment['booking_code']?.toString() ?? '',
       status: rawStatus == 'completed'
           ? AppointmentStatus.selesai
           : rawStatus == 'expired'
           ? AppointmentStatus.batasWaktu
           : AppointmentStatus.mendatang,
     );
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => AppointmentDetailScreen(item: item)),
     );
+    if (mounted) _loadUpcomingAppointment();
   }
 
   String _monthName(int month) => const [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
   ][month - 1];
 
-  String _weekdayName(int weekday) => const [
-    'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min',
-  ][weekday - 1];
+  String _weekdayName(int weekday) =>
+      const ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'][weekday - 1];
 
   Widget _apptInfoItem(IconData icon, String top, String bottom) => Row(
     children: [
-      Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.8)),
+      Icon(icon, size: 16, color: _c500),
       const SizedBox(width: 6),
       Expanded(
         child: Column(
@@ -1404,7 +1392,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Colors.white,
+                color: _ink,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -1413,10 +1401,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
               bottom,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 10,
-              ),
+              style: TextStyle(color: _ink3, fontSize: 10),
             ),
           ],
         ),
@@ -1424,81 +1409,72 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     ],
   );
 
-  // ── services grid ─────────────────────────────────────────────────────────
-  Widget _buildServicesGrid() {
-    final services = [
-      (
-        icon: Icons.home_rounded,
-        label: t(context, 'homeCare'),
-        color: const Color(0xFF007F78),
-      ),
-      (
-        icon: Icons.local_hospital_rounded,
-        label: t(context, 'klinik'),
-        color: const Color(0xFF5B5FC8),
-      ),
-      (
-        icon: Icons.directions_run_rounded,
-        label: t(context, 'rehab'),
-        color: const Color(0xFFE87040),
-      ),
-      (
-        icon: Icons.favorite_rounded,
-        label: t(context, 'wellness'),
-        color: const Color(0xFFD04080),
-      ),
+  // ── independent tasks ────────────────────────────────────────────────────
+  Widget _buildTasksCard() {
+    final tasks = [
+      (t(context, 'taskStretch'), '2 set × 10 kali'),
+      (t(context, 'taskLatihanOtot'), '3 set × 8 kali'),
+      (t(context, 'taskPanggul'), '3 set × 10 kali'),
+      (t(context, 'taskJalan'), '15–20 menit'),
     ];
-    return Row(
-      children: services.map((s) {
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(right: s == services.last ? 0 : 10),
-            child: _buildServiceItem(s.icon, s.label, s.color),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: _ink.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-        );
-      }).toList(),
+        ],
+      ),
+      child: Column(
+        children: [
+          for (var index = 0; index < tasks.length; index++)
+            InkWell(
+              onTap: () => setState(() {
+                if (_completedTasks.contains(index)) {
+                  _completedTasks.remove(index);
+                } else {
+                  _completedTasks.add(index);
+                }
+              }),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 14, 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      _completedTasks.contains(index)
+                          ? Icons.check_box_outlined
+                          : Icons.check_box_outline_blank,
+                      color: _completedTasks.contains(index) ? _c500 : _ink3,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        tasks[index].$1,
+                        style: TextStyle(
+                          color: _completedTasks.contains(index) ? _ink : _ink2,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      tasks[index].$2,
+                      style: const TextStyle(fontSize: 12, color: _ink2),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
-
-  Widget _buildServiceItem(IconData icon, String label, Color color) =>
-      Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: color,
-                height: 1.2,
-              ),
-            ),
-          ],
-        ),
-      );
 
   // ── progress card ─────────────────────────────────────────────────────────
   Widget _buildProgressCard() => Container(

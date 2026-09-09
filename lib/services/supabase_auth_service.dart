@@ -33,6 +33,15 @@ class SupabaseAuthService {
     }
   }
 
+  Future<void> expireOverdueAppointments() async {
+    if (client.auth.currentUser == null) return;
+    try {
+      await client.rpc('expire_overdue_appointments');
+    } catch (error) {
+      debugPrint('Expire overdue appointments failed: $error');
+    }
+  }
+
   SupabaseApiClient get apiClient {
     final dio = Dio();
     dio.options.headers['apikey'] = _supabasePublishableKey;

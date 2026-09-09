@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_language.dart';
+import '../../services/supabase_auth_service.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
-const _c900 = Color(0xFF004D47);
 const _c700 = Color(0xFF007F78);
 const _c500 = Color(0xFF00A79D);
-const _c300 = Color(0xFF5ECFC9);
 const _c100 = Color(0xFFD4F5F3);
-const _bg   = Color(0xFFF0F7F7);
-const _ink  = Color(0xFF0E2C2F);
+const _bg = Color(0xFFF0F7F7);
+const _ink = Color(0xFF0E2C2F);
 const _ink2 = Color(0xFF3D6065);
 const _ink3 = Color(0xFF8AA8AC);
 
@@ -24,7 +23,6 @@ class _ProgressBodyState extends State<ProgressBody>
     with TickerProviderStateMixin {
   late AnimationController _headerCtrl;
   late AnimationController _contentCtrl;
-  late Animation<double> _headerExpand;
   late Animation<double> _titleFade;
   late Animation<Offset> _titleSlide;
 
@@ -32,45 +30,59 @@ class _ProgressBodyState extends State<ProgressBody>
   late List<Animation<double>> _contentFades;
   late List<Animation<Offset>> _contentSlides;
 
-  int _selectedWeek = 0; // 0 = minggu ini, 1 = minggu lalu, 2 = 2 minggu lalu
+  bool _loading = true;
+  List<Map<String, dynamic>> _appointments = [];
 
   @override
   void initState() {
     super.initState();
     _headerCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800));
-    _headerExpand = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _headerCtrl, curve: Curves.easeOutCubic),
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
     );
     _titleFade = CurvedAnimation(
-        parent: _headerCtrl,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut));
+      parent: _headerCtrl,
+      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+    );
     _titleSlide = Tween<Offset>(begin: const Offset(-0.2, 0), end: Offset.zero)
-        .animate(CurvedAnimation(
+        .animate(
+          CurvedAnimation(
             parent: _headerCtrl,
-            curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic)));
+            curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic),
+          ),
+        );
 
     _contentCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1000));
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
     _contentFades = List.generate(_kContent, (i) {
       final s = (i * 0.18).clamp(0.0, 1.0);
       final e = (s + 0.4).clamp(0.0, 1.0);
       return CurvedAnimation(
-          parent: _contentCtrl, curve: Interval(s, e, curve: Curves.easeOut));
+        parent: _contentCtrl,
+        curve: Interval(s, e, curve: Curves.easeOut),
+      );
     });
     _contentSlides = List.generate(_kContent, (i) {
       final s = (i * 0.18).clamp(0.0, 1.0);
       final e = (s + 0.4).clamp(0.0, 1.0);
-      return Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
-          .animate(CurvedAnimation(
-              parent: _contentCtrl,
-              curve: Interval(s, e, curve: Curves.easeOutCubic)));
+      return Tween<Offset>(
+        begin: const Offset(0, 0.12),
+        end: Offset.zero,
+      ).animate(
+        CurvedAnimation(
+          parent: _contentCtrl,
+          curve: Interval(s, e, curve: Curves.easeOutCubic),
+        ),
+      );
     });
 
     _headerCtrl.forward();
     Future.delayed(const Duration(milliseconds: 280), () {
       if (mounted) _contentCtrl.forward();
     });
+    _loadProgressData();
   }
 
   @override
@@ -92,35 +104,54 @@ class _ProgressBodyState extends State<ProgressBody>
   }
 
   Widget _anim(int i, Widget child) => FadeTransition(
-        opacity: _contentFades[i],
-        child: SlideTransition(position: _contentSlides[i], child: child),
-      );
+    opacity: _contentFades[i],
+    child: SlideTransition(position: _contentSlides[i], child: child),
+  );
 
-  // ── Data dummy ────────────────────────────────────────────────────────────
+  Future<void> _loadProgressData() async {
+    try {
+      final service = SupabaseAuthService();
+      final user = service.client.auth.currentUser;
+      if (user == null) return;
+      await service.expireOverdueAppointments();
+      final rows = await service.client
+          .from('appointments')
+          .select()
+          .eq('booker_id', user.id)
+          .order('appointment_date', ascending: false)
+          .order('appointment_time', ascending: false);
+      if (!mounted) return;
+      setState(() {
+        _appointments = (rows as List)
+            .map((row) => row as Map<String, dynamic>)
+            .toList();
+      });
+    } catch (error) {
+      debugPrint('Progress data load failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
-  final _weeklyData = [
-    // minggu ini (progress bagus, pain menurun tajam)
-    [8.0, 7.2, 6.5, 5.8, 4.5, 4.2, 4.0],
-    // minggu lalu (masih tinggi, progress lambat)
-    [9.5, 9.0, 8.8, 8.5, 8.2, 8.5, 8.0],
-    // 2 minggu lalu (awal terapi, pain score tinggi)
-    [10.0, 9.8, 9.5, 9.5, 9.2, 9.0, 9.5],
-  ];
+  int get _totalSessions => _appointments.fold(0, (total, appointment) {
+    final count = int.tryParse(appointment['session_count']?.toString() ?? '');
+    return total + (count == null || count < 1 ? 1 : count);
+  });
 
-  final _sessionData = [
-    _SessionItem(date: 'Sen, 02 Sep', therapist: 'Marvin McKinney', service: 'Home Care', score: 4.0, duration: '60 min', status: _SStatus.done),
-    _SessionItem(date: 'Kam, 29 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 4.2, duration: '60 min', status: _SStatus.done),
-    _SessionItem(date: 'Sen, 26 Agu', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 4.5, duration: '45 min', status: _SStatus.done),
-    _SessionItem(date: 'Kam, 22 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 5.8, duration: '60 min', status: _SStatus.done),
-    _SessionItem(date: 'Sen, 19 Agu', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 6.5, duration: '45 min', status: _SStatus.done),
-    _SessionItem(date: 'Kam, 15 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 7.2, duration: '60 min', status: _SStatus.done),
-    _SessionItem(date: 'Sen, 12 Agu', therapist: 'Budi Santoso',    service: 'Home Care', score: 8.0, duration: '60 min', status: _SStatus.done),
-    _SessionItem(date: 'Kam, 08 Agu', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 8.5, duration: '45 min', status: _SStatus.done),
-    _SessionItem(date: 'Sen, 05 Agu', therapist: 'Budi Santoso',    service: 'Klinik',    score: 8.8, duration: '45 min', status: _SStatus.done),
-    _SessionItem(date: 'Kam, 01 Agu', therapist: 'Marvin McKinney', service: 'Home Care', score: 9.0, duration: '60 min', status: _SStatus.done),
-    _SessionItem(date: 'Sen, 29 Jul', therapist: 'Sinta Dewi',      service: 'Klinik',    score: 9.5, duration: '45 min', status: _SStatus.done),
-    _SessionItem(date: 'Kam, 25 Jul', therapist: 'Budi Santoso',    service: 'Home Care', score: 10.0, duration: '60 min', status: _SStatus.done),
-  ];
+  int get _completedSessions => _appointments
+      .where((appointment) => appointment['appointment_status'] == 'completed')
+      .length;
+
+  int get _upcomingSessions => _appointments
+      .where((appointment) => appointment['appointment_status'] == 'upcoming')
+      .length;
+
+  int get _remainingSessions =>
+      (_totalSessions - _completedSessions).clamp(0, _totalSessions);
+
+  double get _progressValue => _totalSessions == 0
+      ? 0
+      : (_completedSessions / _totalSessions).clamp(0.0, 1.0);
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -136,13 +167,16 @@ class _ProgressBodyState extends State<ProgressBody>
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 const SizedBox(height: 20),
-                _anim(0, _buildWeekSelector()),
+                _anim(0, _buildPackageProgress()),
                 const SizedBox(height: 20),
-                _anim(1, _buildPainChart()),
+                _anim(1, _buildProgressChart()),
                 const SizedBox(height: 20),
                 _anim(2, _buildStatRow()),
-                const SizedBox(height: 28),
-                _anim(3, _buildSectionLabel(t(context, 'progressSessionHistoryTitle'))),
+                const SizedBox(height: 24),
+                _anim(
+                  3,
+                  _buildSectionLabel(t(context, 'progressSessionHistoryTitle')),
+                ),
                 const SizedBox(height: 14),
                 _anim(4, _buildSessionList()),
               ]),
@@ -156,424 +190,522 @@ class _ProgressBodyState extends State<ProgressBody>
   // ── Sliver header ─────────────────────────────────────────────────────────
 
   Widget _buildSliverHeader() => SliverToBoxAdapter(
-        child: ClipRect(
-          child: AnimatedBuilder(
-            animation: _headerExpand,
-            builder: (context, child) => Align(
-              alignment: Alignment.topCenter,
-              heightFactor: _headerExpand.value,
-              child: child,
-            ),
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [_c900, _c700, _c500],
+    child: Container(
+      color: Colors.white,
+      padding: EdgeInsets.fromLTRB(
+        20,
+        MediaQuery.of(context).padding.top + 20,
+        20,
+        20,
+      ),
+      child: FadeTransition(
+        opacity: _titleFade,
+        child: SlideTransition(
+          position: _titleSlide,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t(context, 'progressTitle'),
+                style: const TextStyle(
+                  color: _ink,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
                 ),
               ),
-              child: Stack(
-                children: [
-                  Positioned(right: -50, top: -50,
-                      child: _circle(180, Colors.white, 0.05)),
-                  Positioned(right: 30, top: 30,
-                      child: _circle(70, Colors.white, 0.07)),
-                  Positioned(left: -30, bottom: -20,
-                      child: _circle(120, _c300, 0.15)),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      MediaQuery.of(context).padding.top + 16,
-                      20,
-                      24,
+              const SizedBox(height: 4),
+              Text(
+                t(context, 'progressSubtitle'),
+                style: const TextStyle(fontSize: 13, color: _ink3),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildPackageProgress() {
+    final progressLabel = t(context, 'progressSessionCount')
+        .replaceFirst('{completed}', _completedSessions.toString())
+        .replaceFirst('{total}', _totalSessions.toString());
+    final remainingLabel = t(
+      context,
+      'progressSessionsRemaining',
+    ).replaceFirst('{count}', _remainingSessions.toString());
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _c100),
+        boxShadow: [
+          BoxShadow(
+            color: _ink.withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: _loading
+          ? const Center(child: CircularProgressIndicator(color: _c500))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: _c100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.insights_rounded,
+                        color: _c700,
+                        size: 21,
+                      ),
                     ),
-                    child: FadeTransition(
-                      opacity: _titleFade,
-                      child: SlideTransition(
-                        position: _titleSlide,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              t(context, 'progressTitle'),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              t(context, 'progressSubtitle'),
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            // ── Summary chips ──────────────────────────
-                            Row(
-                              children: [
-                                _buildHeaderChip(
-                                    Icons.event_available_rounded, '12', t(context, 'progressTotalSessions')),
-                                const SizedBox(width: 10),
-                                _buildHeaderChip(
-                                    Icons.trending_down_rounded, '4.0', t(context, 'progressPainScore')),
-                                const SizedBox(width: 10),
-                                _buildHeaderChip(
-                                    Icons.timer_outlined, '55 min', t(context, 'progressAverage')),
-                              ],
-                            ),
-                          ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        t(context, 'progressPackageTitle'),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: _ink,
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-  Widget _buildHeaderChip(IconData icon, String value, String label) =>
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: Colors.white),
-            const SizedBox(width: 6),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(value,
-                    style: const TextStyle(
-                        color: Colors.white,
+                    Text(
+                      '${(_progressValue * 100).round()}%',
+                      style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w800)),
-                Text(label,
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.75),
-                        fontSize: 9)),
-              ],
-            ),
-          ],
-        ),
-      );
-
-  Widget _circle(double size, Color color, double opacity) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.withValues(alpha: opacity),
-        ),
-      );
-
-  // ── Week selector ─────────────────────────────────────────────────────────
-
-  Widget _buildWeekSelector() {
-    final labels = [
-      t(context, 'progressWeekThis'),
-      t(context, 'progressWeekLast'),
-      t(context, 'progressWeek2Ago'),
-    ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(labels.length, (i) {
-          final active = i == _selectedWeek;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedWeek = i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: EdgeInsets.only(right: i < labels.length - 1 ? 8 : 0),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: active ? _c500 : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: active
-                        ? _c500.withValues(alpha: 0.3)
-                        : Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Text(
-                labels[i],
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: active ? Colors.white : _ink3,
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
-  // ── Pain score chart ──────────────────────────────────────────────────────
-
-  Widget _buildPainChart() => Container(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: _ink.withValues(alpha: 0.05),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(t(context, 'progressPainChartTitle'),
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: _ink)),
-                      const SizedBox(height: 2),
-                      Text(t(context, 'progressPainChartDesc'),
-                          style: const TextStyle(fontSize: 11, color: _ink3)),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _c100,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.trending_down_rounded,
-                          size: 13, color: _c700),
-                      const SizedBox(width: 4),
-                      Text(t(context, 'progressPainTrend'),
-                          style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: _c700)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 140,
-              child: CustomPaint(
-                painter: _PainChartPainter(_weeklyData[_selectedWeek]),
-                child: const SizedBox.expand(),
-              ),
-            ),
-          ],
-        ),
-      );
-
-  // ── Stat row ──────────────────────────────────────────────────────────────
-
-  Widget _buildStatRow() => Row(
-        children: [
-          Expanded(child: _buildStatCard(
-              Icons.check_circle_rounded, '12', t(context, 'progressStatCompleted'), _c500, _c100)),
-          const SizedBox(width: 12),
-          Expanded(child: _buildStatCard(
-              Icons.schedule_rounded, '2', t(context, 'progressStatUpcoming'),
-              const Color(0xFFD4920A), const Color(0xFFFFEEB0))),
-          const SizedBox(width: 12),
-          Expanded(child: _buildStatCard(
-              Icons.sentiment_satisfied_rounded, '83%', t(context, 'progressStatSatisfaction'),
-              const Color(0xFF5B5FC8), const Color(0xFFEEEFFF))),
-        ],
-      );
-
-  Widget _buildStatCard(
-          IconData icon, String value, String label, Color fg, Color bg) =>
-      Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: _ink.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-              child: Icon(icon, color: fg, size: 20),
-            ),
-            const SizedBox(height: 8),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: fg)),
-            const SizedBox(height: 3),
-            Text(label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 10, color: _ink3)),
-          ],
-        ),
-      );
-
-  // ── Section label ─────────────────────────────────────────────────────────
-
-  Widget _buildSectionLabel(String label) => Text(
-        label,
-        style: const TextStyle(
-            fontSize: 16, fontWeight: FontWeight.w800, color: _ink),
-      );
-
-  // ── Session list ──────────────────────────────────────────────────────────
-
-  Widget _buildSessionList() => Column(
-        children: _sessionData
-            .asMap()
-            .entries
-            .map((e) => Padding(
-                  padding: EdgeInsets.only(
-                      bottom: e.key < _sessionData.length - 1 ? 12 : 0),
-                  child: _buildSessionCard(e.value),
-                ))
-            .toList(),
-      );
-
-  Widget _buildSessionCard(_SessionItem item) => Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: _ink.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // Pain score circle
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _painColor(item.score).withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    item.score.toString(),
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: _painColor(item.score),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.therapist,
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: _ink)),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _c100,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(item.service == 'Home Care' 
-                              ? t(context, 'progressServiceHomeCare')
-                              : t(context, 'progressServiceKlinik'),
-                              style: const TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: _c700)),
-                        ),
-                        const SizedBox(width: 6),
-                        Icon(Icons.timer_outlined, size: 11, color: _ink3),
-                        const SizedBox(width: 3),
-                        Text(item.duration,
-                            style: const TextStyle(
-                                fontSize: 10, color: _ink3)),
-                      ],
+                        fontWeight: FontWeight.w800,
+                        color: _c700,
+                      ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  progressLabel,
+                  style: const TextStyle(fontSize: 12, color: _ink2),
+                ),
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: _progressValue,
+                    minHeight: 10,
+                    backgroundColor: _c100,
+                    valueColor: const AlwaysStoppedAnimation<Color>(_c500),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  remainingLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: _c700,
+                  ),
+                ),
+                if (_totalSessions > 0) ...[
+                  const SizedBox(height: 14),
+                  _buildSessionMarkers(),
+                ],
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSessionMarkers() => Row(
+    children: List.generate(_totalSessions, (index) {
+      final completed = index < _completedSessions;
+      return Expanded(
+        child: Container(
+          height: 5,
+          margin: EdgeInsets.only(right: index == _totalSessions - 1 ? 0 : 4),
+          decoration: BoxDecoration(
+            color: completed ? _c500 : const Color(0xFFE4EEEE),
+            borderRadius: BorderRadius.circular(5),
+          ),
+        ),
+      );
+    }),
+  );
+
+  Widget _buildProgressChart() => Container(
+    padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFE4EEEE)),
+      boxShadow: [
+        BoxShadow(
+          color: _ink.withValues(alpha: 0.04),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: _loading
+        ? const SizedBox(
+            height: 150,
+            child: Center(child: CircularProgressIndicator(color: _c500)),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t(context, 'progressChartTitle'),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: _ink,
+                ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              const SizedBox(height: 3),
+              Text(
+                t(context, 'progressChartDesc'),
+                style: const TextStyle(fontSize: 11, color: _ink3),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 145,
+                child: CustomPaint(
+                  painter: _SessionProgressChartPainter(
+                    totalSessions: _totalSessions,
+                    completedSessions: _completedSessions,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  Text(item.date,
-                      style: const TextStyle(fontSize: 11, color: _ink2)),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _c500,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(t(context, 'progressSessionDone'),
-                        style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white)),
+                  _chartLegend(_c500, t(context, 'progressChartCompleted')),
+                  const SizedBox(width: 14),
+                  _chartLegend(
+                    const Color(0xFFE4EEEE),
+                    t(context, 'progressChartRemaining'),
                   ),
                 ],
               ),
             ],
           ),
+  );
+
+  Widget _chartLegend(Color color, String label) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 5),
+      Text(label, style: const TextStyle(fontSize: 10, color: _ink3)),
+    ],
+  );
+
+  // ── Stat row ──────────────────────────────────────────────────────────────
+
+  Widget _buildStatRow() => Row(
+    children: [
+      Expanded(
+        child: _buildStatCard(
+          Icons.check_circle_rounded,
+          _completedSessions.toString(),
+          t(context, 'progressStatCompleted'),
+          _c500,
+          _c100,
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: _buildStatCard(
+          Icons.schedule_rounded,
+          _upcomingSessions.toString(),
+          t(context, 'progressStatUpcoming'),
+          const Color(0xFFD4920A),
+          const Color(0xFFFFEEB0),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: _buildStatCard(
+          Icons.hourglass_empty_rounded,
+          _remainingSessions.toString(),
+          t(context, 'progressStatRemaining'),
+          _c700,
+          _c100,
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildStatCard(
+    IconData icon,
+    String value,
+    String label,
+    Color fg,
+    Color bg,
+  ) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFE4EEEE)),
+      boxShadow: [
+        BoxShadow(
+          color: _ink.withValues(alpha: 0.05),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Column(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: fg, size: 20),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: fg,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 10, color: _ink3),
+        ),
+      ],
+    ),
+  );
+
+  // ── Section label ─────────────────────────────────────────────────────────
+
+  Widget _buildSectionLabel(String label) => Text(
+    label,
+    style: const TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w800,
+      color: _ink,
+    ),
+  );
+
+  // ── Session list ──────────────────────────────────────────────────────────
+
+  Widget _buildSessionList() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: _c500));
+    }
+    if (_appointments.isEmpty) {
+      return Center(
+        child: Text(
+          t(context, 'progressNoSessions'),
+          style: const TextStyle(color: _ink3),
         ),
       );
+    }
 
-  Color _painColor(double score) {
-    if (score <= 3) return _c500;
-    if (score <= 6) return const Color(0xFFD4920A);
-    return const Color(0xFFD94F45);
+    return Column(
+      children: _appointments
+          .asMap()
+          .entries
+          .map(
+            (entry) => Padding(
+              padding: EdgeInsets.only(
+                bottom: entry.key < _appointments.length - 1 ? 12 : 0,
+              ),
+              child: _buildSessionCard(_sessionFromAppointment(entry.value)),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  _SessionItem _sessionFromAppointment(Map<String, dynamic> appointment) {
+    final status = appointment['appointment_status']?.toString();
+    return _SessionItem(
+      date: appointment['appointment_date']?.toString() ?? '-',
+      time: appointment['appointment_time']?.toString() ?? '-',
+      therapist:
+          appointment['therapist_name']?.toString() ??
+          t(context, 'therapistDefault'),
+      service: appointment['service_type']?.toString() ?? 'Home Care',
+      score: double.tryParse(appointment['pain_score']?.toString() ?? ''),
+      duration: appointment['duration_minutes'] == null
+          ? '-'
+          : '${appointment['duration_minutes']} min',
+      status: status == 'completed' ? _SStatus.done : _SStatus.upcoming,
+    );
+  }
+
+  Widget _buildSessionCard(_SessionItem item) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: _ink.withValues(alpha: 0.05),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          _buildSessionLeading(item),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.therapist,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _ink,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _c100,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        item.service == 'Home Care'
+                            ? t(context, 'progressServiceHomeCare')
+                            : t(context, 'progressServiceKlinik'),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: _c700,
+                        ),
+                      ),
+                    ),
+                    if (item.duration != '-') ...[
+                      const SizedBox(width: 6),
+                      Icon(Icons.timer_outlined, size: 11, color: _ink3),
+                      const SizedBox(width: 3),
+                      Text(
+                        item.duration,
+                        style: const TextStyle(fontSize: 10, color: _ink3),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                item.date,
+                style: const TextStyle(fontSize: 11, color: _ink2),
+              ),
+              const SizedBox(height: 3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.access_time_rounded, size: 11, color: _ink3),
+                  const SizedBox(width: 3),
+                  Text(
+                    item.time.length >= 5
+                        ? '${item.time.substring(0, 5)} WIB'
+                        : item.time,
+                    style: const TextStyle(fontSize: 10, color: _ink3),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _c500,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  item.status == _SStatus.done
+                      ? t(context, 'progressSessionDone')
+                      : t(context, 'statusUpcoming'),
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildSessionLeading(_SessionItem item) {
+    final color = item.status == _SStatus.done
+        ? _c500
+        : const Color(0xFFD4920A);
+    return Container(
+      width: 52,
+      height: 58,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            item.status == _SStatus.done
+                ? Icons.check_circle_outline_rounded
+                : Icons.event_available_rounded,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            item.score == null
+                ? t(context, 'progressSessionLabel')
+                : item.score!.toString(),
+            style: TextStyle(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -583,14 +715,16 @@ enum _SStatus { done, upcoming }
 
 class _SessionItem {
   final String date;
+  final String time;
   final String therapist;
   final String service;
-  final double score;
+  final double? score;
   final String duration;
   final _SStatus status;
 
   const _SessionItem({
     required this.date,
+    required this.time,
     required this.therapist,
     required this.service,
     required this.score,
@@ -599,96 +733,102 @@ class _SessionItem {
   });
 }
 
-// ─── Pain chart painter ───────────────────────────────────────────────────────
+class _SessionProgressChartPainter extends CustomPainter {
+  final int totalSessions;
+  final int completedSessions;
 
-class _PainChartPainter extends CustomPainter {
-  final List<double> data;
-  static const _days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-
-  const _PainChartPainter(this.data);
+  const _SessionProgressChartPainter({
+    required this.totalSessions,
+    required this.completedSessions,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    const padL = 10.0, padR = 10.0, padT = 8.0, padB = 28.0;
-    final chartW = size.width - padL - padR;
-    final chartH = size.height - padT - padB;
+    const left = 28.0;
+    const right = 8.0;
+    const top = 10.0;
+    const bottom = 26.0;
+    final chartWidth = size.width - left - right;
+    final chartHeight = size.height - top - bottom;
+    final safeTotal = totalSessions < 1 ? 1 : totalSessions;
+    final safeCompleted = completedSessions.clamp(0, safeTotal);
 
-    double xOf(int i) => padL + i * chartW / (data.length - 1);
-    double yOf(double v) => padT + chartH - (v / 10.0) * chartH;
-
-    // grid
     final gridPaint = Paint()
-      ..color = const Color(0xFFF0F5F5)
+      ..color = const Color(0xFFEAF1F1)
       ..strokeWidth = 1;
-    for (var i = 0; i <= 5; i++) {
-      final y = padT + i * chartH / 5;
-      canvas.drawLine(Offset(padL, y), Offset(size.width - padR, y), gridPaint);
+    for (var step = 0; step <= 4; step++) {
+      final y = top + chartHeight * step / 4;
+      canvas.drawLine(
+        Offset(left, y),
+        Offset(size.width - right, y),
+        gridPaint,
+      );
     }
 
-    // fill
-    final fillPath = Path()..moveTo(xOf(0), yOf(data[0]));
-    for (var i = 1; i < data.length; i++) {
-      final cpx = (xOf(i - 1) + xOf(i)) / 2;
-      fillPath.cubicTo(cpx, yOf(data[i - 1]), cpx, yOf(data[i]), xOf(i), yOf(data[i]));
+    double xFor(int session) => left + chartWidth * session / safeTotal;
+    double yFor(int session) {
+      final ratio = session == 0
+          ? 0.0
+          : (session.clamp(0, safeCompleted) / safeTotal);
+      return top + chartHeight - chartHeight * ratio;
     }
-    fillPath
-      ..lineTo(xOf(data.length - 1), padT + chartH)
-      ..lineTo(xOf(0), padT + chartH)
+
+    final path = Path()..moveTo(xFor(0), yFor(0));
+    for (var session = 1; session <= safeTotal; session++) {
+      path.lineTo(xFor(session), yFor(session));
+    }
+
+    final fillPath = Path.from(path)
+      ..lineTo(xFor(safeTotal), top + chartHeight)
+      ..lineTo(xFor(0), top + chartHeight)
       ..close();
-
     canvas.drawPath(
       fillPath,
       Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0x4000A79D), Color(0x0000A79D)],
-        ).createShader(Rect.fromLTWH(0, padT, size.width, chartH)),
+        ..color = _c500.withValues(alpha: 0.1)
+        ..style = PaintingStyle.fill,
     );
-
-    // line
-    final linePath = Path()..moveTo(xOf(0), yOf(data[0]));
-    for (var i = 1; i < data.length; i++) {
-      final cpx = (xOf(i - 1) + xOf(i)) / 2;
-      linePath.cubicTo(cpx, yOf(data[i - 1]), cpx, yOf(data[i]), xOf(i), yOf(data[i]));
-    }
     canvas.drawPath(
-      linePath,
+      path,
       Paint()
         ..color = _c500
-        ..strokeWidth = 2.5
+        ..strokeWidth = 3
         ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
     );
 
-    // dots
-    for (var i = 0; i < data.length; i++) {
-      final isLast = i == data.length - 1;
-      if (isLast) {
-        canvas.drawCircle(Offset(xOf(i), yOf(data[i])), 8,
-            Paint()..color = _c500.withValues(alpha: 0.2));
-      }
-      canvas.drawCircle(Offset(xOf(i), yOf(data[i])), isLast ? 5 : 3.5,
-          Paint()..color = isLast ? _c700 : _c300);
-      canvas.drawCircle(Offset(xOf(i), yOf(data[i])), isLast ? 2.5 : 1.5,
-          Paint()..color = Colors.white);
+    for (var session = 0; session <= safeTotal; session++) {
+      canvas.drawCircle(
+        Offset(xFor(session), yFor(session)),
+        session == safeCompleted && safeCompleted > 0 ? 5 : 3,
+        Paint()..color = session <= safeCompleted ? _c700 : _ink3,
+      );
     }
 
-    // day labels
-    for (var i = 0; i < _days.length; i++) {
-      final tp = TextPainter(
-        text: TextSpan(
-          text: _days[i],
-          style: const TextStyle(
-              color: Color(0xFF8AA8AC), fontSize: 9, fontWeight: FontWeight.w500),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas,
-          Offset(xOf(i) - tp.width / 2, padT + chartH + 8));
-    }
+    _drawLabel(canvas, '0%', Offset(0, top + chartHeight - 6));
+    _drawLabel(canvas, '100%', Offset(0, top - 4));
+    _drawLabel(canvas, 'S1', Offset(xFor(0) - 5, size.height - 16));
+    _drawLabel(
+      canvas,
+      'S$safeTotal',
+      Offset(xFor(safeTotal) - 8, size.height - 16),
+    );
+  }
+
+  void _drawLabel(Canvas canvas, String text, Offset offset) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(fontSize: 9, color: _ink3),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, offset);
   }
 
   @override
-  bool shouldRepaint(_PainChartPainter old) => old.data != data;
+  bool shouldRepaint(_SessionProgressChartPainter oldDelegate) =>
+      oldDelegate.totalSessions != totalSessions ||
+      oldDelegate.completedSessions != completedSessions;
 }

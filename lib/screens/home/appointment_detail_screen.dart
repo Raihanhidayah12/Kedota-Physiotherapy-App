@@ -7,7 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_language.dart';
 import '../home/history_screen.dart';
-import 'reservation_flow_screen.dart';
+import 'reschedule_appointment_screen.dart';
+import 'settle_payment_screen.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _c700 = Color(0xFF007F78);
@@ -22,6 +23,7 @@ const _redBg = Color(0xFFFFECEB);
 const _clinicAddress =
     'Blok Kelapa No.29, Tunggulwulung, Kec. Lowokwaru, Kota Malang, Jawa Timur 65143';
 const _clinicMapUrl = 'https://maps.app.goo.gl/6RoeDr21WjTfMjo86';
+const _customerServicePhone = '6281645460939';
 
 class AppointmentDetailScreen extends StatefulWidget {
   final AppointmentItem item;
@@ -70,6 +72,10 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
   bool get _isSelesai => _status == AppointmentStatus.selesai;
   bool get _isBatasWaktu => _status == AppointmentStatus.batasWaktu;
   bool get _isClinic => widget.item.serviceType.toLowerCase() == 'klinik';
+  bool get _hasOutstandingPayment =>
+      widget.item.amountDue > 0 &&
+      (widget.item.paymentStatus != 'paid' ||
+          widget.item.paymentPlan == 'deposit');
 
   String get _displayAddress => _isClinic
       ? _clinicAddress
@@ -246,6 +252,46 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
             _statusBadge(),
           ],
         ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: () {
+            Clipboard.setData(
+              ClipboardData(text: widget.item.displayBookingCode),
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(t(context, 'bookingCodeCopied')),
+                backgroundColor: _c500,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            );
+          },
+          child: Row(
+            children: [
+              const Icon(
+                Icons.confirmation_number_outlined,
+                size: 16,
+                color: _c700,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${t(context, 'bookingCode')}: ',
+                style: const TextStyle(fontSize: 11, color: _ink3),
+              ),
+              Text(
+                widget.item.displayBookingCode,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: _c700,
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 14),
         const Divider(height: 1, color: Color(0xFFF0F5F5)),
         const SizedBox(height: 14),
@@ -324,6 +370,19 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
           const SizedBox(height: 14),
           const Divider(height: 1, color: Color(0xFFF0F5F5)),
           const SizedBox(height: 14),
+
+          if (_hasOutstandingPayment) ...[
+            _rowLabel(
+              Icons.receipt_long_outlined,
+              t(context, 'remainingPayment'),
+            ),
+            const SizedBox(height: 10),
+            _textBox(
+              '${t(context, 'remainingPayment')}: ${_formatRupiah(widget.item.amountDue)}',
+              isWarning: true,
+            ),
+            const SizedBox(height: 14),
+          ],
 
           // Keluhan
           _rowLabel(Icons.description_outlined, t(context, 'patientComplaint')),
@@ -826,10 +885,26 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: _bottomBtn(
-              label: t(context, 'upcomingAppointmentButton'),
-              color: _c500,
-              onTap: _openReschedule,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _bottomBtn(
+                    label: t(context, 'upcomingAppointmentButton'),
+                    color: _c500,
+                    onTap: _openReschedule,
+                  ),
+                ),
+                if (_hasOutstandingPayment) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _bottomBtn(
+                      label: t(context, 'settlePayment'),
+                      color: _c700,
+                      onTap: _openPayment,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
@@ -855,7 +930,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
                   child: _bottomBtn(
                     label: t(context, 'contactCustomerService'),
                     color: const Color(0xFF5B5FC8),
-                    onTap: () {},
+                    onTap: _contactCustomerService,
                   ),
                 ),
               ],
@@ -869,25 +944,34 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
   }
 
   Future<void> _openReschedule() async {
-    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+    final updated = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => ReservationFlowScreen(
-          initialAppointmentId: widget.item.id,
-          initialServiceType: widget.item.serviceType,
-          initialClinic: widget.item.clinicName,
-          initialDate: widget.item.date,
-          initialTime: widget.item.time,
-          initialAddress: widget.item.address,
-          initialComplaint: widget.item.complaint,
-          initialSessionCount: widget.item.sessionCount,
-        ),
+        builder: (_) => RescheduleAppointmentScreen(appointment: widget.item),
       ),
     );
-    if (!mounted || result == null) return;
-    setState(() {
-      _rescheduledDate = result['appointment_date']?.toString();
-      _rescheduledTime = result['appointment_time']?.toString();
-    });
+    if (!mounted || updated != true) return;
+    if (mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _contactCustomerService() async {
+    final message = Uri.encodeComponent(
+      t(context, 'customerServiceWhatsAppMessage')
+          .replaceFirst('{bookingCode}', widget.item.displayBookingCode)
+          .replaceFirst('{date}', widget.item.date)
+          .replaceFirst('{time}', widget.item.time),
+    );
+    final uri = Uri.parse('https://wa.me/$_customerServicePhone?text=$message');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t(context, 'whatsappOpenFailed'))));
+    }
   }
 
   Widget _bottomBtn({
@@ -1033,6 +1117,23 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
   );
 
   Widget _statusBadge() {
+    if (_hasOutstandingPayment) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: _redBg,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          t(context, 'paymentPending'),
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: _red,
+          ),
+        ),
+      );
+    }
     final (labelKey, bg, fg) = switch (_status) {
       AppointmentStatus.mendatang => ('statusUpcoming', _c100, _c700),
       AppointmentStatus.selesai => ('statusDone', _c500, Colors.white),
@@ -1049,5 +1150,24 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
         style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg),
       ),
     );
+  }
+
+  Future<void> _openPayment() async {
+    final paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SettlePaymentScreen(appointment: widget.item),
+      ),
+    );
+    if (paid == true && mounted) Navigator.of(context).pop(true);
+  }
+
+  String _formatRupiah(int amount) {
+    final digits = amount.toString();
+    final groups = <String>[];
+    for (var end = digits.length; end > 0; end -= 3) {
+      final start = (end - 3).clamp(0, end);
+      groups.insert(0, digits.substring(start, end));
+    }
+    return 'Rp ${groups.join('.')}';
   }
 }

@@ -5,6 +5,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../l10n/app_language.dart';
+import '../../services/notification_service.dart';
+import '../../services/supabase_auth_service.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
 import 'progress_screen.dart';
@@ -35,7 +37,48 @@ class _MainScreenState extends State<MainScreen> {
     _currentIndex = widget.initialIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestNotificationPermission();
+      _syncAppointmentReminders();
     });
+  }
+
+  Future<void> _syncAppointmentReminders() async {
+    final service = SupabaseAuthService();
+    final user = service.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      await NotificationService().cancelAllAppointmentReminders();
+      final rows = await service.client
+          .from('appointments')
+          .select('id, appointment_date, appointment_time, appointment_status')
+          .eq('booker_id', user.id)
+          .eq('appointment_status', 'upcoming');
+      if (!mounted) return;
+      final reminderTitle = t(context, 'appointmentReminderTitle');
+      final reminderBody = t(context, 'appointmentReminderBody');
+      final expiredTitle = t(context, 'expiredAppointmentTitle');
+      final expiredBody = t(context, 'expiredAppointmentBody');
+      for (final row in (rows as List).cast<Map<String, dynamic>>()) {
+        await NotificationService().scheduleAppointmentReminder(
+          appointmentId: row['id'].toString(),
+          date: row['appointment_date'].toString(),
+          time: row['appointment_time'].toString(),
+          title: reminderTitle,
+          body: reminderBody.replaceFirst(
+            '{time}',
+            row['appointment_time'].toString(),
+          ),
+        );
+        await NotificationService().scheduleExpirationNotice(
+          appointmentId: row['id'].toString(),
+          date: row['appointment_date'].toString(),
+          time: row['appointment_time'].toString(),
+          title: expiredTitle,
+          body: expiredBody,
+        );
+      }
+    } catch (error) {
+      debugPrint('Startup appointment reminder sync failed: $error');
+    }
   }
 
   Future<void> _requestNotificationPermission() async {
@@ -50,10 +93,10 @@ class _MainScreenState extends State<MainScreen> {
   static const _grey = Color(0xFFB0BEC5);
 
   List<({IconData icon, String labelKey})> get _tabs => [
-    (icon: Icons.home_rounded,       labelKey: 'tabBeranda'),
-    (icon: Icons.bar_chart_rounded,  labelKey: 'tabProgress'),
+    (icon: Icons.home_rounded, labelKey: 'tabBeranda'),
+    (icon: Icons.bar_chart_rounded, labelKey: 'tabProgress'),
     (icon: Icons.event_note_rounded, labelKey: 'tabJanjiTemu'),
-    (icon: Icons.person_rounded,     labelKey: 'tabProfil'),
+    (icon: Icons.person_rounded, labelKey: 'tabProfil'),
   ];
 
   @override
@@ -88,8 +131,7 @@ class _MainScreenState extends State<MainScreen> {
     return SizedBox(
       height: navHeight + (bottomPad > 0 ? bottomPad : 12),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, 0, 20, bottomPad > 0 ? bottomPad : 12),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPad > 0 ? bottomPad : 12),
         child: Container(
           height: navHeight,
           decoration: BoxDecoration(
@@ -105,7 +147,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
           child: Row(
             children: List.generate(_tabs.length, (i) {
-              final tab    = _tabs[i];
+              final tab = _tabs[i];
               final active = i == _currentIndex;
               return Expanded(
                 child: GestureDetector(
@@ -126,11 +168,7 @@ class _MainScreenState extends State<MainScreen> {
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      Icon(
-                        tab.icon,
-                        size: 22,
-                        color: active ? _teal : _grey,
-                      ),
+                      Icon(tab.icon, size: 22, color: active ? _teal : _grey),
                       const SizedBox(height: 3),
                       Text(
                         t(context, tab.labelKey),
@@ -170,15 +208,17 @@ class _AnimatedTab extends StatefulWidget {
 class _AnimatedTabState extends State<_AnimatedTab>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
-  late Animation<double>   _fade;
-  late Animation<Offset>   _slide;
+  late Animation<double> _fade;
+  late Animation<Offset> _slide;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 500));
-    _fade  = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _slide = Tween<Offset>(
       begin: const Offset(0, 0.1),
       end: Offset.zero,
@@ -194,8 +234,7 @@ class _AnimatedTabState extends State<_AnimatedTab>
 
   @override
   Widget build(BuildContext context) => FadeTransition(
-        opacity: _fade,
-        child: SlideTransition(position: _slide, child: widget.child),
-      );
+    opacity: _fade,
+    child: SlideTransition(position: _slide, child: widget.child),
+  );
 }
-

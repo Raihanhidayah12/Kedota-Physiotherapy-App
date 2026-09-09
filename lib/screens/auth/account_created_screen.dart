@@ -57,6 +57,10 @@ class _AccountCreatedScreenState extends State<AccountCreatedScreen>
     final body = t(context, 'welcomeNotificationBody');
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('welcome_notification_sent') ?? false) return;
+    if (!(prefs.getBool('pref_notif_push') ?? true) ||
+        !(prefs.getBool('pref_notif_promo') ?? true)) {
+      return;
+    }
     await NotificationService().showNotification(
       id: 200,
       title: title,

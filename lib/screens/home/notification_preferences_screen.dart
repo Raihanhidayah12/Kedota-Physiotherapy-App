@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../l10n/app_language.dart';
+import '../../services/notification_service.dart';
+import '../../services/supabase_auth_service.dart';
 
 class NotificationPreferencesScreen extends StatefulWidget {
   const NotificationPreferencesScreen({super.key});
@@ -114,6 +116,36 @@ class _NotificationPreferencesScreenState
     await prefs.setBool(key, value);
   }
 
+  Future<void> _syncAppointmentReminders() async {
+    if (!mounted) return;
+    final reminderTitle = t(context, 'appointmentReminderTitle');
+    final reminderBodyTemplate = t(context, 'appointmentReminderBody');
+    final service = SupabaseAuthService();
+    final user = service.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final rows = await service.client
+          .from('appointments')
+          .select('id, appointment_date, appointment_time, appointment_status')
+          .eq('booker_id', user.id)
+          .eq('appointment_status', 'upcoming');
+      for (final row in (rows as List).cast<Map<String, dynamic>>()) {
+        await NotificationService().scheduleAppointmentReminder(
+          appointmentId: row['id'].toString(),
+          date: row['appointment_date'].toString(),
+          time: row['appointment_time'].toString(),
+          title: reminderTitle,
+          body: reminderBodyTemplate.replaceFirst(
+            '{time}',
+            row['appointment_time'].toString(),
+          ),
+        );
+      }
+    } catch (error) {
+      debugPrint('Appointment reminder sync failed: $error');
+    }
+  }
+
   /// Handle toggle utama "Izinkan Notifikasi"
   Future<void> _handlePushToggle(bool val) async {
     if (val) {
@@ -139,6 +171,7 @@ class _NotificationPreferencesScreenState
           _pushEnabled = true;
         });
         await _savePreference('pref_notif_push', true);
+        if (_reminderEnabled) await _syncAppointmentReminders();
       }
     } else {
       // User mau matikan → arahkan ke pengaturan HP
@@ -370,6 +403,11 @@ class _NotificationPreferencesScreenState
                     onChanged: (val) {
                       setState(() => _reminderEnabled = val);
                       _savePreference('pref_notif_reminder', val);
+                      if (val) {
+                        _syncAppointmentReminders();
+                      } else {
+                        NotificationService().cancelAllAppointmentReminders();
+                      }
                     },
                   ),
                   _buildSwitchItem(
