@@ -109,7 +109,7 @@ Sign In → Continue with Google
 - **Ganti PIN (Change PIN)**:
   - Verifikasi PIN lama (rate limit 3x) → Buat PIN Baru → Konfirmasi PIN Baru.
 - **Preferensi Notifikasi**:
-  - Push Notifications, Pengingat Jadwal Terapi (H-1 & 2 jam sebelum sesi), Promo & Penawaran, serta Update Berita via Email.
+  - Push Notifications, pengingat jadwal terapi 1 jam sebelum sesi, promo & penawaran, serta update berita via email.
 - **Hapus Akun Permanen**:
   - Dialog konfirmasi bahaya + Verifikasi PIN 6-digit sebelum akun dan data dihapus permanen dari Supabase.
 
@@ -158,6 +158,9 @@ Sign In → Continue with Google
 - Lima belas menit setelah jadwal dimulai, appointment yang belum selesai mendapat notifikasi expired; tap notifikasi membuka detail dengan pilihan **Ubah Jadwal** atau **Hubungi CS**.
 - Tombol **Hubungi CS** membuka WhatsApp dengan kode booking, tanggal, dan jam appointment.
 - Pembayaran sukses dikirim sebagai notifikasi HP dan notifikasi in-app.
+- Push reservasi baru, reminder, reschedule, dan pembayaran berhasil dapat diketuk untuk membuka Detail Appointment.
+- Push DP menggunakan deep-link khusus untuk langsung membuka Pelunasan Pembayaran.
+- Push expired membuka Detail Appointment agar pengguna dapat memilih reschedule atau menghubungi CS.
 - Pembayaran masih berstatus demo sampai payment gateway/webhook diterapkan.
 
 ---

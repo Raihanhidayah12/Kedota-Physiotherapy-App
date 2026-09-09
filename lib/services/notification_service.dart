@@ -19,6 +19,11 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
+  Future<void> markNotificationsUnread() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifications_marked_as_read', false);
+  }
+
   final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
@@ -50,6 +55,8 @@ class NotificationService {
           _openAppointmentPayment(payload.substring('deposit:'.length));
         } else if (payload != null && payload.startsWith('expired:')) {
           _openAppointmentDetail(payload.substring('expired:'.length));
+        } else if (payload != null && payload.startsWith('appointment:')) {
+          _openAppointmentDetail(payload.substring('appointment:'.length));
         }
       },
     );
@@ -221,6 +228,9 @@ class NotificationService {
       'reminder_notifications',
       filtered.length > 20 ? filtered.sublist(filtered.length - 20) : filtered,
     );
+    if (!scheduledFor.isAfter(DateTime.now())) {
+      await markNotificationsUnread();
+    }
   }
 
   Future<void> _scheduleReminder({
@@ -305,6 +315,7 @@ class NotificationService {
       platformChannelSpecifics,
       payload: payload,
     );
+    await markNotificationsUnread();
   }
 
   Future<void> _openAppointmentPayment(String appointmentId) async {

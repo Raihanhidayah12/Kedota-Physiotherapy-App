@@ -295,6 +295,7 @@ class _RescheduleAppointmentScreenState
         id: DateTime.now().millisecondsSinceEpoch.remainder(2147483647),
         title: scheduleUpdatedTitle,
         body: '$scheduleUpdatedBody $date, ${time.substring(0, 5)} WIB',
+        payload: 'appointment:${widget.appointment.id}',
       );
       saved = true;
       if (mounted) Navigator.of(context).pop(true);

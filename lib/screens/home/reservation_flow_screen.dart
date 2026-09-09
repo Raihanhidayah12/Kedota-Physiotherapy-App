@@ -482,7 +482,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
               )
               .replaceFirst('{date}', _formatDate(_appointmentDate!))
               .replaceFirst('{time}', _formatTime(_appointmentTime!)),
-          payload: 'appointment:${widget.initialAppointmentId ?? ''}',
+          payload: appointmentId == null ? null : 'appointment:$appointmentId',
         );
         setState(() => _step = 6);
         _startSuccessRedirect();

@@ -146,6 +146,7 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
           id: DateTime.now().millisecondsSinceEpoch.remainder(2147483647),
           title: successTitle,
           body: successBody,
+          payload: 'appointment:${widget.appointment.id}',
         );
       } catch (notificationError) {
         debugPrint('Payment success notification failed: $notificationError');

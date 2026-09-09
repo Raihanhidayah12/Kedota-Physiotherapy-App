@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
+import 'appointment_detail_screen.dart';
 import 'history_screen.dart';
 import 'settle_payment_screen.dart';
 
@@ -143,6 +144,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Future<void> _markAllAsRead() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications_marked_as_read', true);
+    await prefs.setInt(
+      'notifications_last_read_at',
+      DateTime.now().millisecondsSinceEpoch,
+    );
     if (mounted) {
       setState(() => _notificationsRead = true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -258,6 +263,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         (paymentPlan == 'deposit' && paymentStatus != 'paid') ||
         (amountDue > 0 && paymentStatus != 'paid');
     return {
+      'appointment_id': row['id']?.toString() ?? '',
       'title': isReminder
           ? row['title']?.toString() ?? t(context, 'appointmentReminderTitle')
           : isPaymentCompleted
@@ -348,6 +354,45 @@ class _NotificationScreenState extends State<NotificationScreen> {
     if (mounted) _loadAppointmentNotifications();
   }
 
+  Future<void> _openAppointmentDetail(String appointmentId) async {
+    if (appointmentId.isEmpty) return;
+    try {
+      final row = await SupabaseAuthService().client
+          .from('appointments')
+          .select()
+          .eq('id', appointmentId)
+          .maybeSingle();
+      if (row == null || !mounted) return;
+      final rawStatus = row['appointment_status']?.toString();
+      final item = AppointmentItem(
+        id: row['id']?.toString() ?? appointmentId,
+        therapistName: row['therapist_name']?.toString() ?? 'Kedota Therapist',
+        serviceType: row['service_type']?.toString() ?? 'Home Care',
+        date: row['appointment_date']?.toString() ?? '-',
+        time: row['appointment_time']?.toString() ?? '- WIB',
+        patientName: row['patient_full_name']?.toString() ?? '',
+        medicalCode: row['patient_medical_code']?.toString() ?? '',
+        address: row['address']?.toString() ?? '',
+        complaint: row['patient_complaint']?.toString() ?? '',
+        clinicName: row['clinic_name']?.toString() ?? '',
+        sessionCount: int.tryParse(row['session_count']?.toString() ?? '') ?? 1,
+        paymentStatus: row['payment_status']?.toString() ?? 'paid',
+        paymentPlan: row['payment_plan']?.toString() ?? 'full',
+        amountDue: int.tryParse(row['amount_due']?.toString() ?? '') ?? 0,
+        status: rawStatus == 'completed'
+            ? AppointmentStatus.selesai
+            : rawStatus == 'expired'
+            ? AppointmentStatus.batasWaktu
+            : AppointmentStatus.mendatang,
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => AppointmentDetailScreen(item: item)),
+      );
+    } catch (error) {
+      debugPrint('Notification appointment detail load failed: $error');
+    }
+  }
+
   Map<String, dynamic> _buildWelcomeNotification(BuildContext context) => {
     'title': t(context, 'welcomeNotificationTitle'),
     'body': t(context, 'welcomeNotificationBody'),
@@ -360,10 +405,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Widget _buildNotificationCard(Map<String, dynamic> notif) {
     final bool isUnread = notif['isUnread'];
     final appointment = notif['appointment'];
+    final appointmentId = notif['appointment_id']?.toString() ?? '';
 
     return GestureDetector(
       onTap: appointment is Map<String, dynamic>
           ? () => _openPayment(appointment)
+          : appointmentId.isNotEmpty
+          ? () => _openAppointmentDetail(appointmentId)
           : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
