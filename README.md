@@ -21,11 +21,14 @@
 | 👤 Edit Profil | 🟢 Selesai | Ubah Nama, TTL, Gender, Upload/Hapus Foto Profil Supabase Storage |
 | 👁️ Privasi Nomor HP | 🟢 Selesai | Default hidden (`+628••••9436`) + Eye Icon toggle di Settings & Edit Profile |
 | 🔔 Preferensi Notifikasi | 🟢 Selesai | Push notif, reminder 1 jam sebelum janji, notifikasi DP/expired, dan deep-link ke detail atau pelunasan |
+| 🕒 Urutan & Waktu Notifikasi | 🟢 Selesai | Notifikasi terbaru tampil paling atas dengan waktu relatif seperti `2 menit yang lalu` atau `1 jam yang lalu` |
 | ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan Lengkap + Hapus Akun Permanen (Verifikasi PIN 6-digit) |
 | 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → cooldown 30 detik |
 | 💤 Dormant Account | 🟢 Selesai | Deteksi akun >60 hari tidak aktif → verifikasi via email |
 | 🎨 UI & Layout Stability | 🟢 Selesai | Numpad, DatePicker & Flex Badge responsive 0 overflow di mobile/web |
 | ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (`update-pin` Deno runtime) |
+| 📊 HTTP 5xx Error Logging | 🟢 Selesai | Client mendeteksi response `500-599`, mengirim metadata aman ke Edge Function `client-error-log`, dan server mencatatnya |
+| 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion dengan tanggal pembaruan dinamis |
 | 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
 | 📅 Reservasi & Paket Sesi | 🟢 Selesai | Paket 1, 3, 6, atau 9 sesi dengan harga paket tetap |
 | 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, notifikasi perubahan, dan reminder baru |
@@ -165,7 +168,25 @@ Sign In → Continue with Google
 
 ---
 
-### 8. 🔓 Lupa PIN Flow
+### 8. 🔔 Notifikasi In-App
+
+- Notifikasi terbaru tampil paling atas berdasarkan `created_at`.
+- Waktu ditampilkan relatif seperti `Baru saja`, `2 menit yang lalu`, `3 jam yang lalu`, atau `Kemarin`.
+- Label waktu tersedia dalam Bahasa Indonesia dan English.
+
+### 9. 📑 Syarat, Ketentuan & Kebijakan Privasi
+
+- Kedua dokumen menggunakan UI accordion agar setiap section dapat dibuka dan ditutup.
+- Tanggal `Terakhir diperbarui` mengikuti tanggal perangkat saat ini.
+
+### 10. 📊 Logging Error HTTP 5xx
+
+- Client mendeteksi response HTTP `500-599` dari API Dio.
+- Metadata aman dikirim ke Edge Function `client-error-log`.
+- Server memvalidasi payload dan mencatat log di Supabase Edge Function Logs.
+- Token, password, dan body request tidak dikirim ke logger.
+
+### 11. 🔓 Lupa PIN Flow
 
 ```
 PIN Verification → Lupa PIN
@@ -180,7 +201,7 @@ PIN Verification → Lupa PIN
 
 ---
 
-### 9. 🛡️ Keamanan & Stabilitas Layout
+### 12. 🛡️ Keamanan & Stabilitas Layout
 
 | Mekanisme | Detail |
 |---|---|
@@ -370,6 +391,7 @@ lib/
 │   │   ├── pin_rate_limit_screen.dart       # Lock 5m PIN
 │   │   └── verification_rate_limit_screen.dart
 │   ├── home/
+│   │   ├── support_info_screens.dart         # FAQ, support, terms, dan privacy accordion
 │   │   ├── change_pin_screen.dart           # Ganti PIN dari Settings
 │   │   ├── edit_profile_screen.dart         # Edit profil, foto, hide phone, hapus akun
 │   │   ├── history_screen.dart              # Riwayat aktivitas & medis
@@ -385,6 +407,7 @@ lib/
 │   └── splash/
 │       └── splash_screen.dart               # Auto-routing berdasarkan sesi
 ├── services/
+│   ├── client_error_log_service.dart         # Pengiriman metadata error HTTP 5xx
 │   ├── supabase_auth_service.dart           # Service logika autentikasi & profile DB
 │   ├── notification_service.dart             # Push notification, reminder, dan deep-link
 │   ├── supabase_api_client.dart             # Retrofit API client
@@ -394,6 +417,8 @@ lib/
 │   └── functions/
 │       └── update-pin/
 │           └── index.ts                     # Edge function update PIN
+│       └── client-error-log/
+│           └── index.ts                     # Logging error HTTP 5xx dari client
 └── widgets/
     ├── custom_bottom_sheet.dart             # Reusable bottom sheet
     ├── custom_error_screen.dart
@@ -416,6 +441,7 @@ lib/
 | Server Functions | Supabase Edge Functions (Deno Runtime) |
 | API Spec | OpenAPI 3.0 (Swagger) — `swagger_supabase_api_spec.txt` |
 | Multi-Language | `AppLanguageScope` (Indonesia & English) |
+| Observability | Dio interceptor + Supabase Edge Function `client-error-log` |
 
 ---
 
@@ -431,6 +457,18 @@ flutter pub get
 
 # 3. Jalankan aplikasi
 flutter run
+
+# 4. Jalankan unit dan widget tests
+flutter test
+
+# 5. Jalankan integration test di device/emulator Android yang terhubung
+flutter test integration_test/app_test.dart -d <device-id>
+
+# 6. Deploy Edge Functions
+supabase login
+supabase link --project-ref wwmctqhbqpsbkyxkeaqv
+supabase functions deploy update-pin
+supabase functions deploy client-error-log
 ```
 
 ---
