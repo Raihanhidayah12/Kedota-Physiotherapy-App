@@ -9,6 +9,7 @@ import '../../services/notification_service.dart';
 import '../../services/supabase_auth_service.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
+import 'edit_profile_screen.dart';
 import 'progress_screen.dart';
 import 'settings_screen.dart';
 
@@ -30,15 +31,59 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   late int _currentIndex;
+  bool _showProfileNotice = false;
+  bool _isCheckingProfile = false;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    appLanguageNotifier.addListener(_handleLanguageChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestNotificationPermission();
       _syncAppointmentReminders();
+      _checkProfileForHomeNotice();
     });
+  }
+
+  void _handleLanguageChanged() {
+    if (mounted) _syncAppointmentReminders();
+  }
+
+  @override
+  void dispose() {
+    appLanguageNotifier.removeListener(_handleLanguageChanged);
+    super.dispose();
+  }
+
+  Future<void> _checkProfileForHomeNotice() async {
+    if (_isCheckingProfile) return;
+    _isCheckingProfile = true;
+    try {
+      final service = SupabaseAuthService();
+      if (service.client.auth.currentUser == null) return;
+      final profile = await service.checkUserProfileExists();
+      final nik = profile?['nik']?.toString().trim() ?? '';
+      final address = profile?['address']?.toString().trim() ?? '';
+      if (!mounted ||
+          profile == null ||
+          (RegExp(r'^\d{16}$').hasMatch(nik) && address.isNotEmpty)) {
+        return;
+      }
+      setState(() => _showProfileNotice = true);
+    } catch (error) {
+      debugPrint('Home profile notice check failed: $error');
+    } finally {
+      _isCheckingProfile = false;
+    }
+  }
+
+  Future<void> _openProfileFromHomeNotice() async {
+    setState(() => _showProfileNotice = false);
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+    if (mounted) _checkProfileForHomeNotice();
   }
 
   Future<void> _syncAppointmentReminders() async {
@@ -138,16 +183,133 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F8F8),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(child: _buildCurrentTab()),
-            _buildBottomNav(),
-          ],
-        ),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                Expanded(child: _buildCurrentTab()),
+                _buildBottomNav(),
+              ],
+            ),
+          ),
+          if (_showProfileNotice) _buildProfileNoticeOverlay(),
+        ],
       ),
     );
   }
+
+  Widget _buildProfileNoticeOverlay() => Positioned.fill(
+    child: Material(
+      color: const Color(0x990E2C2F),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x45000000),
+                    blurRadius: 28,
+                    offset: Offset(0, 12),
+                  ),
+                ],
+                border: Border.all(color: Color(0xFFE6EEEE), width: 1),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF4D8),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFFE3A1),
+                        width: 5,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Color(0xFFE59D2A),
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F7F5),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      t(context, 'profileRequiredBadge'),
+                      style: TextStyle(
+                        color: _teal,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    t(context, 'incompleteProfileTitle'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF0E2C2F),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    t(context, 'profileRequiredMessage'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF3D6065),
+                      fontSize: 13,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _openProfileFromHomeNotice,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _teal,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      child: Text(t(context, 'profileRequiredAction')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   Widget _buildCurrentTab() {
     final child = switch (_currentIndex) {

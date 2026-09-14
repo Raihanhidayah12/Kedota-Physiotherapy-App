@@ -1,6 +1,17 @@
-# 🏥 Kedota Physiotherapy App
+# Kedota Physiotherapy App
 
-> **"Your Comfort, Our Care"** — Aplikasi layanan fisioterapi modern, aman, dan intuitif berbasis Flutter & Supabase.
+> **"Your Comfort, Our Care"** — Aplikasi layanan fisioterapi berbasis Flutter dan Supabase.
+
+Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memantau progres, menerima pengingat, dan mengatur pembayaran. Aplikasi mendukung Android, iOS, Web, Windows, macOS, dan Linux melalui Flutter.
+
+## Status Saat Ini
+
+- Framework: Flutter dengan Dart SDK `^3.12.2`
+- Backend: Supabase Auth, PostgreSQL, Storage, REST API, RPC, dan Edge Functions
+- Bahasa UI: Bahasa Indonesia dan English
+- Pembayaran: alur UI dan RPC pelunasan tersedia; payment gateway masih demo
+- Environment: URL dan publishable/anon key Supabase dibaca dari file `.env`
+- Test otomatis: 27 unit/widget test lulus; OAuth production dan integration flow memerlukan device, backend, serta credential nyata
 
 ---
 
@@ -9,6 +20,7 @@
 | Fitur / Modul | Status | Keterangan |
 | :--- | :---: | :--- |
 | 🌐 Multi-Language (ID / EN) | 🟢 Selesai | Paritas 100% ID & EN di Auth, OTP, Edit Profile, Notifikasi, Settings & Forgot PIN (`AppLanguageScope`) |
+| 🧪 Auth Flow Tests | 🟢 Selesai | Test widget untuk Onboarding, Sign In, Forgot PIN/OTP, sign-up phone, Google profile, dan pembuatan PIN phone/Google |
 | 🚀 Onboarding Screen | 🟢 Selesai | Tampil sekali saat pertama buka, 3 slide interaktif (`SharedPreferences`) |
 | 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home Screen (Handled 400 pre-check & 422 password sync gracefully) |
 | 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil → Buat PIN → Account Created Screen |
@@ -30,12 +42,15 @@
 | 📊 HTTP 5xx Error Logging | 🟢 Selesai | Client mendeteksi response `500-599`, mengirim metadata aman ke Edge Function `client-error-log`, dan server mencatatnya |
 | 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion dengan tanggal pembaruan dinamis |
 | 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
+| 🔔 SnackBar UI | 🟢 Selesai | Semua SnackBar memakai helper bersama dengan style, ikon, warna, margin, durasi, dan behavior yang konsisten |
 | 📅 Reservasi & Paket Sesi | 🟢 Selesai | Paket 1, 3, 6, atau 9 sesi dengan harga paket tetap |
-| 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, notifikasi perubahan, dan reminder baru |
+| 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, validasi slot, batas waktu, notifikasi perubahan, dan reminder baru |
 | 💳 DP & Pelunasan | 🟢 Selesai (Demo Gateway) | Instruksi pembayaran, konfirmasi, screen sukses, redirect History 3 detik, dan RPC pelunasan |
-| 🧾 Identitas Pasien & Booking | 🟢 Selesai | `medical_code` sebagai ID pasien tetap dan `booking_code` unik berurutan untuk setiap reservasi |
+| 🧾 Identitas Pasien & Booking | 🟢 Selesai | `profiles.medical_code` memakai format `KDT-` + 12 karakter acak unik; `appointments.booking_code` memakai format `EMR-` |
 | ⏱️ Auto Expire | 🟢 Selesai | Janji berubah menjadi `expired` 15 menit setelah waktu mulai dan mengirim push ke pengguna |
 | 🔒 Proteksi Slot | 🟢 Selesai | Unique index mencegah dua janji aktif memakai slot yang sama |
+| 🪪 Profil Wajib Reservasi | 🟢 Selesai | NIK 16 digit dan alamat wajib dilengkapi sebelum reservasi; pengingat tampil di Home dan Informasi Akun |
+| 🚫 DP Hangus & No-Show | 🟢 Selesai | DP belum lunas hangus saat tidak hadir; pembayaran lunas dapat reschedule maksimal 24 jam setelah sesi |
 
 ---
 
@@ -139,10 +154,17 @@ Sign In → Continue with Google
 - Slot lama terbuka kembali setelah reschedule, sedangkan slot baru dikunci oleh unique index database.
 - Screen reschedule terpisah memakai kalender custom dan pemilih jam yang sama dengan reservasi utama.
 - Janji yang belum selesai otomatis menjadi `expired` setelah 15 menit dari waktu mulai ketika data dimuat.
-- Setiap pasien memiliki `medical_code` tetap berformat `KED-` + 12 karakter acak heksadesimal, yang ditampilkan sebagai **ID Pasien** di profil.
-- Setiap reservasi memiliki `booking_code` unik berurutan, dimulai dari `KDT-2026000001`.
+- Setiap pasien memiliki `medical_code` tetap berformat `KDT-` + 12 karakter acak heksadesimal, yang ditampilkan sebagai **ID Pasien** di profil.
+- Setiap reservasi memiliki `booking_code` yang ditampilkan dengan format `EMR-####-########`.
+- Card janji temu menampilkan nama pasien, tujuan reservasi (mandiri/orang lain), jadwal, sesi, layanan, terapis, dan tombol detail dari data appointment.
+- Card mendatang, selesai, dan batas waktu menggunakan struktur UI yang konsisten serta aksen status tipis di bagian atas card.
+- Profil yang belum memiliki NIK 16 digit atau alamat mendapat modal terpusat di Home dan diarahkan langsung ke Informasi Akun.
+- Pada halaman edit profil, pengguna tidak dapat keluar atau menyimpan sebelum NIK dan alamat lengkap.
 - Tab Janji Temu dan Beranda menampilkan penanda merah untuk appointment dengan DP yang belum lunas.
 - Screen Atur Jadwal Ulang memakai date picker dan time picker dengan validasi slot tersedia.
+- Appointment lunas yang berstatus tidak hadir dapat diubah jadwal sejak waktu sesi sampai maksimal 24 jam setelahnya.
+- Setelah jendela reschedule 24 jam berakhir, pengguna hanya mendapat opsi **Hubungi CS**.
+- Reschedule divalidasi kembali di layar reschedule sebelum RPC dikirim, sehingga aturan tidak hanya bergantung pada tampilan tombol.
 - Saat reschedule, reminder lama dibatalkan dan reminder baru dijadwalkan ulang.
 - Teks UI terbaru, pesan WhatsApp CS, dan metode pembayaran mengikuti localization ID/EN.
 
@@ -159,6 +181,9 @@ Sign In → Continue with Google
 - Reminder appointment dikirim ke HP satu jam sebelum jadwal; appointment yang dibuat kurang dari satu jam akan mendapat reminder segera.
 - Reminder lama dibersihkan dan menggunakan ID stabil agar tidak muncul berulang setelah aplikasi dibuka atau jadwal diubah.
 - Lima belas menit setelah jadwal dimulai, appointment yang belum selesai mendapat notifikasi expired; tap notifikasi membuka detail dengan pilihan **Ubah Jadwal** atau **Hubungi CS**.
+- Appointment dengan `payment_plan = deposit`, `payment_status != paid`, dan status expired ditampilkan sebagai **DP Hangus** dengan pemberitahuan khusus.
+- Appointment DP yang belum lunas tidak menyediakan reschedule setelah tidak hadir dan tidak menyediakan pelunasan dari detail yang sudah expired.
+- Detail appointment menampilkan banner informasi reschedule dan konsekuensi uang muka sesuai status pembayaran.
 - Tombol **Hubungi CS** membuka WhatsApp dengan kode booking, tanggal, dan jam appointment.
 - Pembayaran sukses dikirim sebagai notifikasi HP dan notifikasi in-app.
 - Push reservasi baru, reminder, reschedule, dan pembayaran berhasil dapat diketuk untuk membuka Detail Appointment.
@@ -302,7 +327,7 @@ supabase functions deploy update-pin
 | `payment_plan` | text | `full` atau `deposit` |
 | `payment_status` | text | `paid`, `pending`, `failed`, atau `expired` |
 | `amount_due` | numeric | Sisa pembayaran |
-| `booking_code` | text | Kode unik reservasi dengan format `KDT-2026XXXXXX` |
+| `booking_code` | text | Kode unik reservasi dengan format `EMR-####-########` |
 | `assigned_therapist_id` | uuid | Terapis yang ditugaskan, jika tersedia |
 | `created_at` / `updated_at` | timestamptz | Waktu pembuatan/perubahan |
 
@@ -316,7 +341,7 @@ Status `completed` seharusnya diubah oleh terapis atau admin melalui RPC, bukan 
 - `20260909000300_reschedule_appointment_rpc.sql` — reschedule aman oleh pemilik janji.
 - `20260909000400_settle_appointment_payment_rpc.sql` — RPC pelunasan pembayaran.
 - `20260909000000_add_booking_code.sql` — sequence dan kolom kode booking unik.
-- `20260909000500_secure_patient_medical_codes.sql` — migrasi ID pasien lama ke kode acak dan unique index.
+- `20260909000500_secure_patient_medical_codes.sql` — migrasi ID pasien ke kode acak dan unique index.
 
 ### Tabel `profiles`
 
@@ -331,10 +356,12 @@ Status `completed` seharusnya diubah oleh terapis atau admin melalui RPC, bukan 
 | `birth_date` | date | Tanggal lahir format `YYYY-MM-DD` |
 | `gender` | text | `Laki-laki` / `Perempuan` / `Lainnya` |
 | `profile_photo_url` | text | URL foto profil dari Supabase Storage |
+| `nik` | text | NIK 16 digit pasien |
+| `address` | text | Alamat pasien untuk kebutuhan reservasi |
 | `signup_method` | text | `phone` / `google` / `apple` |
 | `status` | text | `active` / `deactivated` / `recycled` |
 | `is_profile_complete` | bool | Flag kelengkapan profil |
-| `medical_code` | text | ID pasien/nomor rekam medis yang tetap untuk pengguna |
+| `medical_code` | text | ID pasien tetap dengan format `KDT-` + 12 karakter acak unik |
 | `last_login_at` | timestamptz | Untuk deteksi akun dormant (>60 hari) |
 | `created_at` | timestamptz | Waktu registrasi |
 | `updated_at` | timestamptz | Waktu perbaruan terakhir |
@@ -399,8 +426,11 @@ lib/
 │   │   ├── main_screen.dart                 # Bottom Navigation Bar (4 tab)
 │   │   ├── notification_preferences_screen.dart # Preferensi notifikasi
 │   │   ├── notification_screen.dart         # Halaman daftar notifikasi
+│   │   ├── reservation_flow_screen.dart     # Alur reservasi dan pembayaran
+│   │   ├── reschedule_appointment_screen.dart # Ubah jadwal appointment
 │   │   ├── settle_payment_screen.dart        # Instruksi dan pelunasan pembayaran
 │   │   ├── progress_screen.dart             # Monitor perkembangan kesehatan
+│   │   ├── upcoming_appointment_card.dart   # Card appointment bersama Home/Riwayat
 │   │   └── settings_screen.dart             # Settings, toggle bahasa, header profil
 │   ├── onboarding/
 │   │   └── onboarding_screen.dart
@@ -412,18 +442,27 @@ lib/
 │   ├── notification_service.dart             # Push notification, reminder, dan deep-link
 │   ├── supabase_api_client.dart             # Retrofit API client
 │   └── supabase_api_client.g.dart           # Code-generated Retrofit client
-├── supabase/
-│   ├── config.toml                          # Project config Supabase
-│   └── functions/
-│       └── update-pin/
-│           └── index.ts                     # Edge function update PIN
-│       └── client-error-log/
-│           └── index.ts                     # Logging error HTTP 5xx dari client
-└── widgets/
-    ├── custom_bottom_sheet.dart             # Reusable bottom sheet
-    ├── custom_error_screen.dart
-    ├── google_logo_icon.dart
-    └── language_button.dart
+├── widgets/
+│   ├── app_lock_overlay.dart                 # App lock saat resume dari background
+│   ├── custom_bottom_sheet.dart              # Reusable bottom sheet
+│   ├── custom_error_screen.dart
+│   ├── google_logo_icon.dart
+│   ├── language_button.dart
+│   └── data_error_widget.dart                # Error state dengan retry terlokalisasi
+├── utils/
+│   ├── app_snackbar.dart                     # SnackBar standar seluruh aplikasi
+│   └── phone_validator.dart
+├── test/
+│   ├── screens/auth/auth_flow_screens_test.dart # Test onboarding, Forgot PIN, phone/Google sign-up
+│   ├── screens/auth/sign_in_screen_test.dart   # Test UI Sign In dan provider OAuth
+│   ├── services/supabase_auth_service_test.dart
+│   └── utils/phone_validator_test.dart
+└── supabase/
+  ├── config.toml                           # Project config Supabase lokal
+  ├── migrations/                           # Schema, RPC, constraint, dan policy database
+  └── functions/
+    ├── update-pin/index.ts               # Edge Function update PIN
+    └── client-error-log/index.ts         # Logging error HTTP 5xx dari client
 ```
 
 ---
@@ -443,6 +482,27 @@ lib/
 | Multi-Language | `AppLanguageScope` (Indonesia & English) |
 | Observability | Dio interceptor + Supabase Edge Function `client-error-log` |
 
+## 🧪 Testing
+
+Test widget dan unit tersedia untuk:
+
+- Splash dan branding aplikasi.
+- Validasi nomor telepon.
+- Service hashing PIN.
+- Sign In phone dan validasi input.
+- Onboarding, termasuk skip ke Sign In dan penyimpanan `has_seen_onboarding`.
+- Forgot PIN, validasi nomor, serta OTP dummy.
+- Sign-up phone: profile completion dan create PIN.
+- Google sign-up: profile completion dan create PIN.
+
+Jalankan seluruh test dengan:
+
+```bash
+flutter test
+```
+
+Perintah tersebut saat ini menghasilkan **27 test lulus**. Integration smoke test tersedia di `integration_test/app_test.dart` dan membutuhkan device Android/iOS, file `.env`, serta koneksi Supabase. OAuth Google/Apple dan OTP production tidak diuji dengan credential nyata dalam widget test.
+
 ---
 
 ## 🚀 Cara Menjalankan
@@ -450,26 +510,44 @@ lib/
 ```bash
 # 1. Clone repository
 git clone https://github.com/Raihanhidayah12/Kedota-Physiotherapy-App.git
-cd kedotaapp
+cd Kedota-Physiotherapy-App
 
-# 2. Install dependencies
+# 2. Siapkan environment Supabase
+copy .env.example .env       # Windows PowerShell: Copy-Item .env.example .env
+# Isi SUPABASE_URL dan SUPABASE_ANON_KEY pada .env
+
+# 3. Install dependencies
 flutter pub get
 
-# 3. Jalankan aplikasi
+# 4. Jalankan aplikasi
 flutter run
 
-# 4. Jalankan unit dan widget tests
+# 5. Jalankan unit dan widget tests
 flutter test
 
-# 5. Jalankan integration test di device/emulator Android yang terhubung
+# 6. Jalankan integration test di device/emulator Android yang terhubung
 flutter test integration_test/app_test.dart -d <device-id>
 
-# 6. Deploy Edge Functions
+# 7. Deploy Edge Functions jika memiliki akses ke project Supabase
 supabase login
 supabase link --project-ref wwmctqhbqpsbkyxkeaqv
 supabase functions deploy update-pin
 supabase functions deploy client-error-log
 ```
+
+> Jangan commit `.env`. Gunakan `.env.example` sebagai template dan isi hanya dengan publishable/anon key pada aplikasi Flutter. Service-role key hanya boleh digunakan oleh Edge Function.
+
+### Supabase Lokal
+
+Konfigurasi lokal tersedia di `supabase/config.toml`. Supabase CLI dapat menjalankan API, database, Auth, Storage, Studio, Inbucket, dan Edge Runtime secara lokal:
+
+```bash
+supabase start
+supabase functions serve update-pin
+supabase functions serve client-error-log
+```
+
+Migration database berada di `supabase/migrations/`. Setelah perubahan schema, jalankan migration sesuai workflow Supabase yang digunakan oleh tim.
 
 ---
 

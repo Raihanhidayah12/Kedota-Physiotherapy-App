@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/app_language.dart';
+import '../../utils/app_snackbar.dart';
 import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_bottom_sheet.dart';
@@ -357,16 +358,7 @@ class _ChangePinScreenState extends State<ChangePinScreen>
       if (mounted) setState(() => _isPinError = false);
     });
     if (msg != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: const Color(0xFFD94F45),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      );
+      showAppSnackBar(context, msg, type: AppSnackBarType.error);
     }
   }
 

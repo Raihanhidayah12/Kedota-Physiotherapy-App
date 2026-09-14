@@ -1,12 +1,12 @@
 openapi: 3.0.0
 info:
   title: Kedota Physiotherapy App API
-  version: 1.3.0
+  version: 2.0.0
   description: >-
     Spesifikasi OpenAPI untuk API produksi aplikasi Kedota Physiotherapy yang
     berjalan di atas Supabase. Dokumen ini mencakup alur autentikasi phone dan
-    Google OAuth, manajemen profil, update PIN via Edge Function, verifikasi 
-    tanggal lahir, CRUD data profil, update status, dan penghapusan akun.
+    Google OAuth, manajemen profil, appointment, pembayaran, reschedule,
+    RPC operasional, dan Edge Functions yang saat ini digunakan aplikasi Flutter.
 
     Catatan implementasi:
     - PIN di-hash menggunakan SHA-256 sebelum disimpan ke kolom pin_hash.
@@ -14,6 +14,7 @@ info:
       fallback ke format {digits}@kedota.local.
     - Update PIN untuk forgot PIN flow menggunakan Edge Function (update-pin)
       yang berjalan server-side dengan service-role key aman.
+    - Edge Function client-error-log menerima metadata response HTTP 5xx dari client.
     - Password Supabase Auth disinkronkan setiap kali PIN diperbarui via
       Edge Function atau direct session update.
 
@@ -30,8 +31,15 @@ info:
     - signup_method (Enum: phone, google, apple)
     - status (Enum: active, deactivated, recycled)
     - is_profile_complete (Boolean)
+    - nik (String, 16 digit)
+    - address (String)
+    - medical_code (String, format KDT- + 12 karakter heksadesimal)
+    - profile_photo_url (String, opsional)
     - last_login_at (Timestamp)
     - created_at, updated_at (Timestamp)
+
+    Tabel `appointments` menyimpan satu jadwal terapi per record dan digunakan
+    untuk Home, Riwayat, Progress, notifikasi, reschedule, dan pembayaran.
 servers:
   - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/rest/v1
     description: Production Supabase REST API
@@ -48,6 +56,12 @@ tags:
     description: Endpoint untuk update dan verifikasi PIN pengguna
   - name: Edge Functions
     description: Supabase Edge Functions untuk operasi server-side yang aman
+  - name: Appointments
+    description: REST resource appointment pasien
+  - name: RPC
+    description: Supabase Postgres RPC untuk operasi appointment atomik
+  - name: Observability
+    description: Endpoint logging error dari client
 security:
   - apiKeyAuth: []
   - bearerAuth: []
@@ -884,6 +898,292 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /appointments:
+    get:
+      tags:
+        - Appointments
+      operationId: listAppointments
+      summary: Ambil appointment milik pengguna
+      description: >-
+        Mengambil appointment dari tabel appointments. Client selalu membatasi
+        hasil dengan booker_id pengguna yang sedang login dan dapat mengurutkan
+        berdasarkan appointment_date serta appointment_time.
+      parameters:
+        - in: query
+          name: select
+          schema:
+            type: string
+            default: '*'
+        - in: query
+          name: booker_id
+          required: true
+          schema:
+            type: string
+            example: eq.123e4567-e89b-12d3-a456-426614174000
+        - in: query
+          name: appointment_status
+          schema:
+            type: string
+            example: eq.upcoming
+        - in: query
+          name: appointment_date
+          schema:
+            type: string
+            example: eq.2026-09-20
+        - in: query
+          name: service_type
+          schema:
+            type: string
+            enum: [Klinik, Home Care]
+        - in: query
+          name: clinic_name
+          schema:
+            type: string
+        - in: query
+          name: order
+          schema:
+            type: string
+            example: appointment_date.asc,appointment_time.asc
+      responses:
+        '200':
+          description: Daftar appointment berhasil diambil.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '401':
+          description: Token atau API key tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Appointments
+      operationId: createAppointment
+      summary: Buat appointment baru
+      description: >-
+        Membuat appointment dengan status awal upcoming. Reservasi full
+        menggunakan payment_status paid, sedangkan deposit menggunakan pending.
+        Client mengambil id dan booking_code dari response untuk menjadwalkan
+        reminder serta notifikasi expired.
+      parameters:
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentRequest'
+      responses:
+        '201':
+          description: Appointment berhasil dibuat.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '400':
+          description: Payload tidak valid atau slot tidak tersedia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Slot appointment bentrok dengan appointment aktif lain.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Appointments
+      operationId: updateAppointmentSchedule
+      summary: Update tanggal atau waktu appointment
+      description: >-
+        Update REST langsung yang digunakan oleh alur reservasi reschedule.
+        Pemeriksaan hak akses dan aturan jendela reschedule utama dilakukan oleh
+        RPC reschedule_appointment.
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+            example: eq.123e4567-e89b-12d3-a456-426614174000
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppointmentRequest'
+      responses:
+        '200':
+          description: Appointment berhasil diperbarui.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '401':
+          description: Akses ditolak.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Slot baru tidak tersedia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /rpc/expire_overdue_appointments:
+    post:
+      tags:
+        - RPC
+      operationId: expireOverdueAppointments
+      summary: Expire appointment yang melewati batas waktu
+      description: >-
+        Menandai appointment upcoming menjadi expired setelah 15 menit dari
+        waktu mulai. Dipanggil saat Home, Riwayat, dan notifikasi dimuat.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '200':
+          description: RPC selesai.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '401':
+          description: Session tidak valid.
+
+  /rpc/reschedule_appointment:
+    post:
+      tags:
+        - RPC
+      operationId: rescheduleAppointment
+      summary: Reschedule appointment secara atomik
+      description: >-
+        Mengubah tanggal dan waktu appointment setelah validasi pemilik,
+        status, jendela 24 jam, dan ketersediaan slot. Appointment paid yang
+        tidak hadir dapat diubah maksimal 24 jam setelah waktu mulai.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleAppointmentRequest'
+      responses:
+        '200':
+          description: Appointment berhasil di-reschedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          description: Appointment tidak memenuhi aturan reschedule atau slot tidak tersedia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Session tidak valid.
+        '403':
+          description: User bukan pemilik appointment.
+        '404':
+          description: Appointment tidak ditemukan.
+
+  /rpc/settle_appointment_payment:
+    post:
+      tags:
+        - RPC
+      operationId: settleAppointmentPayment
+      summary: Lunasi pembayaran appointment
+      description: >-
+        Menyelesaikan pembayaran appointment deposit menggunakan metode yang
+        dipilih user. Pembayaran masih berada pada alur demo sampai gateway dan
+        webhook produksi diterapkan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlePaymentRequest'
+      responses:
+        '200':
+          description: Pembayaran berhasil dicatat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          description: Appointment tidak dapat dilunasi atau metode pembayaran tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Session tidak valid.
+        '403':
+          description: User bukan pemilik appointment.
+        '404':
+          description: Appointment tidak ditemukan.
+
+  /functions/v1/client-error-log:
+    post:
+      tags:
+        - Observability
+      operationId: logClientServerError
+      summary: Kirim metadata error HTTP 5xx dari client
+      description: >-
+        Menerima metadata aman dari Dio interceptor ketika client menerima
+        status HTTP 500-599. Token, password, dan body request tidak dikirim.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientErrorLogRequest'
+      responses:
+        '202':
+          description: Log diterima.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientErrorLogResponse'
+        '400':
+          description: Payload log tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionErrorResponse'
+        '405':
+          description: Method selain POST tidak diizinkan.
+
 components:
   securitySchemes:
     apiKeyAuth:
@@ -1301,6 +1601,255 @@ components:
           type: string
           format: date-time
           example: "2026-08-17T10:30:00Z"
+
+    Appointment:
+      type: object
+      required:
+        - id
+        - booker_id
+        - service_type
+        - appointment_date
+        - appointment_time
+        - appointment_status
+        - payment_plan
+        - payment_status
+      properties:
+        id:
+          type: string
+          format: uuid
+        booker_id:
+          type: string
+          format: uuid
+        patient_full_name:
+          type: string
+        patient_medical_code:
+          type: string
+          description: ID pasien dengan format KDT- + 12 karakter heksadesimal.
+        patient_complaint:
+          type: string
+        service_type:
+          type: string
+          enum: [Klinik, Home Care]
+        clinic_name:
+          type: string
+        address:
+          type: string
+        therapist_name:
+          type: string
+        therapist_gender_preference:
+          type: string
+        therapist_availability_requested:
+          type: string
+        appointment_date:
+          type: string
+          format: date
+        appointment_time:
+          type: string
+          description: Jam lokal dalam format HH:mm:ss.
+          example: "10:00:00"
+        session_count:
+          type: integer
+          minimum: 1
+          enum: [1, 3, 6, 9]
+        appointment_status:
+          type: string
+          enum: [upcoming, completed, expired, cancelled]
+        payment_plan:
+          type: string
+          enum: [full, deposit]
+        payment_method:
+          type: string
+          nullable: true
+        payment_status:
+          type: string
+          enum: [paid, pending, failed, expired]
+        base_price:
+          type: integer
+          format: int64
+        travel_fee:
+          type: integer
+          format: int64
+        discount_amount:
+          type: integer
+          format: int64
+        discount_code:
+          type: string
+          nullable: true
+        discount_percent:
+          type: integer
+          minimum: 0
+        total_amount:
+          type: integer
+          format: int64
+        amount_due:
+          type: integer
+          format: int64
+        booking_code:
+          type: string
+          description: Kode booking dengan format EMR-####-########.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateAppointmentRequest:
+      type: object
+      required:
+        - booker_id
+        - service_type
+        - appointment_date
+        - appointment_time
+        - session_count
+        - payment_plan
+        - payment_status
+        - appointment_status
+        - total_amount
+        - amount_due
+      properties:
+        booker_id:
+          type: string
+          format: uuid
+        patient_full_name:
+          type: string
+        patient_medical_code:
+          type: string
+        patient_complaint:
+          type: string
+        service_type:
+          type: string
+          enum: [Klinik, Home Care]
+        clinic_name:
+          type: string
+        address:
+          type: string
+        therapist_gender_preference:
+          type: string
+        therapist_availability_requested:
+          type: string
+        appointment_date:
+          type: string
+          format: date
+        appointment_time:
+          type: string
+          example: "10:00:00"
+        session_count:
+          type: integer
+          enum: [1, 3, 6, 9]
+        payment_plan:
+          type: string
+          enum: [full, deposit]
+        payment_method:
+          type: string
+        payment_status:
+          type: string
+          enum: [paid, pending]
+        appointment_status:
+          type: string
+          enum: [upcoming]
+        base_price:
+          type: integer
+        travel_fee:
+          type: integer
+        discount_amount:
+          type: integer
+        discount_code:
+          type: string
+          nullable: true
+        discount_percent:
+          type: integer
+        total_amount:
+          type: integer
+        amount_due:
+          type: integer
+
+    UpdateAppointmentRequest:
+      type: object
+      required:
+        - appointment_date
+        - appointment_time
+      properties:
+        appointment_date:
+          type: string
+          format: date
+        appointment_time:
+          type: string
+          example: "10:00:00"
+
+    RescheduleAppointmentRequest:
+      type: object
+      required:
+        - p_appointment_id
+        - p_appointment_date
+        - p_appointment_time
+      properties:
+        p_appointment_id:
+          type: string
+          format: uuid
+        p_appointment_date:
+          type: string
+          format: date
+        p_appointment_time:
+          type: string
+          example: "10:00:00"
+
+    SettlePaymentRequest:
+      type: object
+      required:
+        - p_appointment_id
+        - p_payment_method
+      properties:
+        p_appointment_id:
+          type: string
+          format: uuid
+        p_payment_method:
+          type: string
+          enum:
+            - QRIS
+            - OVO
+            - GoPay
+            - ShopeePay
+            - BCA
+            - BNI
+            - BRI
+            - Permata
+            - Mandiri
+            - Kartu Kredit / Debit
+            - Tunai
+
+    ClientErrorLogRequest:
+      type: object
+      required:
+        - source
+        - method
+        - path
+        - status_code
+      properties:
+        source:
+          type: string
+          enum: [flutter_client]
+        method:
+          type: string
+          example: GET
+        path:
+          type: string
+          example: /rest/v1/appointments
+        status_code:
+          type: integer
+          minimum: 500
+          maximum: 599
+        message:
+          type: string
+        platform:
+          type: string
+
+    ClientErrorLogResponse:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+          example: true
 
     ErrorResponse:
       type: object

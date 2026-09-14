@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../services/notification_service.dart';
+import '../../utils/app_snackbar.dart';
 import '../../utils/phone_validator.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
@@ -180,7 +181,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       final savedMedicalCode =
           profile?['medical_code']?.toString().trim() ?? '';
       final medicalCode =
-          RegExp(r'^KED-[A-F0-9]{12}$').hasMatch(savedMedicalCode)
+          RegExp(r'^KDT-[A-F0-9]{12}$').hasMatch(savedMedicalCode)
           ? savedMedicalCode
           : await _generateUniqueMedicalCode();
       _medicalCodeController.text = medicalCode;
@@ -251,11 +252,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       12,
       (_) => alphabet[random.nextInt(alphabet.length)],
     ).join();
-    return 'KED-$suffix';
+    return 'KDT-$suffix';
   }
 
   Future<String> _generateUniqueMedicalCode() async {
-    for (var attempt = 0; attempt < 5; attempt++) {
+    for (var attempt = 0; attempt < 20; attempt++) {
       final candidate = _generateMedicalCode();
       try {
         final existing = await _service.client
@@ -266,10 +267,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         if (existing == null) return candidate;
       } catch (error) {
         debugPrint('Medical code uniqueness check failed: $error');
-        return candidate;
+        rethrow;
       }
     }
-    return _generateMedicalCode();
+    throw StateError('Unable to generate a unique medical code.');
   }
 
   @override
@@ -829,7 +830,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                   _serviceType == _homeCareService
                       ? Icons.home_work_rounded
                       : Icons.local_hospital_rounded,
-                  subtitle: location.address,
+                  subtitle: _serviceType == _homeCareService
+                      ? t(context, 'homeVisitAddress')
+                      : location.address,
                   mapUrl: location.mapUrl,
                 ),
               )
@@ -906,7 +909,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
               const Icon(Icons.check_circle_rounded, color: _teal, size: 20),
             if (mapUrl != null)
               IconButton(
-                tooltip: 'Buka di Maps',
+                tooltip: t(context, 'openClinicMap'),
                 icon: const Icon(Icons.map_outlined, color: _teal),
                 onPressed: () => launchUrl(
                   Uri.parse(mapUrl),
@@ -1483,7 +1486,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         child: TextButton.icon(
           onPressed: _openClinicMap,
           icon: const Icon(Icons.directions_rounded, size: 17),
-          label: const Text('Arahkan ke Google Maps'),
+          label: Text(t(context, 'openClinicMap')),
           style: TextButton.styleFrom(foregroundColor: _tealDark),
         ),
       ),
@@ -2010,7 +2013,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         child: OutlinedButton.icon(
           onPressed: () {},
           icon: const Icon(Icons.download_rounded, size: 16),
-          label: const Text('Unduh QR'),
+          label: Text(t(context, 'downloadQr')),
           style: OutlinedButton.styleFrom(
             foregroundColor: _teal,
             side: const BorderSide(color: Color(0xFFE0EAEA)),
@@ -2155,12 +2158,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   Future<void> _copyPaymentValue(String value) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(t(context, 'reservationAccountCopied')),
-        duration: const Duration(seconds: 2),
-      ),
+    showAppSnackBar(
+      context,
+      t(context, 'reservationAccountCopied'),
+      type: AppSnackBarType.success,
+      duration: const Duration(seconds: 2),
     );
   }
 

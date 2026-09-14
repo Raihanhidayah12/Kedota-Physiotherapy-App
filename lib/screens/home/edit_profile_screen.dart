@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../l10n/app_language.dart';
 import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
+import '../../utils/app_snackbar.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
 import 'change_pin_screen.dart';
@@ -23,7 +24,9 @@ const _ink2 = Color(0xFF3D6065);
 const _ink3 = Color(0xFF8AA8AC);
 
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({super.key});
+  const EditProfileScreen({super.key, this.requireCompleteProfile = true});
+
+  final bool requireCompleteProfile;
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -134,6 +137,114 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     }
   }
 
+  Future<void> _showRequiredProfileDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Color(0xFFE6EEEE)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x45000000),
+                  blurRadius: 28,
+                  offset: Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF4D8),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFFFE3A1),
+                      width: 5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Color(0xFFE59D2A),
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F7F5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    t(context, 'profileRequiredBadge'),
+                    style: TextStyle(
+                      color: _c700,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  t(context, 'incompleteProfileTitle'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _ink,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  t(context, 'profileRequiredMessage'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _ink2, fontSize: 13, height: 1.45),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _c700,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    child: Text(t(context, 'incompleteProfileBtn')),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _restoreChangePinCooldown(String phone) async {
     final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
     if (digits.isEmpty) return;
@@ -203,15 +314,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         _isDirty = false;
         _profileChanged = true;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(t(context, 'profileSavedSuccess')),
-          backgroundColor: _c700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        t(context, 'profileSavedSuccess'),
+        type: AppSnackBarType.success,
       );
     } catch (e) {
       if (!mounted) return;
@@ -475,18 +581,26 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     return lang == AppLanguage.en ? en[m] : id[m];
   }
 
-  void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(msg),
-      backgroundColor: _c700,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    ),
-  );
+  void _snack(String msg) =>
+      showAppSnackBar(context, msg, type: AppSnackBarType.success);
 
   Future<void> _copyMedicalCode() async {
     await Clipboard.setData(ClipboardData(text: _medicalCode));
     if (mounted) _snack(t(context, 'patientIdCopied'));
+  }
+
+  bool get _requiredFieldsComplete {
+    final nik = _nikCtr.text.trim();
+    return RegExp(r'^\d{16}$').hasMatch(nik) &&
+        _addressCtr.text.trim().isNotEmpty;
+  }
+
+  void _handleBack() {
+    if (widget.requireCompleteProfile && !_requiredFieldsComplete) {
+      _showRequiredProfileDialog();
+      return;
+    }
+    Navigator.of(context).pop(_profileChanged);
   }
 
   // ── build ─────────────────────────────────────────────────────────────────
@@ -496,7 +610,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        Navigator.of(context).pop(_profileChanged);
+        _handleBack();
       },
       child: Scaffold(
         backgroundColor: _bg,
@@ -549,7 +663,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                 keyboardType: TextInputType.number,
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
-                                    return null;
+                                    return widget.requireCompleteProfile
+                                        ? t(context, 'nikRequired')
+                                        : null;
                                   }
                                   if (v.trim().length != 16) {
                                     return t(context, 'nikLengthError');
@@ -567,7 +683,13 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                 icon: Icons.location_on_outlined,
                                 label: t(context, 'address'),
                                 hint: t(context, 'addressHint'),
+                                minLines: 1,
                                 maxLines: 3,
+                                validator: (v) =>
+                                    widget.requireCompleteProfile &&
+                                        (v == null || v.trim().isEmpty)
+                                    ? t(context, 'addressRequired')
+                                    : null,
                               ),
                             ],
                           ),
@@ -644,7 +766,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     surfaceTintColor: Colors.transparent,
     leading: IconButton(
       icon: const Icon(Icons.arrow_back_rounded),
-      onPressed: () => Navigator.of(context).pop(_profileChanged),
+      onPressed: _handleBack,
     ),
     title: Text(
       t(context, 'menuEditProfile'),
@@ -778,6 +900,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     required String label,
     String? Function(String?)? validator,
     TextInputType? keyboardType,
+    int? minLines,
     int maxLines = 1,
     List<TextInputFormatter>? inputFormatters,
   }) => Padding(
@@ -812,6 +935,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 controller: controller,
                 keyboardType: keyboardType,
                 validator: validator,
+                minLines: minLines,
                 maxLines: maxLines,
                 inputFormatters: inputFormatters,
                 style: const TextStyle(
@@ -823,6 +947,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                   isDense: true,
                   contentPadding: EdgeInsets.zero,
                   border: InputBorder.none,
+                  errorStyle: const TextStyle(
+                    fontSize: 11,
+                    height: 1.15,
+                    color: Color(0xFFD94F45),
+                  ),
+                  errorMaxLines: 2,
                   hintText: hint,
                   hintStyle: const TextStyle(
                     fontSize: 15,
@@ -1025,15 +1155,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     final digits = rawPhone.replaceAll(RegExp(r'[^\d]'), '');
 
     if (digits.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(t(context, 'phoneNotFound')),
-          backgroundColor: const Color(0xFFD94F45),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        t(context, 'phoneNotFound'),
+        type: AppSnackBarType.error,
       );
       return;
     }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../l10n/app_language.dart';
+import '../../utils/app_snackbar.dart';
 import '../../services/app_lock_service.dart';
 import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
@@ -167,11 +168,10 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
               _isError = true;
               _isLoading = false;
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(t(context, 'sessionExpiredUsePIN')),
-                backgroundColor: const Color(0xFFEF4444),
-              ),
+            showAppSnackBar(
+              context,
+              t(context, 'sessionExpiredUsePIN'),
+              type: AppSnackBarType.error,
             );
           }
         }

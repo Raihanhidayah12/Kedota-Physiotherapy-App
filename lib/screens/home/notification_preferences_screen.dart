@@ -185,7 +185,9 @@ class _NotificationPreferencesScreenState
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          isDisabling ? 'Matikan Notifikasi?' : 'Izin Notifikasi Diperlukan',
+          isDisabling
+              ? t(context, 'disableNotificationsTitle')
+              : t(context, 'notificationPermissionTitle'),
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w800,
@@ -194,14 +196,17 @@ class _NotificationPreferencesScreenState
         ),
         content: Text(
           isDisabling
-              ? 'Untuk mematikan notifikasi, buka Pengaturan HP dan nonaktifkan notifikasi untuk aplikasi ini.'
-              : 'Izin notifikasi ditolak. Buka Pengaturan HP untuk mengaktifkannya secara manual.',
+              ? t(context, 'disableNotificationsBody')
+              : t(context, 'notificationPermissionBody'),
           style: const TextStyle(fontSize: 13, color: _ink2),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Batal', style: TextStyle(color: _ink3)),
+            child: Text(
+              t(context, 'cancel'),
+              style: const TextStyle(color: _ink3),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -210,7 +215,7 @@ class _NotificationPreferencesScreenState
               openAppSettings();
             },
             child: Text(
-              'Buka Pengaturan',
+              t(context, 'openSettingsBtn'),
               style: TextStyle(color: _c700, fontWeight: FontWeight.w700),
             ),
           ),
@@ -301,18 +306,21 @@ class _NotificationPreferencesScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Notifikasi diblokir di pengaturan HP',
-                  style: TextStyle(
+                Text(
+                  t(context, 'notificationDisabledTitle'),
+                  style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFFE65100),
                   ),
                 ),
                 const SizedBox(height: 2),
-                const Text(
-                  'Aktifkan izin notifikasi di Pengaturan HP agar notifikasi dapat diterima.',
-                  style: TextStyle(fontSize: 11, color: Color(0xFFBF360C)),
+                Text(
+                  t(context, 'notificationDisabledBody'),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFFBF360C),
+                  ),
                 ),
               ],
             ),
@@ -326,8 +334,8 @@ class _NotificationPreferencesScreenState
                 color: const Color(0xFFE65100),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text(
-                'Buka',
+              child: Text(
+                t(context, 'openSettingsShort'),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../l10n/app_language.dart';
 import '../../services/notification_service.dart';
 import '../../services/supabase_auth_service.dart';
+import '../../utils/app_snackbar.dart';
 import 'history_screen.dart';
 import 'main_screen.dart';
 
@@ -157,9 +158,7 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showAppSnackBar(context, error.toString(), type: AppSnackBarType.error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -606,8 +605,10 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
   Future<void> _copyValue(String value) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(t(context, 'reservationAccountCopied'))),
+    showAppSnackBar(
+      context,
+      t(context, 'reservationAccountCopied'),
+      type: AppSnackBarType.success,
     );
   }
 }

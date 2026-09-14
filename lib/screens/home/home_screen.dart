@@ -1,15 +1,18 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
-import 'edit_profile_screen.dart';
+import '../../utils/app_snackbar.dart';
 import 'notification_screen.dart';
 import 'reservation_flow_screen.dart';
 import 'main_screen.dart';
 import 'appointment_detail_screen.dart';
 import 'history_screen.dart';
+import 'upcoming_appointment_card.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _c700 = Color(0xFF007F78);
@@ -33,9 +36,8 @@ class HomeBody extends StatefulWidget {
 }
 
 class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
-  String _fullName = 'Pasien Kedota';
+  String _fullName = '';
   String? _profileImageUrl;
-  bool _isProfileIncomplete = false;
   // header expand animation
   late AnimationController _headerCtrl;
   late Animation<double> _headerExpand; // height expand from top-to-bottom
@@ -153,12 +155,59 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   }
 
   Future<void> _loadNotificationReadState() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _hasUnreadNotifications =
-          !(prefs.getBool('notifications_marked_as_read') ?? false);
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final globalRead = prefs.getBool('notifications_marked_as_read') ?? false;
+      final readKeys =
+          prefs.getStringList('read_notification_keys')?.toSet() ?? {};
+      if (globalRead && readKeys.isEmpty) {
+        if (mounted) setState(() => _hasUnreadNotifications = false);
+        return;
+      }
+
+      final user = SupabaseAuthService().client.auth.currentUser;
+      if (user == null) return;
+      final rows = await SupabaseAuthService().client
+          .from('appointments')
+          .select('id, created_at')
+          .eq('booker_id', user.id);
+      final notificationKeys = <String>{
+        ...(rows as List).map(
+          (row) => 'appointment:${row['id'] ?? ''}:${row['created_at'] ?? ''}',
+        ),
+      };
+
+      void addLocalKeys(String preferenceKey, String notificationType) {
+        for (final rawEvent in prefs.getStringList(preferenceKey) ?? []) {
+          try {
+            final event = jsonDecode(rawEvent);
+            if (event is Map<String, dynamic> &&
+                event['booker_id'] == user.id) {
+              notificationKeys.add(
+                '$notificationType:${event['appointment_id'] ?? ''}:${event['created_at'] ?? ''}',
+              );
+            }
+          } catch (_) {}
+        }
+      }
+
+      addLocalKeys('reschedule_notifications', 'rescheduled');
+      addLocalKeys('payment_notifications', 'payment_completed');
+      addLocalKeys('reminder_notifications', 'reminder');
+      if (prefs.getBool('welcome_notification_sent') ?? false) {
+        notificationKeys.add(
+          'welcome:${prefs.getString('welcome_notification_created_at') ?? 'default'}',
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _hasUnreadNotifications = notificationKeys.any(
+          (key) => !readKeys.contains(key),
+        );
+      });
+    } catch (error) {
+      debugPrint('Notification read state load failed: $error');
+    }
   }
 
   @override
@@ -214,11 +263,10 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       setState(() {
         _fullName = profileName.isNotEmpty
             ? profileName
-            : (metadataName?.isNotEmpty == true ? metadataName! : _fullName);
+            : (metadataName?.isNotEmpty == true
+                  ? metadataName!
+                  : t(context, 'patientName'));
         _profileImageUrl = imageUrl;
-        final nik = profile?['nik']?.toString().trim() ?? '';
-        final address = profile?['address']?.toString().trim() ?? '';
-        _isProfileIncomplete = nik.isEmpty || address.isEmpty;
       });
     } catch (e) {
       debugPrint('Home profile load failed: $e');
@@ -286,84 +334,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     });
   }
 
-  // ── incomplete profile banner ────────────────────────────────────────────
-  Widget _buildIncompleteProfileBanner() {
-    return GestureDetector(
-      onTap: () async {
-        final refreshed = await Navigator.of(context).push<bool>(
-          MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-        );
-        if (refreshed == true && mounted) _loadProfile();
-      },
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF8E1),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFFFCC02), width: 1),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFEE82),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.info_outline_rounded,
-                color: Color(0xFFB7820A),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    t(context, 'incompleteProfileTitle'),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF7A5800),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    t(context, 'incompleteProfileDesc'),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF9A7000),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Tombol langsung ke Informasi Akun
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFCC02),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                t(context, 'incompleteProfileBtn'),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF7A5800),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   String get _firstName => _fullName.split(' ').first;
 
   // ── build ────────────────────────────────────────────────────────────────────
@@ -385,11 +355,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       const SizedBox(height: 20),
-                      // Banner kelengkapan profil
-                      if (_isProfileIncomplete) ...[
-                        _buildIncompleteProfileBanner(),
-                        const SizedBox(height: 16),
-                      ],
                       _fadeSlide(0, _buildPromoBanner()),
                       const SizedBox(height: 28),
                       _fadeSlide(
@@ -546,23 +511,12 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     ),
   );
 
-  Widget _circle(double size, Color color, double opacity) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      color: color.withValues(alpha: opacity),
-    ),
-  );
-
   Widget _buildNotifButton() => GestureDetector(
     onTap: () async {
-      final markedAsRead = await Navigator.of(context).push<bool>(
+      await Navigator.of(context).push<bool>(
         MaterialPageRoute(builder: (_) => const NotificationScreen()),
       );
-      if (markedAsRead == true && mounted) {
-        setState(() => _hasUnreadNotifications = false);
-      }
+      if (mounted) _loadNotificationReadState();
     },
     child: Container(
       width: 40,
@@ -993,9 +947,11 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       mode: LaunchMode.externalApplication,
     );
     if (!opened && mounted) {
-      ScaffoldMessenger.of(
+      showAppSnackBar(
         context,
-      ).showSnackBar(SnackBar(content: Text(t(context, 'whatsappOpenFailed'))));
+        t(context, 'whatsappOpenFailed'),
+        type: AppSnackBarType.error,
+      );
     }
   }
 
@@ -1135,6 +1091,12 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
         ),
       );
     }
+    final item = _appointmentItemFromRow(appointment);
+    return UpcomingAppointmentCard(
+      item: item,
+      onTap: () => _openUpcomingDetail(appointment),
+    );
+    /*
     final serviceType = appointment['service_type']?.toString() ?? 'Home Care';
     final isClinic = serviceType == 'Klinik';
     final paymentStatus =
@@ -1325,6 +1287,41 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
         ),
       ),
     );
+    */
+  }
+
+  AppointmentItem _appointmentItemFromRow(Map<String, dynamic> appointment) {
+    final appointmentDate = appointment['appointment_date']?.toString() ?? '';
+    final appointmentTime = appointment['appointment_time']?.toString() ?? '';
+    final scheduledAt = DateTime.tryParse('$appointmentDate $appointmentTime');
+    final locallyExpired =
+        scheduledAt != null &&
+        !scheduledAt.add(const Duration(minutes: 15)).isAfter(DateTime.now());
+    final rawStatus = appointment['appointment_status']?.toString();
+    final status = rawStatus == 'completed'
+        ? AppointmentStatus.selesai
+        : rawStatus == 'expired' || rawStatus == 'cancelled'
+        ? AppointmentStatus.batasWaktu
+        : locallyExpired
+        ? AppointmentStatus.batasWaktu
+        : AppointmentStatus.mendatang;
+    return AppointmentItem(
+      id: appointment['id']?.toString() ?? '',
+      therapistName:
+          appointment['therapist_name']?.toString().isNotEmpty == true
+          ? appointment['therapist_name'].toString()
+          : t(context, 'therapistDefault'),
+      serviceType: appointment['service_type']?.toString() ?? 'Home Care',
+      date: appointmentDate,
+      time: appointmentTime,
+      patientName: appointment['patient_full_name']?.toString() ?? '',
+      sessionCount:
+          int.tryParse(appointment['session_count']?.toString() ?? '') ?? 1,
+      paymentStatus: appointment['payment_status']?.toString() ?? 'paid',
+      paymentPlan: appointment['payment_plan']?.toString() ?? 'full',
+      amountDue: int.tryParse(appointment['amount_due']?.toString() ?? '') ?? 0,
+      status: status,
+    );
   }
 
   Future<void> _openUpcomingDetail(Map<String, dynamic> appointment) async {
@@ -1368,54 +1365,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     );
     if (mounted) _loadUpcomingAppointment();
   }
-
-  String _monthName(int month) => const [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'Mei',
-    'Jun',
-    'Jul',
-    'Agu',
-    'Sep',
-    'Okt',
-    'Nov',
-    'Des',
-  ][month - 1];
-
-  String _weekdayName(int weekday) =>
-      const ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'][weekday - 1];
-
-  Widget _apptInfoItem(IconData icon, String top, String bottom) => Row(
-    children: [
-      Icon(icon, size: 16, color: _c500),
-      const SizedBox(width: 6),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              top,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: _ink,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(
-              bottom,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: _ink3, fontSize: 10),
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
 
   // ── independent tasks ────────────────────────────────────────────────────
   Widget _buildTasksCard() {
@@ -1503,9 +1452,9 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       children: [
         Row(
           children: [
-            const Text(
-              'Pain Score',
-              style: TextStyle(
+            Text(
+              t(context, 'painScore'),
+              style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: _ink,

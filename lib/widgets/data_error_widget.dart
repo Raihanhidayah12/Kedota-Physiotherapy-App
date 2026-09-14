@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_language.dart';
+
 /// Widget error state untuk data gagal dimuat.
 /// Tampilan: icon refresh dalam circle → teks bold merah → subtitle abu → opsional tombol retry.
 ///
@@ -17,17 +19,12 @@ class DataErrorWidget extends StatelessWidget {
   final String? subtitle;
   final VoidCallback? onRetry;
 
-  const DataErrorWidget({
-    super.key,
-    this.title,
-    this.subtitle,
-    this.onRetry,
-  });
+  const DataErrorWidget({super.key, this.title, this.subtitle, this.onRetry});
 
   @override
   Widget build(BuildContext context) {
-    final displayTitle = title ?? 'Gagal Memuat Data';
-    final displaySubtitle = subtitle ?? 'Silahkan refresh halaman';
+    final displayTitle = title ?? t(context, 'loadErrorTitle');
+    final displaySubtitle = subtitle ?? t(context, 'loadErrorSubtitle');
 
     return Center(
       child: Column(
@@ -91,7 +88,7 @@ class DataErrorWidget extends StatelessWidget {
             TextButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Coba Lagi'),
+              label: Text(t(context, 'retry')),
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFF00A79D),
                 textStyle: const TextStyle(

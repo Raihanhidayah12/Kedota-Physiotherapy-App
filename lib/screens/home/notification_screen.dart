@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
+import '../../utils/app_snackbar.dart';
 import 'appointment_detail_screen.dart';
 import 'history_screen.dart';
 import 'settle_payment_screen.dart';
@@ -29,6 +30,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   int _welcomeIndex = -1;
   bool _loading = true;
   bool _notificationsRead = false;
+  final Set<String> _readNotificationKeys = {};
 
   @override
   void initState() {
@@ -45,6 +47,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
       );
       final notificationsRead =
           prefs.getBool('notifications_marked_as_read') ?? false;
+      final readNotificationKeys =
+          prefs.getStringList('read_notification_keys')?.toSet() ?? {};
       final service = SupabaseAuthService();
       final user = service.client.auth.currentUser;
       if (user == null) {
@@ -149,12 +153,27 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       )
                       .length
           : -1;
+      final currentNotificationKeys = {
+        ...notifications.map(_notificationKey),
+        if (welcomeSent)
+          'welcome:${welcomeCreatedAt?.toIso8601String() ?? 'default'}',
+      };
+      if (notificationsRead && readNotificationKeys.isEmpty) {
+        readNotificationKeys.addAll(currentNotificationKeys);
+      }
+      final allNotificationsRead =
+          currentNotificationKeys.isNotEmpty &&
+          currentNotificationKeys.every(readNotificationKeys.contains);
+      await prefs.setBool('notifications_marked_as_read', allNotificationsRead);
       if (mounted) {
         setState(() {
           _showWelcomeNotification = welcomeSent;
           _welcomeNotificationCreatedAt = welcomeCreatedAt;
           _welcomeIndex = welcomeIndex;
-          _notificationsRead = notificationsRead;
+          _notificationsRead = allNotificationsRead;
+          _readNotificationKeys
+            ..clear()
+            ..addAll(readNotificationKeys);
           _appointmentNotifications = notifications;
         });
       }
@@ -166,17 +185,70 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _markAllAsRead() async {
+    final keys = {
+      ..._appointmentNotifications.map(_notificationKey),
+      if (_showWelcomeNotification)
+        'welcome:${_welcomeNotificationCreatedAt?.toIso8601String() ?? 'default'}',
+    };
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications_marked_as_read', true);
     await prefs.setInt(
       'notifications_last_read_at',
       DateTime.now().millisecondsSinceEpoch,
     );
+    await prefs.setStringList('read_notification_keys', keys.toList());
     if (mounted) {
-      setState(() => _notificationsRead = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(t(context, 'notificationsMarkedRead'))),
+      setState(() {
+        _notificationsRead = true;
+        _readNotificationKeys
+          ..clear()
+          ..addAll(keys);
+      });
+      showAppSnackBar(
+        context,
+        t(context, 'notificationsMarkedRead'),
+        type: AppSnackBarType.success,
+        icon: Icons.check_rounded,
       );
+    }
+  }
+
+  String _notificationKey(Map<String, dynamic> notification) =>
+      notification['notification_key']?.toString() ??
+      '${notification['notification_type'] ?? 'appointment'}:${notification['id'] ?? notification['appointment_id'] ?? ''}:${notification['created_at'] ?? ''}';
+
+  Future<void> _markNotificationAsRead(
+    Map<String, dynamic> notification,
+  ) async {
+    final key = _notificationKey(notification);
+    if (_readNotificationKeys.contains(key)) return;
+    _readNotificationKeys.add(key);
+    final prefs = await SharedPreferences.getInstance();
+    final currentKeys = {
+      ..._appointmentNotifications.map(_notificationKey),
+      if (_showWelcomeNotification)
+        'welcome:${_welcomeNotificationCreatedAt?.toIso8601String() ?? 'default'}',
+    };
+    final allNotificationsRead =
+        currentKeys.isNotEmpty &&
+        currentKeys.every(_readNotificationKeys.contains);
+    await prefs.setStringList(
+      'read_notification_keys',
+      _readNotificationKeys.toList(),
+    );
+    await prefs.setBool('notifications_marked_as_read', allNotificationsRead);
+    if (allNotificationsRead) _notificationsRead = true;
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _handleNotificationTap(Map<String, dynamic> notification) async {
+    await _markNotificationAsRead(notification);
+    final appointment = notification['appointment'];
+    final appointmentId = notification['appointment_id']?.toString() ?? '';
+    if (appointment is Map<String, dynamic>) {
+      await _openPayment(appointment);
+    } else if (appointmentId.isNotEmpty) {
+      await _openAppointmentDetail(appointmentId);
     }
   }
 
@@ -288,10 +360,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final hasOutstandingPayment =
         (paymentPlan == 'deposit' && paymentStatus != 'paid') ||
         (amountDue > 0 && paymentStatus != 'paid');
+    final reminderBody = t(
+      context,
+      'appointmentReminderBody',
+    ).replaceFirst('{time}', time);
     return {
       'appointment_id': row['id']?.toString() ?? '',
       'title': isReminder
-          ? row['title']?.toString() ?? t(context, 'appointmentReminderTitle')
+          ? t(context, 'appointmentReminderTitle')
           : isPaymentCompleted
           ? t(context, 'paymentSuccessTitle')
           : isRescheduled
@@ -300,7 +376,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ? t(context, 'paymentPendingNotificationTitle')
           : t(context, 'notificationReservationTitle'),
       'body': isReminder
-          ? row['body']?.toString() ?? t(context, 'appointmentReminderBody')
+          ? reminderBody
           : isPaymentCompleted
           ? t(context, 'paymentSuccessDesc')
                 .replaceFirst('{date}', date)
@@ -338,7 +414,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
           : hasOutstandingPayment
           ? const Color(0xFFD94F45)
           : _c500,
-      'isUnread': !_notificationsRead,
+      'notification_key':
+          '${row['notification_type'] ?? 'appointment'}:${row['id'] ?? ''}:${row['created_at'] ?? ''}',
       if (hasOutstandingPayment) 'appointment': row,
     };
   }
@@ -453,29 +530,37 @@ class _NotificationScreenState extends State<NotificationScreen> {
     ),
     'icon': Icons.celebration_rounded,
     'color': _c500,
-    'isUnread': !_notificationsRead,
+    'notification_key':
+        'welcome:${_welcomeNotificationCreatedAt?.toIso8601String() ?? 'default'}',
   };
 
   Widget _buildNotificationCard(Map<String, dynamic> notif) {
-    final bool isUnread = notif['isUnread'];
+    final bool isUnread = !_readNotificationKeys.contains(
+      _notificationKey(notif),
+    );
     final appointment = notif['appointment'];
-    final appointmentId = notif['appointment_id']?.toString() ?? '';
+    final isPaymentNotification = appointment is Map<String, dynamic>;
+    final cardBorderColor = isPaymentNotification
+        ? const Color(0xFFFFD5D2)
+        : isUnread
+        ? const Color(0xFFD4F5F3)
+        : const Color(0xFFE1E9E8);
+    final iconColor = isUnread ? notif['color'] : _ink3;
+    final iconBackground = isUnread
+        ? notif['color'].withValues(alpha: 0.1)
+        : const Color(0xFFF0F7F7);
 
     return GestureDetector(
-      onTap: appointment is Map<String, dynamic>
-          ? () => _openPayment(appointment)
-          : appointmentId.isNotEmpty
-          ? () => _openAppointmentDetail(appointmentId)
+      onTap: notif['notification_key'] != null
+          ? () => _handleNotificationTap(notif)
           : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: appointment is Map<String, dynamic>
-              ? Border.all(color: const Color(0xFFFFD5D2))
-              : null,
+          color: isUnread ? const Color(0xFFF5FBFA) : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cardBorderColor),
           boxShadow: [
             BoxShadow(
               color: _ink.withValues(alpha: 0.04),
@@ -490,10 +575,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: notif['color'].withValues(alpha: 0.1),
+                color: iconBackground,
                 shape: BoxShape.circle,
               ),
-              child: Icon(notif['icon'], color: notif['color'], size: 24),
+              child: Icon(notif['icon'], color: iconColor, size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -511,7 +596,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             fontWeight: isUnread
                                 ? FontWeight.w800
                                 : FontWeight.w700,
-                            color: _ink,
+                            color: isUnread ? _ink : _ink2,
                           ),
                         ),
                       ),
@@ -530,10 +615,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   const SizedBox(height: 6),
                   Text(
                     notif['body'],
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: _ink2,
+                      fontWeight: isUnread ? FontWeight.w500 : FontWeight.w400,
+                      color: isUnread ? _ink2 : _ink3,
                       height: 1.4,
                     ),
                   ),

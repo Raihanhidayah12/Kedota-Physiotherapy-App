@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_language.dart';
+import '../../utils/app_snackbar.dart';
 import '../home/history_screen.dart';
 import 'reschedule_appointment_screen.dart';
 import 'settle_payment_screen.dart';
@@ -72,10 +73,48 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
   bool get _isSelesai => _status == AppointmentStatus.selesai;
   bool get _isBatasWaktu => _status == AppointmentStatus.batasWaktu;
   bool get _isClinic => widget.item.serviceType.toLowerCase() == 'klinik';
+  bool get _isDepositForfeited =>
+      _isBatasWaktu &&
+      widget.item.paymentPlan == 'deposit' &&
+      widget.item.paymentStatus != 'paid';
   bool get _hasOutstandingPayment =>
+      !_isDepositForfeited &&
       widget.item.amountDue > 0 &&
       (widget.item.paymentStatus != 'paid' ||
           widget.item.paymentPlan == 'deposit');
+  DateTime? get _scheduledDateTime {
+    final date = DateTime.tryParse(_displayDate);
+    final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(_displayTime);
+    if (date == null || match == null) return null;
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+    );
+  }
+
+  bool get _canReschedule {
+    final scheduled = _scheduledDateTime;
+    if (scheduled == null) return false;
+    final now = DateTime.now();
+    if (_isBatasWaktu && widget.item.paymentStatus == 'paid') {
+      final elapsed = now.difference(scheduled);
+      return elapsed >= Duration.zero && elapsed <= const Duration(hours: 24);
+    }
+    return scheduled.difference(now) >= const Duration(hours: 24);
+  }
+
+  bool get _isPaidNoShow =>
+      _isBatasWaktu && widget.item.paymentStatus == 'paid';
+
+  bool get _noShowRescheduleExpired {
+    final scheduled = _scheduledDateTime;
+    return _isPaidNoShow &&
+        scheduled != null &&
+        DateTime.now().isAfter(scheduled.add(const Duration(hours: 24)));
+  }
 
   String get _displayAddress => _isClinic
       ? _clinicAddress
@@ -116,7 +155,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Banner batas waktu ───────────────────────────────
-                if (_isBatasWaktu) ...[
+                if (_isBatasWaktu && !_isDepositForfeited) ...[
                   _buildExpiredBanner(),
                   const SizedBox(height: 20),
                 ],
@@ -127,6 +166,18 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
                 _sectionLabel(t(context, 'detailSection')),
                 const SizedBox(height: 12),
                 _buildDetailCard(),
+                if (_isMendatang && widget.item.paymentPlan == 'deposit') ...[
+                  const SizedBox(height: 12),
+                  _buildDepositRescheduleNotice(),
+                ],
+                if (_isDepositForfeited) ...[
+                  const SizedBox(height: 12),
+                  _buildDepositForfeitedNotice(),
+                ],
+                if (_isPaidNoShow) ...[
+                  const SizedBox(height: 12),
+                  _buildNoShowRescheduleNotice(),
+                ],
               ],
             ),
           ),
@@ -179,6 +230,135 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
     ),
   );
 
+  Widget _buildDepositForfeitedNotice() => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+      color: _redBg,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _red.withValues(alpha: 0.16)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: _red.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.lightbulb_outline_rounded,
+            color: _red,
+            size: 18,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            t(context, 'depositForfeitedBody'),
+            style: const TextStyle(
+              color: _ink2,
+              fontSize: 12,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildDepositRescheduleNotice() => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFF5E3),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFFFDFA8)),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x120E2C2F),
+          blurRadius: 12,
+          offset: Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: const BoxDecoration(
+            color: Color(0xFFF0A62B),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.lightbulb_outline_rounded,
+            color: Colors.white,
+            size: 25,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            t(context, 'rescheduleDepositNotice'),
+            style: const TextStyle(
+              color: _ink,
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildNoShowRescheduleNotice() => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFF5E3),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFFFDFA8)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: const BoxDecoration(
+            color: Color(0xFFF0A62B),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.lightbulb_outline_rounded,
+            color: Colors.white,
+            size: 25,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            t(
+              context,
+              _noShowRescheduleExpired
+                  ? 'noShowRescheduleExpiredNotice'
+                  : 'noShowRescheduleNotice',
+            ),
+            style: const TextStyle(
+              color: _ink,
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
   // ── Section label ─────────────────────────────────────────────────────────
   Widget _sectionLabel(String label) => Text(
     label,
@@ -214,30 +394,45 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  if (!_isSelesai) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.sell_outlined, size: 15, color: _c500),
+                        const SizedBox(width: 6),
+                        Text(
+                          widget.item.bookedForOther
+                              ? t(context, 'reservationForOther')
+                              : t(context, 'reservationForSelf'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _ink2,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                  ],
                   GestureDetector(
                     onTap: () {
                       Clipboard.setData(
                         ClipboardData(
                           text: widget.item.medicalCode.isEmpty
-                              ? 'EMR-1782-07092025'
+                              ? widget.item.displayBookingCode
                               : widget.item.medicalCode,
                         ),
                       );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(t(context, 'emrCopied')),
-                          backgroundColor: _c500,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
+                      showAppSnackBar(
+                        context,
+                        t(context, 'emrCopied'),
+                        type: AppSnackBarType.success,
+                        icon: Icons.copy_rounded,
                       );
                     },
                     child: Text(
                       widget.item.medicalCode.isEmpty
-                          ? 'EMR-1782-07092025'
+                          ? widget.item.displayBookingCode
                           : widget.item.medicalCode,
                       style: TextStyle(
                         fontSize: 12,
@@ -252,46 +447,43 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
             _statusBadge(),
           ],
         ),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: () {
-            Clipboard.setData(
-              ClipboardData(text: widget.item.displayBookingCode),
-            );
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(t(context, 'bookingCodeCopied')),
-                backgroundColor: _c500,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
-          },
-          child: Row(
-            children: [
-              const Icon(
-                Icons.confirmation_number_outlined,
-                size: 16,
-                color: _c700,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '${t(context, 'bookingCode')}: ',
-                style: const TextStyle(fontSize: 11, color: _ink3),
-              ),
-              Text(
-                widget.item.displayBookingCode,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
+        if (!_isSelesai) const SizedBox(height: 12),
+        if (!_isSelesai)
+          GestureDetector(
+            onTap: () {
+              Clipboard.setData(
+                ClipboardData(text: widget.item.displayBookingCode),
+              );
+              showAppSnackBar(
+                context,
+                t(context, 'bookingCodeCopied'),
+                type: AppSnackBarType.success,
+                icon: Icons.copy_rounded,
+              );
+            },
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.confirmation_number_outlined,
+                  size: 16,
                   color: _c700,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  '${t(context, 'bookingCode')}: ',
+                  style: const TextStyle(fontSize: 11, color: _ink3),
+                ),
+                Text(
+                  widget.item.displayBookingCode,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: _c700,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         const SizedBox(height: 14),
         const Divider(height: 1, color: Color(0xFFF0F5F5)),
         const SizedBox(height: 14),
@@ -473,36 +665,13 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
     required IconData icon,
     required Color color,
   }) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(icon, color: Colors.white, size: 21),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: color,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 92),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+    showAppSnackBar(
+      context,
+      message,
+      type: color == _c700 ? AppSnackBarType.success : AppSnackBarType.info,
+      icon: icon,
+      duration: const Duration(seconds: 4),
+    );
   }
 
   String _calendarDate(DateTime dateTime) {
@@ -890,8 +1059,10 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
                 Expanded(
                   child: _bottomBtn(
                     label: t(context, 'upcomingAppointmentButton'),
-                    color: _c500,
-                    onTap: _openReschedule,
+                    color: _canReschedule ? _c500 : _ink3,
+                    onTap: _canReschedule
+                        ? _openReschedule
+                        : () => _showRescheduleUnavailable(),
                   ),
                 ),
                 if (_hasOutstandingPayment) ...[
@@ -911,6 +1082,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
       );
     }
     if (_isBatasWaktu) {
+      if (_isDepositForfeited) return null;
       return SizedBox(
         height: 76,
         child: SafeArea(
@@ -918,13 +1090,14 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: Row(
               children: [
-                Expanded(
-                  child: _bottomBtn(
-                    label: t(context, 'rescheduleAppointmentButton'),
-                    color: _c500,
-                    onTap: _openReschedule,
+                if (_canReschedule)
+                  Expanded(
+                    child: _bottomBtn(
+                      label: t(context, 'rescheduleAppointmentButton'),
+                      color: _c500,
+                      onTap: _openReschedule,
+                    ),
                   ),
-                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _bottomBtn(
@@ -955,6 +1128,14 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
     }
   }
 
+  void _showRescheduleUnavailable() {
+    showAppSnackBar(
+      context,
+      t(context, 'reschedule24HourError'),
+      type: AppSnackBarType.warning,
+    );
+  }
+
   Future<void> _contactCustomerService() async {
     final message = Uri.encodeComponent(
       t(context, 'customerServiceWhatsAppMessage')
@@ -968,9 +1149,11 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
       return;
     }
     if (mounted) {
-      ScaffoldMessenger.of(
+      showAppSnackBar(
         context,
-      ).showSnackBar(SnackBar(content: Text(t(context, 'whatsappOpenFailed'))));
+        t(context, 'whatsappOpenFailed'),
+        type: AppSnackBarType.error,
+      );
     }
   }
 
@@ -1117,6 +1300,23 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
   );
 
   Widget _statusBadge() {
+    if (_isDepositForfeited) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: _redBg,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          t(context, 'depositForfeitedTitle'),
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: _red,
+          ),
+        ),
+      );
+    }
     if (_hasOutstandingPayment) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

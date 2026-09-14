@@ -8,6 +8,7 @@ import '../../l10n/app_language.dart';
 import '../../services/app_lock_service.dart';
 import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
+import '../../utils/app_snackbar.dart';
 import 'edit_profile_screen.dart';
 import 'notification_preferences_screen.dart';
 import 'support_info_screens.dart';
@@ -63,12 +64,11 @@ class _SettingsBodyState extends State<SettingsBody>
         SingleTickerProviderStateMixin,
         SecureScreenMixin,
         WidgetsBindingObserver {
-  String _fullName = 'Pasien Kedota';
+  String _fullName = '';
   String? _profileImageUrl;
   String _phone = '-';
   String _medicalCode = '-';
   bool _hidePhone = true;
-  bool _isProfileIncomplete = false; // true jika NIK atau alamat kosong
   bool _biometricEnabled = false;
 
   String get _displayPhone {
@@ -147,7 +147,9 @@ class _SettingsBodyState extends State<SettingsBody>
       setState(() {
         _fullName = profileName.isNotEmpty
             ? profileName
-            : (metaName?.isNotEmpty == true ? metaName! : _fullName);
+            : (metaName?.isNotEmpty == true
+                  ? metaName!
+                  : t(context, 'patientName'));
         _profileImageUrl = imageUrl;
         _phone =
             profile?['phone']?.toString().trim() ??
@@ -155,10 +157,6 @@ class _SettingsBodyState extends State<SettingsBody>
             user?.phone ??
             '-';
         _medicalCode = profile?['medical_code']?.toString().trim() ?? '-';
-        // Cek NIK dan alamat — jika salah satu kosong, tampilkan banner
-        final nik = profile?['nik']?.toString().trim() ?? '';
-        final address = profile?['address']?.toString().trim() ?? '';
-        _isProfileIncomplete = nik.isEmpty || address.isEmpty;
       });
       _loadBiometricPreference();
     } catch (e) {
@@ -405,18 +403,7 @@ class _SettingsBodyState extends State<SettingsBody>
   }
 
   void _snack(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: _c700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      );
+    showAppSnackBar(context, message, type: AppSnackBarType.success);
   }
 
   Future<void> _copyMedicalCode() async {
@@ -575,8 +562,6 @@ class _SettingsBodyState extends State<SettingsBody>
             ),
             _buildProfileHeader(),
             const SizedBox(height: 8),
-            // Banner notifikasi kelengkapan profil
-            if (_isProfileIncomplete) _buildIncompleteProfileBanner(),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
               child: Column(
@@ -673,74 +658,6 @@ class _SettingsBodyState extends State<SettingsBody>
       ),
     );
   }
-
-  // ── Incomplete profile banner ─────────────────────────────────────────────
-  Widget _buildIncompleteProfileBanner() => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-    child: GestureDetector(
-      onTap: () async {
-        final refreshed = await Navigator.of(context).push<bool>(
-          MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-        );
-        if (refreshed == true && mounted) _loadProfile();
-      },
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF8E1),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFFFCC02), width: 1),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFEE82),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.info_outline_rounded,
-                color: Color(0xFFB7820A),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    t(context, 'incompleteProfileTitle'),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF7A5800),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    t(context, 'incompleteProfileDesc'),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF9A7000),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Color(0xFFB7820A),
-              size: 20,
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 
   // ── Profile header ────────────────────────────────────────────────────────
   Widget _buildProfileHeader() => Padding(

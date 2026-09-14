@@ -152,6 +152,20 @@ const _translations = {
     'cameraPermissionSettingsDesc':
         'Camera access is blocked. Enable it in your phone settings.',
     'openSettings': 'Open Settings',
+    'notificationDisabledTitle': 'Notifications are blocked in phone settings',
+    'notificationDisabledBody':
+        'Enable notification permission in phone Settings to receive notifications.',
+    'openSettingsShort': 'Open',
+    'disableNotificationsTitle': 'Turn Off Notifications?',
+    'disableNotificationsBody':
+        'To turn off notifications, open phone Settings and disable notifications for this app.',
+    'notificationPermissionTitle': 'Notification Permission Required',
+    'notificationPermissionBody':
+        'Notification permission was denied. Open phone Settings to enable it manually.',
+    'painScore': 'Pain Score',
+    'downloadQr': 'Download QR',
+    'retry': 'Try Again',
+    'homeVisitAddress': 'Home visit',
     'onboardingTitle1': 'Book Appointments Easily!',
     'onboardingDesc1': 'Schedule your consultations\nwith ease and efficiency!',
     'onboardingTitle2': 'Track Your Health More Easily',
@@ -636,6 +650,25 @@ const _translations = {
     'incompleteProfileTitle': 'Complete Your Account Info',
     'incompleteProfileDesc': 'ID number and address are not filled in yet.',
     'incompleteProfileBtn': 'Complete',
+    'depositForfeitedTitle': 'Deposit Forfeited',
+    'depositForfeitedBody':
+        'The deposit you paid has been forfeited because the patient was not present for the scheduled session.',
+    'rescheduleDepositNotice':
+        'Rescheduling is available only 24 hours before the appointment. If you do not attend, the deposit will be forfeited.',
+    'reschedule24HourError':
+        'This appointment can only be rescheduled at least 24 hours before its start time.',
+    'noShowRescheduleNotice':
+        'Because the appointment was paid in full, you can reschedule it within 24 hours after the session time. After that, please contact support.',
+    'noShowRescheduleExpiredNotice':
+        'The 24-hour rescheduling period has ended. Please contact support for assistance.',
+    'profileRequiredBadge': 'REQUIRED',
+    'profileRequiredMessage':
+        'Your ID number and address are required to make a reservation.',
+    'profileRequiredAction': 'Complete Now',
+    'nikRequired': 'ID number is required.',
+    'addressRequired': 'Address is required.',
+    'profileRequiredFields':
+        'Complete your 16-digit ID number and address first.',
     'address': 'Address',
     'addressHint': 'Enter your full address',
     'nik': 'ID Number',
@@ -671,12 +704,12 @@ const _translations = {
     'notifEmailSubtitle': 'We will send health articles to your email.',
 
     // ── Edit profile ─────────────────────────────────────────────────────
-    'profileSavedSuccess': '✓ Profile saved successfully',
+    'profileSavedSuccess': 'Profile saved successfully',
     'failedTitle': 'Failed',
     'camera': 'Camera',
     'gallery': 'Gallery',
     'deletePhoto': 'Delete Photo',
-    'profilePhotoUpdated': '✓ Profile photo updated',
+    'profilePhotoUpdated': 'Profile photo updated',
     'uploadPhotoFailed': 'Failed to upload photo. Try again.',
     'profilePhotoDeleted': 'Profile photo deleted',
     'personalInfoSection': 'Personal Information',
@@ -933,6 +966,20 @@ Device information, application activity logs, and usage data for security and s
     'cameraPermissionSettingsDesc':
         'Akses kamera diblokir. Aktifkan melalui pengaturan HP Anda.',
     'openSettings': 'Buka Pengaturan',
+    'notificationDisabledTitle': 'Notifikasi diblokir di pengaturan HP',
+    'notificationDisabledBody':
+        'Aktifkan izin notifikasi di Pengaturan HP agar notifikasi dapat diterima.',
+    'openSettingsShort': 'Buka',
+    'disableNotificationsTitle': 'Matikan Notifikasi?',
+    'disableNotificationsBody':
+        'Untuk mematikan notifikasi, buka Pengaturan HP dan nonaktifkan notifikasi untuk aplikasi ini.',
+    'notificationPermissionTitle': 'Izin Notifikasi Diperlukan',
+    'notificationPermissionBody':
+        'Izin notifikasi ditolak. Buka Pengaturan HP untuk mengaktifkannya secara manual.',
+    'painScore': 'Skor Nyeri',
+    'downloadQr': 'Unduh QR',
+    'retry': 'Coba Lagi',
+    'homeVisitAddress': 'Kunjungan ke Rumah',
     'onboardingTitle1': 'Pesan Jadwal Tanpa Ribet!',
     'onboardingDesc1': 'Atur Jadwal Konsultasi dengan\nGampang dan Efisien!',
     'onboardingTitle2': 'Pantau Kesehatan Lebih Mudah',
@@ -1424,6 +1471,25 @@ Device information, application activity logs, and usage data for security and s
     'incompleteProfileTitle': 'Lengkapi Informasi Akun',
     'incompleteProfileDesc': 'NIK dan alamat belum diisi.',
     'incompleteProfileBtn': 'Lengkapi',
+    'depositForfeitedTitle': 'DP Hangus',
+    'depositForfeitedBody':
+        'DP yang Anda bayarkan telah hangus karena pasien tidak hadir pada sesi yang dijadwalkan.',
+    'rescheduleDepositNotice':
+        'Penjadwalan ulang hanya bisa dilakukan 24 jam sebelum jadwal. Jika Anda tidak hadir, uang muka yang dibayarkan hangus.',
+    'reschedule24HourError':
+        'Janji temu ini hanya dapat dijadwalkan ulang minimal 24 jam sebelum waktu mulai.',
+    'noShowRescheduleNotice':
+        'Karena janji temu sudah dibayar lunas, Anda dapat mengubah jadwal dalam 24 jam setelah waktu sesi. Setelah itu, silakan hubungi CS.',
+    'noShowRescheduleExpiredNotice':
+        'Batas waktu 24 jam untuk mengubah jadwal telah berakhir. Silakan hubungi CS untuk bantuan.',
+    'profileRequiredBadge': 'WAJIB DILENGKAPI',
+    'profileRequiredMessage':
+        'NIK dan alamat diperlukan agar proses reservasi berjalan lebih mudah.',
+    'profileRequiredAction': 'Lengkapi Sekarang',
+    'nikRequired': 'NIK wajib diisi.',
+    'addressRequired': 'Alamat wajib diisi.',
+    'profileRequiredFields':
+        'Lengkapi NIK 16 digit dan alamat terlebih dahulu.',
     'address': 'Alamat',
     'addressHint': 'Masukkan alamat lengkap',
     'nik': 'NIK',
@@ -1454,12 +1520,12 @@ Device information, application activity logs, and usage data for security and s
         'Kami akan mengirimkan artikel kesehatan ke email Anda.',
 
     // ── Edit profile ─────────────────────────────────────────────────────
-    'profileSavedSuccess': '✓ Profil berhasil disimpan',
+    'profileSavedSuccess': 'Profil berhasil disimpan',
     'failedTitle': 'Gagal',
     'camera': 'Kamera',
     'gallery': 'Galeri',
     'deletePhoto': 'Hapus Foto',
-    'profilePhotoUpdated': '✓ Foto profil diperbarui',
+    'profilePhotoUpdated': 'Foto profil diperbarui',
     'uploadPhotoFailed': 'Gagal upload foto. Coba lagi.',
     'profilePhotoDeleted': 'Foto profil dihapus',
     'personalInfoSection': 'Informasi Pribadi',

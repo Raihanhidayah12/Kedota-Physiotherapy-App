@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/notification_service.dart';
+import '../../utils/app_snackbar.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_date_picker.dart';
 import 'history_screen.dart';
@@ -32,6 +33,25 @@ class _RescheduleAppointmentScreenState
   late TimeOfDay _time;
   Set<String> _bookedTimes = {};
   bool _saving = false;
+
+  DateTime? get _originalScheduledAt {
+    final date = DateTime.tryParse(widget.appointment.date);
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})',
+    ).firstMatch(widget.appointment.time);
+    if (date == null || match == null) return null;
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+    );
+  }
+
+  bool get _isPaidNoShow =>
+      widget.appointment.status == AppointmentStatus.batasWaktu &&
+      widget.appointment.paymentStatus == 'paid';
 
   @override
   void initState() {
@@ -222,6 +242,25 @@ class _RescheduleAppointmentScreenState
   }
 
   Future<void> _save() async {
+    final originalScheduledAt = _originalScheduledAt;
+    final now = DateTime.now();
+    final outsideWindow = _isPaidNoShow
+        ? originalScheduledAt == null ||
+              now.isBefore(originalScheduledAt) ||
+              now.isAfter(originalScheduledAt.add(const Duration(hours: 24)))
+        : originalScheduledAt == null ||
+              originalScheduledAt.difference(now) < const Duration(hours: 24);
+    if (outsideWindow) {
+      _showMessage(
+        t(
+          context,
+          _isPaidNoShow
+              ? 'noShowRescheduleExpiredNotice'
+              : 'reschedule24HourError',
+        ),
+      );
+      return;
+    }
     if (_date.weekday == DateTime.sunday) {
       _showMessage(t(context, 'reservationSundayClosed'));
       return;
@@ -314,9 +353,7 @@ class _RescheduleAppointmentScreenState
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    showAppSnackBar(context, message, type: AppSnackBarType.warning);
   }
 
   @override

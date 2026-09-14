@@ -4,6 +4,7 @@ import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
 import 'appointment_detail_screen.dart';
 import 'reservation_flow_screen.dart';
+import 'upcoming_appointment_card.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _c700 = Color(0xFF007F78);
@@ -18,12 +19,13 @@ const _ink3 = Color(0xFF8AA8AC);
 enum AppointmentStatus { mendatang, selesai, batasWaktu }
 
 String appointmentBookingCode(String appointmentId) {
-  final normalizedId = appointmentId.replaceAll('-', '').toUpperCase();
-  if (normalizedId.isEmpty) return 'KDT-2026000000';
-  final codePart = normalizedId.length > 8
-      ? normalizedId.substring(0, 8)
-      : normalizedId.padRight(8, '0');
-  return 'KDT-2026$codePart';
+  var hash = 17;
+  for (final codeUnit in appointmentId.codeUnits) {
+    hash = (hash * 31 + codeUnit) & 0x7fffffff;
+  }
+  final sequence = (1000 + hash % 9000).toString();
+  final reference = (10000000 + hash % 90000000).toString();
+  return 'EMR-$sequence-$reference';
 }
 
 class AppointmentItem {
@@ -43,6 +45,7 @@ class AppointmentItem {
   final int amountDue;
   final String bookingCode;
   final AppointmentStatus status;
+  final bool bookedForOther;
 
   const AppointmentItem({
     this.id = '',
@@ -60,11 +63,17 @@ class AppointmentItem {
     this.paymentPlan = 'full',
     this.amountDue = 0,
     this.bookingCode = '',
+    this.bookedForOther = false,
     required this.status,
   });
 
-  String get displayBookingCode =>
-      bookingCode.isEmpty ? appointmentBookingCode(id) : bookingCode;
+  String get displayBookingCode {
+    final savedCode = bookingCode.trim();
+    if (savedCode.isEmpty || savedCode.toUpperCase().startsWith('KDT-')) {
+      return appointmentBookingCode(id);
+    }
+    return savedCode;
+  }
 }
 
 // ─── Body widget ──────────────────────────────────────────────────────────────
@@ -83,6 +92,7 @@ class _HistoryBodyState extends State<HistoryBody>
   int _filterIndex = 0;
   List<AppointmentItem> _savedAppointments = [];
   List<AppointmentItem> _savedUpcomingAppointments = [];
+  String _currentUserName = '';
   bool _loadingAppointments = false;
 
   // ── animation controllers ─────────────────────────────────────────────────
@@ -118,6 +128,8 @@ class _HistoryBodyState extends State<HistoryBody>
       final service = SupabaseAuthService();
       final user = service.client.auth.currentUser;
       if (user == null) return;
+      final profile = await service.checkUserProfileExists();
+      _currentUserName = profile?['full_name']?.toString().trim() ?? '';
       await service.expireOverdueAppointments();
       final rows = await service.client
           .from('appointments')
@@ -125,7 +137,12 @@ class _HistoryBodyState extends State<HistoryBody>
           .eq('booker_id', user.id)
           .order('appointment_date', ascending: false);
       final appointments = (rows as List)
-          .map((row) => _appointmentFromRow(row as Map<String, dynamic>))
+          .map(
+            (row) => _appointmentFromRow(
+              row as Map<String, dynamic>,
+              currentUserName: _currentUserName,
+            ),
+          )
           .toList();
       if (!mounted) return;
       setState(() {
@@ -141,7 +158,10 @@ class _HistoryBodyState extends State<HistoryBody>
     }
   }
 
-  AppointmentItem _appointmentFromRow(Map<String, dynamic> row) {
+  AppointmentItem _appointmentFromRow(
+    Map<String, dynamic> row, {
+    String currentUserName = '',
+  }) {
     final rawStatus = row['appointment_status']?.toString();
     final appointmentDate = row['appointment_date']?.toString() ?? '';
     final appointmentTime = row['appointment_time']?.toString() ?? '';
@@ -159,13 +179,18 @@ class _HistoryBodyState extends State<HistoryBody>
       _ when locallyExpired => AppointmentStatus.batasWaktu,
       _ => AppointmentStatus.mendatang,
     };
+    final patientName = row['patient_full_name']?.toString().trim() ?? '';
+    final bookedForOther =
+        currentUserName.isNotEmpty &&
+        patientName.isNotEmpty &&
+        patientName.toLowerCase() != currentUserName.toLowerCase();
     return AppointmentItem(
       id: row['id']?.toString() ?? '',
       therapistName: row['therapist_name']?.toString() ?? 'Kedota Therapist',
       serviceType: row['service_type']?.toString() ?? 'Home Care',
       date: row['appointment_date']?.toString() ?? '-',
       time: row['appointment_time']?.toString() ?? '- WIB',
-      patientName: row['patient_full_name']?.toString() ?? '',
+      patientName: patientName,
       medicalCode: row['patient_medical_code']?.toString() ?? '',
       address: row['address']?.toString() ?? '',
       complaint: row['patient_complaint']?.toString() ?? '',
@@ -175,6 +200,7 @@ class _HistoryBodyState extends State<HistoryBody>
       paymentPlan: row['payment_plan']?.toString() ?? 'full',
       amountDue: int.tryParse(row['amount_due']?.toString() ?? '') ?? 0,
       bookingCode: row['booking_code']?.toString() ?? '',
+      bookedForOther: bookedForOther,
       status: status,
     );
   }
@@ -335,7 +361,19 @@ class _HistoryBodyState extends State<HistoryBody>
                             children: [
                               for (final appointment
                                   in _savedUpcomingAppointments) ...[
-                                _buildUpcomingCard(appointment),
+                                UpcomingAppointmentCard(
+                                  item: appointment,
+                                  onTap: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => AppointmentDetailScreen(
+                                          item: appointment,
+                                        ),
+                                      ),
+                                    );
+                                    if (mounted) _loadAppointments();
+                                  },
+                                ),
                                 if (appointment !=
                                     _savedUpcomingAppointments.last)
                                   const SizedBox(height: 14),
@@ -570,7 +608,7 @@ class _HistoryBodyState extends State<HistoryBody>
 
   // ── upcoming card ─────────────────────────────────────────────────────────
 
-  Widget _buildUpcomingCard(AppointmentItem item) {
+  /* Widget _buildUpcomingCard(AppointmentItem item) {
     final paymentStatus = item.paymentStatus.toLowerCase();
     final paymentPlan = item.paymentPlan.toLowerCase();
     final hasOutstandingPayment =
@@ -580,11 +618,13 @@ class _HistoryBodyState extends State<HistoryBody>
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border(
-          left: BorderSide(
-            color: hasOutstandingPayment ? paymentWarning : _c500,
-            width: 4,
+          top: BorderSide(
+            color: (hasOutstandingPayment ? paymentWarning : _c500).withValues(
+              alpha: 0.5,
+            ),
+            width: 2,
           ),
         ),
         boxShadow: [
@@ -596,50 +636,49 @@ class _HistoryBodyState extends State<HistoryBody>
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // avatar + info + badge
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildAvatar(),
+                _buildAvatar(size: 56),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.serviceType,
+                        item.patientName.isEmpty
+                            ? t(context, 'patientName')
+                            : item.patientName,
                         style: const TextStyle(
                           color: _c700,
-                          fontSize: 14,
+                          fontSize: 15,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 5),
                       _infoRow(
-                        Icons.calendar_month_outlined,
-                        _formatAppointmentDate(item.date),
-                      ),
-                      const SizedBox(height: 4),
-                      _infoRow(Icons.access_time_rounded, item.time),
-                      const SizedBox(height: 4),
-                      _infoRow(
-                        Icons.confirmation_number_outlined,
-                        item.displayBookingCode,
+                        Icons.sell_outlined,
+                        item.bookedForOther
+                            ? t(context, 'reservationForOther')
+                            : t(context, 'reservationForSelf'),
+                        fontSize: 11,
                       ),
                     ],
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
+                    horizontal: 11,
+                    vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: hasOutstandingPayment ? paymentWarning : _c500,
+                    color: hasOutstandingPayment
+                        ? paymentWarning.withValues(alpha: 0.12)
+                        : _c500.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -647,7 +686,7 @@ class _HistoryBodyState extends State<HistoryBody>
                         ? t(context, 'paymentPending')
                         : t(context, 'statusUpcoming'),
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: _c700,
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                     ),
@@ -656,28 +695,55 @@ class _HistoryBodyState extends State<HistoryBody>
               ],
             ),
             const SizedBox(height: 14),
-            const Divider(height: 1, color: Color(0xFFF0F5F5)),
-            const SizedBox(height: 12),
-            // therapist row
             Row(
               children: [
-                Text(
-                  t(context, 'terapisLabel'),
-                  style: const TextStyle(fontSize: 12, color: _ink3),
+                Expanded(
+                  child: _infoRow(
+                    Icons.calendar_month_outlined,
+                    _formatAppointmentDate(item.date),
+                    fontSize: 11,
+                  ),
                 ),
-                const Spacer(),
-                Text(
-                  item.therapistName,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: _ink,
+                _verticalDivider(),
+                Expanded(
+                  child: _infoRow(
+                    Icons.access_time_rounded,
+                    item.time,
+                    fontSize: 11,
+                  ),
+                ),
+                _verticalDivider(),
+                Expanded(
+                  child: _infoRow(
+                    Icons.radio_button_checked_rounded,
+                    '${t(context, 'sessionUnit')} ${item.sessionCount}',
+                    fontSize: 11,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            // Lihat Detail button
+            const Divider(height: 1, color: Color(0xFFF0F5F5)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _infoRow(
+                    Icons.medical_services_outlined,
+                    '${t(context, 'serviceCat')}: ${item.serviceType}',
+                    fontSize: 11,
+                  ),
+                ),
+                _verticalDivider(),
+                Expanded(
+                  child: _infoRow(
+                    Icons.person_outline_rounded,
+                    '${t(context, 'terapisLabel')}: ${item.therapistName}',
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: GestureDetector(
@@ -690,10 +756,10 @@ class _HistoryBodyState extends State<HistoryBody>
                   if (mounted) _loadAppointments();
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
                     color: hasOutstandingPayment ? paymentWarning : _c500,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -707,12 +773,13 @@ class _HistoryBodyState extends State<HistoryBody>
                 ),
               ),
             ),
-            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
+
+  } */
 
   // ── history list ──────────────────────────────────────────────────────────
 
@@ -759,25 +826,15 @@ class _HistoryBodyState extends State<HistoryBody>
     final hasOutstandingPayment =
         (item.paymentPlan == 'deposit' && item.paymentStatus != 'paid') ||
         (item.amountDue > 0 && item.paymentStatus != 'paid');
+    final isDepositForfeited =
+        item.status == AppointmentStatus.batasWaktu &&
+        item.paymentPlan == 'deposit' &&
+        item.paymentStatus != 'paid';
     final accentColor = _accentBorder(item.status);
-    final serviceColor = isSelesai ? _c700 : _ink;
-
-    final badgeBg = hasOutstandingPayment
-        ? const Color(0xFFFFECEB)
-        : isSelesai
-        ? Colors.transparent
-        : const Color(0xFFFFECEB);
-    final badgeFg = hasOutstandingPayment
-        ? const Color(0xFFD94F45)
-        : isSelesai
-        ? _c700
-        : const Color(0xFFD94F45);
-    final badgeBorder = hasOutstandingPayment
-        ? const Color(0xFFD94F45)
-        : isSelesai
-        ? _c700
-        : const Color(0xFFD94F45);
-    final badgeLabel = hasOutstandingPayment
+    final statusColor = isSelesai ? _c700 : const Color(0xFFD94F45);
+    final badgeLabel = isDepositForfeited
+        ? t(context, 'depositForfeitedTitle')
+        : hasOutstandingPayment
         ? t(context, 'paymentPending')
         : isSelesai
         ? t(context, 'statusDone')
@@ -787,7 +844,9 @@ class _HistoryBodyState extends State<HistoryBody>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border(left: BorderSide(color: accentColor, width: 4)),
+        border: Border(
+          top: BorderSide(color: accentColor.withValues(alpha: 0.5), width: 2),
+        ),
         boxShadow: [
           BoxShadow(
             color: _ink.withValues(alpha: 0.06),
@@ -797,43 +856,35 @@ class _HistoryBodyState extends State<HistoryBody>
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildAvatar(size: 48),
+                _buildAvatar(size: 56),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.serviceType,
-                        style: TextStyle(
-                          color: serviceColor,
-                          fontSize: 14,
+                        item.patientName.isEmpty
+                            ? t(context, 'patientName')
+                            : item.patientName,
+                        style: const TextStyle(
+                          color: _c700,
+                          fontSize: 15,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 5),
                       _infoRow(
-                        Icons.calendar_month_outlined,
-                        _formatAppointmentDate(item.date),
-                        fontSize: 11,
-                      ),
-                      const SizedBox(height: 3),
-                      _infoRow(
-                        Icons.access_time_rounded,
-                        item.time,
-                        fontSize: 11,
-                      ),
-                      const SizedBox(height: 3),
-                      _infoRow(
-                        Icons.confirmation_number_outlined,
-                        item.displayBookingCode,
+                        Icons.sell_outlined,
+                        item.bookedForOther
+                            ? t(context, 'reservationForOther')
+                            : t(context, 'reservationForSelf'),
                         fontSize: 11,
                       ),
                     ],
@@ -846,14 +897,16 @@ class _HistoryBodyState extends State<HistoryBody>
                     vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: badgeBg,
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: badgeBorder, width: 1.2),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.18),
+                    ),
                   ),
                   child: Text(
                     badgeLabel,
                     style: TextStyle(
-                      color: badgeFg,
+                      color: statusColor,
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                     ),
@@ -862,47 +915,53 @@ class _HistoryBodyState extends State<HistoryBody>
               ],
             ),
             const SizedBox(height: 14),
-            const Divider(height: 1, color: Color(0xFFF0F5F5)),
-            const SizedBox(height: 10),
-            if (hasOutstandingPayment) ...[
-              Row(
-                children: [
-                  const Icon(
-                    Icons.receipt_long_outlined,
-                    size: 15,
-                    color: Color(0xFFD94F45),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${t(context, 'remainingPayment')}: ${_formatRupiah(item.amountDue)}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFD94F45),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-            ],
             Row(
               children: [
-                Text(
-                  t(context, 'terapisLabel'),
-                  style: const TextStyle(fontSize: 12, color: _ink3),
-                ),
-                const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
-                    item.therapistName,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: _ink,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: _infoRow(
+                    Icons.calendar_month_outlined,
+                    _formatAppointmentDate(item.date),
+                    fontSize: 11,
                   ),
                 ),
+                _verticalDivider(),
+                Expanded(
+                  child: _infoRow(
+                    Icons.access_time_rounded,
+                    item.time,
+                    fontSize: 11,
+                  ),
+                ),
+                _verticalDivider(),
+                Expanded(
+                  child: _infoRow(
+                    Icons.radio_button_checked_rounded,
+                    '${t(context, 'sessionUnit')} ${item.sessionCount}',
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 1, color: Color(0xFFF0F5F5)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _infoRow(
+                    Icons.medical_services_outlined,
+                    '${t(context, 'serviceCat')}: ${item.serviceType}',
+                    fontSize: 11,
+                  ),
+                ),
+                _verticalDivider(),
+                Expanded(
+                  child: _infoRow(
+                    Icons.person_outline_rounded,
+                    '${t(context, 'terapisLabel')}: ${item.therapistName}',
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () async {
                     await Navigator.of(context).push(
@@ -912,43 +971,31 @@ class _HistoryBodyState extends State<HistoryBody>
                     );
                     if (mounted) _loadAppointments();
                   },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        t(context, 'lihatDetail'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: _c500,
-                        ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _c100,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      t(context, 'lihatDetail'),
+                      style: const TextStyle(
+                        color: _c700,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(width: 2),
-                      const Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 13,
-                        color: _c500,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
           ],
         ),
       ),
     );
-  }
-
-  String _formatRupiah(int amount) {
-    final digits = amount.toString();
-    final groups = <String>[];
-    for (var end = digits.length; end > 0; end -= 3) {
-      final start = (end - 3).clamp(0, end);
-      groups.insert(0, digits.substring(start, end));
-    }
-    return 'Rp ${groups.join('.')}';
   }
 
   String _formatAppointmentDate(String rawDate) {
@@ -1014,5 +1061,12 @@ class _HistoryBodyState extends State<HistoryBody>
         ),
       ),
     ],
+  );
+
+  Widget _verticalDivider() => Container(
+    width: 1,
+    height: 16,
+    margin: const EdgeInsets.symmetric(horizontal: 8),
+    color: const Color(0xFFE0EAEA),
   );
 }
