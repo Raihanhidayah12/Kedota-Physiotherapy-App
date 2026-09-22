@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -41,10 +43,45 @@ Deno.serve(async (req) => {
       });
     }
 
+    const receivedAt = new Date().toISOString();
+
+    // Log to Supabase Edge Function Logs (always — cheap, instant)
     console.error("Client received server 5xx:", JSON.stringify({
       ...body,
-      received_at: new Date().toISOString(),
+      received_at: receivedAt,
     }));
+
+    // Persist to error_logs table using service_role key so it bypasses RLS
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (supabaseUrl && serviceRoleKey) {
+      const supabase = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false },
+      });
+
+      const { error: insertError } = await supabase
+        .from("error_logs")
+        .insert({
+          source: body.source,
+          method: body.method,
+          path: body.path,
+          status_code: body.status_code,
+          message: body.message ?? null,
+          platform: body.platform ?? null,
+          received_at: receivedAt,
+        });
+
+      if (insertError) {
+        // Log the insert failure but still return 202 — the console.error above
+        // already captured the event, so we don't want to surface this to the client.
+        console.error("error_logs insert failed:", insertError.message);
+      }
+    } else {
+      console.warn(
+        "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; skipping DB insert",
+      );
+    }
 
     return new Response(JSON.stringify({ accepted: true }), {
       status: 202,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
@@ -22,6 +23,7 @@ const _tealDark = Color(0xFF007F78);
 const _background = Color(0xFFF5F8F8);
 const _ink = Color(0xFF172B2D);
 const _muted = Color(0xFF7C8C8E);
+const _geoapifyKey = 'f4a383aa058449cb994d543567a6145b';
 const _homeCareService = 'home_care';
 const _clinicService = 'clinic';
 const _sessionPackagePrices = <int, int>{
@@ -52,27 +54,13 @@ const _clinicLocation = _ServiceLocation(
   mapUrl: 'https://maps.app.goo.gl/6RoeDr21WjTfMjo86',
 );
 
-const _homeCareLocations = [
-  _ServiceLocation(
-    name: 'Home Care Surabaya',
-    address: 'Kunjungan ke Rumah',
-    mapUrl: 'https://maps.app.goo.gl/BKJHTHqbi6AbTYu5A',
-  ),
-  _ServiceLocation(
-    name: 'Home Care Sidoarjo',
-    address: 'Kunjungan ke Rumah',
-    mapUrl: 'https://maps.app.goo.gl/cVyYPBepqdLHBLNb6',
-  ),
-  _ServiceLocation(
-    name: 'Home Care Surakarta',
-    address: 'Kunjungan ke Rumah',
-    mapUrl: 'https://maps.app.goo.gl/tEg3aaZokSEpNmRF7',
-  ),
-  _ServiceLocation(
-    name: 'Home Care Yogyakarta',
-    address: 'Kunjungan ke Rumah',
-    mapUrl: 'https://maps.app.goo.gl/JZRHQ9e7iMULrjtB9',
-  ),
+// Kota yang tersedia untuk dipilih di step 3
+const _availableCities = [
+  'Malang',
+  'Surabaya',
+  'Sidoarjo',
+  'Surakarta',
+  'Yogyakarta',
 ];
 
 class ReservationFlowScreen extends StatefulWidget {
@@ -128,8 +116,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   TimeOfDay? _appointmentTime;
   String _gender = 'male';
   final String _therapistGender = 'any';
-  String _clinic = _clinicLocation.name;
-  String _serviceType = _clinicService;
+  String _clinic = '';
+  String _serviceType = '';
+  String _selectedCity = ''; // Kota yang dipilih di step 3
   String _paymentMethod = 'qris';
   String _paymentPlan = 'full';
   int _sessionCount = 1;
@@ -137,6 +126,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   bool _clinicPromoEligible = false;
   String? _expandedPaymentTutorial;
   Timer? _successTimer;
+  Timer? _geocodeDebounce;
   int _successCountdown = 3;
   late final AnimationController _successAnimationController;
   late final Animation<double> _successScale;
@@ -144,6 +134,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   Set<String> _bookedAppointmentTimes = {};
   bool _locating = false;
   LatLng _mapCenter = const LatLng(-7.9839, 112.6214);
+  final _mapPointNotifier = ValueNotifier<LatLng>(const LatLng(-7.9839, 112.6214));
 
   bool get _isReschedule => widget.initialDate != null;
 
@@ -163,6 +154,90 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       curve: const Interval(0, 0.42, curve: Curves.easeOut),
     );
     _loadProfile();
+    _addressController.addListener(_onAddressChanged);
+  }
+
+  void _onAddressChanged() {
+    // Rebuild supaya floating label ikut update
+    if (mounted) setState(() {});
+    _geocodeDebounce?.cancel();
+    _geocodeDebounce = Timer(const Duration(milliseconds: 900), () {
+      final text = _addressController.text.trim();
+      if (text.length >= 10) _geocodeAddress(text);
+    });
+  }
+
+  Future<void> _geocodeAddress(String address) async {
+    try {
+      final dio = Dio();
+      final response = await dio
+          .get<Map<String, dynamic>>(
+            'https://api.geoapify.com/v1/geocode/search',
+            queryParameters: {
+              'text': address,
+              'apiKey': _geoapifyKey,
+              'limit': 1,
+              'filter': 'countrycode:id',
+              'lang': 'id',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (!mounted) return;
+      final features = (response.data?['features'] as List?) ?? [];
+      if (features.isNotEmpty) {
+        final coords =
+            (features.first as Map<String, dynamic>)['geometry']?['coordinates']
+                as List?;
+        if (coords != null && coords.length >= 2) {
+          final lon = (coords[0] as num).toDouble();
+          final lat = (coords[1] as num).toDouble();
+          final point = LatLng(lat, lon);
+          setState(() => _mapCenter = point);
+          _mapPointNotifier.value = point;
+          try {
+            _mapController.move(point, 16);
+          } catch (_) {}
+        }
+      }
+    } catch (error) {
+      debugPrint('Geoapify forward geocoding failed: $error');
+    }
+
+    // Fallback: Nominatim (gratis unlimited, tapi lebih lambat)
+    try {
+      final dio = Dio();
+      dio.options.headers['User-Agent'] = 'KedotaApp/1.0';
+      final response = await dio
+          .get<List<dynamic>>(
+            'https://nominatim.openstreetmap.org/search',
+            queryParameters: {
+              'q': address,
+              'format': 'json',
+              'limit': 1,
+              'countrycodes': 'id',
+              'accept-language': 'id',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      final data = response.data;
+      if (data != null && data.isNotEmpty) {
+        final first = data.first as Map<String, dynamic>;
+        final lat = double.tryParse(first['lat']?.toString() ?? '');
+        final lon = double.tryParse(first['lon']?.toString() ?? '');
+        if (lat != null && lon != null) {
+          final point = LatLng(lat, lon);
+          setState(() => _mapCenter = point);
+          _mapPointNotifier.value = point;
+          try {
+            _mapController.move(point, 16);
+          } catch (_) {}
+        }
+      }
+    } catch (error) {
+      debugPrint('Nominatim forward geocoding fallback failed: $error');
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -219,6 +294,16 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     }
     if (widget.initialClinic?.isNotEmpty == true) {
       _clinic = widget.initialClinic!;
+      // Derive city from clinic name
+      for (final city in _availableCities) {
+        if (_clinic.contains(city)) {
+          _selectedCity = city;
+          break;
+        }
+      }
+    }
+    if (_selectedCity.isEmpty && _serviceType == _clinicService) {
+      _selectedCity = 'Malang';
     }
     if (widget.initialAddress?.isNotEmpty == true) {
       _addressController.text = widget.initialAddress!;
@@ -276,6 +361,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   @override
   void dispose() {
     _successTimer?.cancel();
+    _geocodeDebounce?.cancel();
+    _mapPointNotifier.dispose();
+    _addressController.removeListener(_onAddressChanged);
     _successAnimationController.dispose();
     for (final controller in [
       _nikController,
@@ -303,6 +391,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     if (_step == 2 &&
         (_clinic.isEmpty ||
             _serviceType.isEmpty ||
+            _selectedCity.isEmpty ||
             _appointmentDate == null ||
             _appointmentTime == null)) {
       _showMessage(t(context, 'reservationDate'));
@@ -432,6 +521,12 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
               .select('id, booking_code');
           if (insertedRows.isNotEmpty) {
             appointmentId = insertedRows.first['id']?.toString();
+            if (appointmentId != null) {
+              await _service.persistEmrBookingCode(
+                appointmentId: appointmentId,
+                storedCode: insertedRows.first['booking_code']?.toString(),
+              );
+            }
           }
           break;
         } catch (error) {
@@ -639,6 +734,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         initialDate: initialDate,
         firstDate: today,
         lastDate: today.add(const Duration(days: 365)),
+        restrictToFutureMonths: true,
         selectableDay: (date) => date.weekday != DateTime.sunday,
       ),
     );
@@ -691,10 +787,14 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     }
     await _loadBookedAppointmentTimes(_appointmentDate!);
     if (!mounted) return;
-    final selected = await showModalBottomSheet<TimeOfDay>(
+    final selected = await showDialog<TimeOfDay>(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _buildTimeSheet(),
+      barrierColor: Colors.black54,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: _buildTimeSheet(),
+      ),
     );
     if (selected != null && mounted) {
       setState(() => _appointmentTime = selected);
@@ -707,16 +807,17 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         : 20;
     final slots = [
       for (var hour = 8; hour < closingHour; hour++)
-        TimeOfDay(hour: hour, minute: 0),
+        if (hour != 12) TimeOfDay(hour: hour, minute: 0),
     ];
     return _selectionSheet(
       t(context, 'reservationTime'),
       GridView.count(
-        crossAxisCount: 2,
+        crossAxisCount: 3,
         shrinkWrap: true,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 3.5,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 2.5,
+        physics: const NeverScrollableScrollPhysics(),
         children: slots.map((slot) {
           final selected = _appointmentTime?.hour == slot.hour;
           final slotDateTime = DateTime(
@@ -736,16 +837,16 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           final isAvailable = !isPast && !isBooked;
           return InkWell(
             onTap: isAvailable ? () => Navigator.of(context).pop(slot) : null,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             child: Container(
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: !isAvailable
                     ? const Color(0xFFE9EEEE)
                     : selected
-                    ? const Color(0xFFDDF5F2)
+                    ? const Color(0xFFF7FFFE)
                     : Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: !isAvailable
                       ? const Color(0xFFD5DEDE)
@@ -756,7 +857,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 ),
               ),
               child: Text(
-                '${slot.format(context)} WIB',
+                '${slot.hour.toString().padLeft(2, '0')}:00',
                 style: TextStyle(
                   color: !isAvailable
                       ? _muted
@@ -771,38 +872,57 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           );
         }).toList(),
       ),
+      compact: true,
     );
   }
 
-  Widget _selectionSheet(String title, Widget content) => SafeArea(
+  Widget _selectionSheet(
+    String title,
+    Widget content, {
+    bool compact = false,
+  }) => SafeArea(
     child: Container(
+      margin: EdgeInsets.zero,
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      decoration: const BoxDecoration(
-        color: _background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      decoration: BoxDecoration(
+        color: compact ? Colors.white : _background,
+        borderRadius: BorderRadius.all(Radius.circular(compact ? 14 : 26)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 42,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD5DFDE),
-                borderRadius: BorderRadius.circular(4),
+          if (!compact) ...[
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD5DFDE),
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: _ink,
-            ),
+            const SizedBox(height: 18),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded, color: _muted),
+                tooltip: t(context, 'close'),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           content,
@@ -810,44 +930,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       ),
     ),
   );
-
-  Future<void> _pickClinic() async {
-    final locations = _serviceType == _homeCareService
-        ? _homeCareLocations
-        : [_clinicLocation];
-    final clinic = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _selectionSheet(
-        _serviceType == _homeCareService
-            ? t(context, 'reservationHomeCareLocation')
-            : t(context, 'reservationClinic'),
-        Column(
-          children: locations
-              .map(
-                (location) => _sheetOption(
-                  location.name,
-                  _serviceType == _homeCareService
-                      ? Icons.home_work_rounded
-                      : Icons.local_hospital_rounded,
-                  subtitle: _serviceType == _homeCareService
-                      ? t(context, 'homeVisitAddress')
-                      : location.address,
-                  mapUrl: location.mapUrl,
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    );
-    if (clinic == null) return;
-    final selected = locations.firstWhere(
-      (location) => location.name == clinic,
-    );
-    setState(() {
-      _clinic = selected.name;
-    });
-  }
 
   Future<void> _openClinicMap() async {
     final opened = await launchUrl(
@@ -859,68 +941,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     }
   }
 
-  Widget _sheetOption(
-    String label,
-    IconData icon, {
-    String? subtitle,
-    String? mapUrl,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: InkWell(
-      onTap: () => Navigator.of(context).pop(label),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _clinic == label ? _teal : const Color(0xFFE3EAE9),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: _teal, size: 21),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: _muted,
-                        fontSize: 11,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (_clinic == label)
-              const Icon(Icons.check_circle_rounded, color: _teal, size: 20),
-            if (mapUrl != null)
-              IconButton(
-                tooltip: t(context, 'openClinicMap'),
-                icon: const Icon(Icons.map_outlined, color: _teal),
-                onPressed: () => launchUrl(
-                  Uri.parse(mapUrl),
-                  mode: LaunchMode.externalApplication,
-                ),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
 
   Future<void> _useCurrentLocation() async {
     setState(() => _locating = true);
@@ -940,7 +960,13 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         _showMessage(t(context, 'locationPermissionDenied'));
         return;
       }
-      final position = await Geolocator.getCurrentPosition();
+      // Pakai akurasi tertinggi supaya koordinat presisi
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
       final point = LatLng(position.latitude, position.longitude);
       await _setMapLocation(point);
     } catch (error) {
@@ -952,86 +978,451 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     }
   }
 
+  /// Bangun alamat lengkap dari response Geoapify reverse geocoding
+  String _buildAddressFromGeoapify(Map<String, dynamic> props) {
+    // Geoapify response: features[0].properties
+    // Fields: street, housenumber, suburb, district, city, county, state, postcode
+    final street = (props['street'] ?? '').toString().trim();
+    final houseNumber = (props['housenumber'] ?? '').toString().trim();
+    final road = street.isNotEmpty
+        ? (houseNumber.isNotEmpty ? '$street No. $houseNumber' : street)
+        : '';
+
+    final suburb = (props['suburb'] ??
+            props['quarter'] ??
+            props['neighbourhood'] ??
+            '')
+        .toString()
+        .trim();
+
+    final district = (props['district'] ??
+            props['city_district'] ??
+            props['subdistrict'] ??
+            '')
+        .toString()
+        .trim();
+
+    final city = (props['city'] ?? props['town'] ?? props['county'] ?? '')
+        .toString()
+        .trim();
+
+    final state = (props['state'] ?? '').toString().trim();
+    final postcode = (props['postcode'] ?? '').toString().trim();
+
+    final parts = <String>[
+      if (road.isNotEmpty) road,
+      if (suburb.isNotEmpty) suburb,
+      if (district.isNotEmpty && district != suburb) district,
+      if (city.isNotEmpty) city,
+      if (state.isNotEmpty) state,
+      if (postcode.isNotEmpty) postcode,
+    ];
+
+    if (parts.isNotEmpty) return parts.join(', ');
+
+    // Fallback: formatted address dari Geoapify
+    final formatted = (props['formatted'] ?? '').toString().trim();
+    if (formatted.isNotEmpty) {
+      // formatted biasanya: "Jl. X, Kelurahan, Kota, Provinsi, Indonesia"
+      final segments = formatted
+          .split(', ')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty && s.toLowerCase() != 'indonesia')
+          .toList();
+      return segments.take(5).join(', ');
+    }
+    return '';
+  }
+
   Future<void> _setMapLocation(LatLng point) async {
     setState(() => _mapCenter = point);
-    _mapController.move(point, 16);
+    _mapPointNotifier.value = point;
+    // Pindahkan kamera langsung — tidak perlu postFrameCallback
+    // karena MapController.move() bisa dipanggil kapan saja setelah map ready
+    try {
+      _mapController.move(point, 16);
+    } catch (_) {
+      // Controller belum ready (map belum render) — abaikan, initialCenter sudah benar
+    }
+
+    // Geoapify reverse geocoding
+    try {
+      final dio = Dio();
+
+      Future<String> fetchAddress() async {
+        final response = await dio
+            .get<Map<String, dynamic>>(
+              'https://api.geoapify.com/v1/geocode/reverse',
+              queryParameters: {
+                'lat': point.latitude,
+                'lon': point.longitude,
+                'apiKey': _geoapifyKey,
+                'lang': 'id',
+              },
+            )
+            .timeout(const Duration(seconds: 10));
+        final features = (response.data?['features'] as List?) ?? [];
+        if (features.isEmpty) return '';
+        final props =
+            (features.first as Map<String, dynamic>)['properties']
+                as Map<String, dynamic>? ??
+            {};
+        return _buildAddressFromGeoapify(props);
+      }
+
+      final address = await fetchAddress();
+      if (!mounted) return;
+      if (address.isNotEmpty) {
+        setState(() => _addressController.text = address);
+        return;
+      }
+    } catch (error) {
+      debugPrint('Geoapify reverse geocoding failed: $error');
+    }
+
+    // Fallback 1: Nominatim (gratis unlimited)
+    try {
+      final dio = Dio();
+      dio.options.headers['User-Agent'] = 'KedotaApp/1.0';
+      final response = await dio
+          .get<Map<String, dynamic>>(
+            'https://nominatim.openstreetmap.org/reverse',
+            queryParameters: {
+              'lat': point.latitude,
+              'lon': point.longitude,
+              'format': 'json',
+              'addressdetails': 1,
+              'zoom': 18,
+              'accept-language': 'id',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      final data = response.data;
+      if (data != null) {
+        final addr = data['address'] as Map<String, dynamic>? ?? {};
+        final parts = <String>[
+          if ((addr['road'] ?? addr['footway'] ?? addr['path'] ?? '').toString().trim().isNotEmpty)
+            [
+              (addr['road'] ?? addr['footway'] ?? addr['path'] ?? '').toString().trim(),
+              if ((addr['house_number'] ?? '').toString().trim().isNotEmpty)
+                'No. ${addr['house_number']}',
+            ].join(' '),
+          if ((addr['suburb'] ?? addr['village'] ?? addr['neighbourhood'] ?? '').toString().trim().isNotEmpty)
+            (addr['suburb'] ?? addr['village'] ?? addr['neighbourhood'] ?? '').toString().trim(),
+          if ((addr['district'] ?? addr['county'] ?? '').toString().trim().isNotEmpty)
+            (addr['district'] ?? addr['county'] ?? '').toString().trim(),
+          if ((addr['city'] ?? addr['town'] ?? '').toString().trim().isNotEmpty)
+            (addr['city'] ?? addr['town'] ?? '').toString().trim(),
+          if ((addr['state'] ?? '').toString().trim().isNotEmpty)
+            (addr['state'] ?? '').toString().trim(),
+          if ((addr['postcode'] ?? '').toString().trim().isNotEmpty)
+            (addr['postcode'] ?? '').toString().trim(),
+        ];
+        final address = parts.isNotEmpty
+            ? parts.join(', ')
+            : data['display_name']?.toString().split(', ').take(5).join(', ') ?? '';
+        if (address.isNotEmpty) {
+          setState(() => _addressController.text = address);
+          return;
+        }
+      }
+    } catch (error) {
+      debugPrint('Nominatim reverse geocoding fallback failed: $error');
+    }
+
+    // Fallback: geocoding package
     try {
       final places = await placemarkFromCoordinates(
         point.latitude,
         point.longitude,
       );
-      if (places.isEmpty || !mounted) return;
-      final place = places.first;
-      final address = [
-        place.street,
-        place.subLocality,
-        place.locality,
-        place.administrativeArea,
-      ].where((part) => part != null && part.trim().isNotEmpty).join(', ');
-      if (address.isNotEmpty) _addressController.text = address;
+      if (places.isNotEmpty && mounted) {
+        final place = places.first;
+        final parts = <String>[
+          if ((place.street ?? '').trim().isNotEmpty) place.street!.trim(),
+          if ((place.subLocality ?? '').trim().isNotEmpty)
+            place.subLocality!.trim(),
+          if ((place.locality ?? '').trim().isNotEmpty)
+            place.locality!.trim(),
+          if ((place.subAdministrativeArea ?? '').trim().isNotEmpty)
+            place.subAdministrativeArea!.trim(),
+          if ((place.administrativeArea ?? '').trim().isNotEmpty)
+            place.administrativeArea!.trim(),
+          if ((place.postalCode ?? '').trim().isNotEmpty)
+            place.postalCode!.trim(),
+        ];
+        if (parts.isNotEmpty) {
+          setState(() => _addressController.text = parts.join(', '));
+        }
+      }
     } catch (error) {
-      debugPrint('Reverse geocoding failed: $error');
+      debugPrint('Geocoding package fallback failed: $error');
     }
   }
 
   Future<void> _openExpandedMap() async {
+    final expandedController = MapController();
+    LatLng selectedPoint = _mapCenter;
+    String selectedAddress = _addressController.text.trim();
+
+    // Listen perubahan dari forward geocoding (ketik di field)
+    void onPointChanged() {
+      final newPoint = _mapPointNotifier.value;
+      selectedPoint = newPoint;
+      expandedController.move(newPoint, 16);
+    }
+
+    _mapPointNotifier.addListener(onPointChanged);
+
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: _background,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      t(context, 'reservationMapTitle'),
-                      style: const TextStyle(
-                        color: _ink,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
+      barrierColor: Colors.black54,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 40,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Stack(
+              children: [
+                // ── Peta fullscreen ──────────────────────────────────────
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.55,
+                  child: FlutterMap(
+                    mapController: expandedController,
+                    options: MapOptions(
+                      initialCenter: selectedPoint,
+                      initialZoom: 15,
+                      onTap: _isReschedule
+                          ? null
+                          : (_, point) async {
+                              setDialogState(() {
+                                selectedPoint = point;
+                                selectedAddress = '';
+                              });
+                              expandedController.move(point, 15);
+                              try {
+                                final dio = Dio();
+                                final resp = await dio
+                                    .get<Map<String, dynamic>>(
+                                      'https://api.geoapify.com/v1/geocode/reverse',
+                                      queryParameters: {
+                                        'lat': point.latitude,
+                                        'lon': point.longitude,
+                                        'apiKey': _geoapifyKey,
+                                        'lang': 'id',
+                                      },
+                                    )
+                                    .timeout(const Duration(seconds: 10));
+                                final features =
+                                    (resp.data?['features'] as List?) ?? [];
+                                if (features.isNotEmpty) {
+                                  final props =
+                                      (features.first
+                                              as Map<String, dynamic>)['properties']
+                                          as Map<String, dynamic>? ??
+                                      {};
+                                  final address =
+                                      _buildAddressFromGeoapify(props);
+                                  if (address.isNotEmpty) {
+                                    setDialogState(
+                                      () => selectedAddress = address,
+                                    );
+                                  }
+                                }
+                              } catch (_) {}
+                            },
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
+                        userAgentPackageName: 'com.kedota.physiotherapy',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: selectedPoint,
+                            width: 42,
+                            height: 42,
+                            child: const Icon(
+                              Icons.location_on_rounded,
+                              color: _teal,
+                              size: 38,
+                            ),
+                          ),
+                        ],
+                      ),
+                      RichAttributionWidget(
+                        attributions: [
+                          TextSourceAttribution('OpenStreetMap contributors'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Floating label alamat ─────────────────────────────────
+                if (selectedAddress.isNotEmpty)
+                  Positioned(
+                    top: 12,
+                    left: 48,
+                    right: 48,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.95),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.location_on_rounded,
+                              size: 14,
+                              color: _teal,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                selectedAddress,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _ink,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: t(context, 'closeBtn'),
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    icon: const Icon(Icons.close_rounded),
+
+                // ── Tombol ✕ pojok kanan atas ────────────────────────────
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.of(dialogContext).pop();
+                      if (!_isReschedule) {
+                        // Langsung set koordinat dan address — tidak perlu geocode ulang
+                        // karena selectedAddress sudah didapat saat tap di popup
+                        setState(() {
+                          _mapCenter = selectedPoint;
+                          if (selectedAddress.isNotEmpty) {
+                            _addressController.text = selectedAddress;
+                          }
+                        });
+                        _mapPointNotifier.value = selectedPoint;
+                        try {
+                          _mapController.move(selectedPoint, 16);
+                        } catch (_) {}
+                        // Kalau belum ada address, baru geocode
+                        if (selectedAddress.isEmpty) {
+                          _setMapLocation(selectedPoint);
+                        }
+                      }
+                    },
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.92),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: _ink,
+                      ),
+                    ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                t(context, 'reservationMapHint'),
-                style: const TextStyle(color: _muted, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: _buildMapPreview(
-                  height: 410,
-                  controller: MapController(),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text(t(context, 'closeBtn')),
+
+                // ── Field detail lokasi di bawah peta ────────────────────
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                    child: TextField(
+                      controller: _addressController,
+                      readOnly: _isReschedule,
+                      decoration: InputDecoration(
+                        hintText: t(context, 'reservationHomeCareAddressHint'),
+                        hintStyle: const TextStyle(
+                          color: _muted,
+                          fontSize: 12,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.edit_location_alt_outlined,
+                          color: _teal,
+                          size: 20,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFDDE4E3),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFDDE4E3),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: _teal,
+                            width: 1.4,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      style: const TextStyle(fontSize: 12, color: _ink),
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+    _mapPointNotifier.removeListener(onPointChanged);
   }
 
   void _showMessage(String message) {
@@ -1098,7 +1489,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              '${(_step + 1).clamp(1, 6).toString().padLeft(2, '0')} / 06',
+              t(context, 'stepOf')
+                  .replaceFirst('{current}', (_step + 1).clamp(1, 6).toString().padLeft(2, '0'))
+                  .replaceFirst('{total}', '06'),
               style: const TextStyle(
                 color: _teal,
                 fontSize: 12,
@@ -1168,40 +1561,54 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     }
   }
 
-  Widget _buildModeStep() => _section(
-    t(context, 'reservationForWho'),
-    Column(
-      children: [
-        _choiceButton(t(context, 'reservationForSelf'), true),
-        const SizedBox(height: 10),
-        _choiceButton(t(context, 'reservationForOther'), false),
-      ],
-    ),
+  Widget _buildModeStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        t(context, 'reservationTitle'),
+        style: const TextStyle(
+          color: _ink,
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      const SizedBox(height: 10),
+      Text(
+        t(context, 'reservationForWho'),
+        style: const TextStyle(color: _muted, fontSize: 12),
+      ),
+      const SizedBox(height: 14),
+      _choiceButton(t(context, 'reservationForSelf'), true),
+      const SizedBox(height: 10),
+      _choiceButton(t(context, 'reservationForOther'), false),
+    ],
   );
 
   Widget _choiceButton(String label, bool self) => InkWell(
-    onTap: () => setState(() => _forSelf = self),
+    onTap: () => setState(() {
+      _forSelf = self;
+      _step = 1;
+    }),
     borderRadius: BorderRadius.circular(10),
     child: Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
-        color: _forSelf == self ? const Color(0xFFDDF5F2) : Colors.white,
-        border: Border.all(color: _forSelf == self ? _teal : Colors.white),
+        color: _teal,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         label,
         textAlign: TextAlign.center,
-        style: TextStyle(
-          color: _forSelf == self ? _tealDark : _ink,
+        style: const TextStyle(
+          color: Colors.white,
           fontWeight: FontWeight.w700,
         ),
       ),
     ),
   );
 
-  Widget _buildPatientStep() => _section(
+  Widget _buildPatientStep() => _flatSection(
     t(context, 'reservationPatientData'),
     Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1280,64 +1687,274 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     ),
   );
 
-  Widget _buildScheduleStep() => _section(
-    t(context, 'reservationStageSchedule'),
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          t(context, 'reservationScheduleHint'),
-          style: const TextStyle(color: _muted, fontSize: 12),
-        ),
-        const SizedBox(height: 10),
-        _serviceChoice(),
-        _selectionField(
-          t(context, 'reservationClinic'),
-          _clinic,
-          t(context, 'reservationClinic'),
-          Icons.location_city_outlined,
-          _isReschedule ? null : _pickClinic,
-        ),
-        _dateField(
-          t(context, 'reservationDate'),
-          _appointmentDate,
-          _pickAppointmentDate,
-          icon: Icons.calendar_today_outlined,
-        ),
-        _timeField(),
-        if (_serviceType == _homeCareService) _buildHomeCareLocation(),
-        if (_serviceType == _clinicService) ...[
-          const SizedBox(height: 20),
-          _buildClinicLocation(),
-        ],
-        InkWell(
-          onTap: () =>
-              setState(() => _therapistAvailability = !_therapistAvailability),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: Checkbox(
-                  value: _therapistAvailability,
-                  activeColor: _teal,
-                  onChanged: (value) =>
-                      setState(() => _therapistAvailability = value ?? false),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  t(context, 'reservationTherapistAvailability'),
-                  style: const TextStyle(fontSize: 11, color: _muted),
-                ),
-              ),
-            ],
+  Widget _buildScheduleStep() {
+    // Apakah kota yang dipilih adalah Malang (bisa klinik + home care)
+    final isMalang = _selectedCity == 'Malang';
+    // Apakah tempat sudah dipilih
+    final cityPicked = _selectedCity.isNotEmpty;
+    // Apakah layanan sudah dipilih (serviceType dan clinic sudah terisi)
+    final servicePicked = cityPicked && _serviceType.isNotEmpty && _clinic.isNotEmpty;
+
+    return _flatSection(
+      t(context, 'reservationStageSchedule'),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            t(context, 'reservationScheduleHint'),
+            style: const TextStyle(color: _muted, fontSize: 12),
           ),
+          const SizedBox(height: 16),
+
+          // ── 1. Pilih Tempat ───────────────────────────────────────────
+          _fieldLabel(t(context, 'reservationPickPlace')),
+          const SizedBox(height: 6),
+          _dropdownField(
+            value: _selectedCity.isEmpty ? null : _selectedCity,
+            hint: '-- ${t(context, 'reservationPickPlace')} --',
+            icon: Icons.location_city_outlined,
+            items: _availableCities,
+            onChanged: _isReschedule
+                ? null
+                : (city) {
+                    if (city == null) return;
+                    setState(() {
+                      _selectedCity = city;
+                      if (city == 'Malang') {
+                        _serviceType = '';
+                        _clinic = '';
+                      } else {
+                        _serviceType = _homeCareService;
+                        _clinic = t(context, 'homeCareCity').replaceFirst('{city}', city);
+                      }
+                      _appointmentDate = null;
+                      _appointmentTime = null;
+                      _bookedAppointmentTimes = {};
+                      _addressController.clear();
+                    });
+                  },
+          ),
+          const SizedBox(height: 14),
+
+          // ── 2. Pilih Layanan ──────────────────────────────────────────
+          _fieldLabel(t(context, 'reservationService')),
+          const SizedBox(height: 6),
+          if (!cityPicked)
+            _lockedField(t(context, 'reservationPickServiceFirst'))
+          else if (!isMalang)
+            _readonlyServiceChip(
+              t(context, 'homeCare'),
+              Icons.home_rounded,
+              _tealDark,
+            )
+          else
+            _dropdownField(
+              value: _serviceType.isEmpty
+                  ? null
+                  : _serviceType == _clinicService
+                  ? t(context, 'klinik')
+                  : t(context, 'homeCare'),
+              hint: '-- ${t(context, 'reservationPickService')} --',
+              icon: _serviceType == _clinicService
+                  ? Icons.local_hospital_rounded
+                  : Icons.home_rounded,
+              items: [t(context, 'klinik'), t(context, 'homeCare')],
+              onChanged: _isReschedule
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _serviceType = value == t(context, 'klinik')
+                            ? _clinicService
+                            : _homeCareService;
+                        _clinic = _serviceType == _clinicService
+                            ? _clinicLocation.name
+                            : t(context, 'homeCareCity').replaceFirst('{city}', 'Malang');
+                        _appointmentDate = null;
+                        _appointmentTime = null;
+                        _bookedAppointmentTimes = {};
+                        if (_serviceType != _homeCareService) {
+                          _addressController.clear();
+                        }
+                      });
+                    },
+            ),
+          const SizedBox(height: 14),
+
+          // ── 3. Pilih Jadwal ───────────────────────────────────────────
+          _fieldLabel(t(context, 'reservationDate')),
+          const SizedBox(height: 6),
+          if (!servicePicked)
+            _lockedField(t(context, 'reservationPickDateFirst'))
+          else
+            _dateField(
+              t(context, 'reservationDate'),
+              _appointmentDate,
+              _pickAppointmentDate,
+              icon: Icons.calendar_month_outlined,
+              showLabel: false,
+            ),
+          const SizedBox(height: 14),
+
+          // ── 4. Pilih Jam ──────────────────────────────────────────────
+          _fieldLabel(t(context, 'reservationTime')),
+          const SizedBox(height: 6),
+          if (!servicePicked || _appointmentDate == null)
+            _lockedField(t(context, 'reservationPickTimeFirst'))
+          else
+            _timeField(showLabel: false),
+          const SizedBox(height: 14),
+
+          // ── 5. Alamat / Lokasi ────────────────────────────────────────
+          if (servicePicked) ...[
+            _fieldLabel(t(context, 'reservationAddress')),
+            const SizedBox(height: 6),
+            if (_serviceType == _homeCareService)
+              _buildHomeCareLocation()
+            else
+              _buildClinicLocation(),
+            const SizedBox(height: 16),
+          ],
+
+          // ── Konfirmasi ketersediaan terapis ───────────────────────────
+          if (servicePicked)
+            InkWell(
+              onTap: () => setState(
+                () => _therapistAvailability = !_therapistAvailability,
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: _therapistAvailability,
+                      activeColor: _teal,
+                      onChanged: (value) => setState(
+                        () => _therapistAvailability = value ?? false,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      t(context, 'reservationTherapistAvailability'),
+                      style: const TextStyle(fontSize: 11, color: _muted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Field dropdown generic
+  Widget _dropdownField({
+    required String? value,
+    required String hint,
+    required IconData icon,
+    required List<String> items,
+    required ValueChanged<String?>? onChanged,
+  }) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: value != null ? _teal : const Color(0xFFDDE4E3),
+        width: value != null ? 1.4 : 1,
+      ),
+    ),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: value,
+        hint: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Text(
+            hint,
+            style: const TextStyle(color: _muted, fontSize: 13),
+          ),
+        ),
+        icon: const Padding(
+          padding: EdgeInsets.only(right: 14),
+          child: Icon(Icons.keyboard_arrow_down_rounded, color: _teal),
+        ),
+        isExpanded: true,
+        borderRadius: BorderRadius.circular(12),
+        items: items
+            .map(
+              (item) => DropdownMenuItem(
+                value: item,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Icon(icon, color: _teal, size: 17),
+                      const SizedBox(width: 10),
+                      Text(
+                        item,
+                        style: const TextStyle(fontSize: 13, color: _ink),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+      ),
+    ),
+  );
+
+  /// Field terkunci (belum bisa dipilih) — tampil abu dengan ikon lock
+  Widget _lockedField(String hint) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF0F5F4),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFDDE4E3)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.lock_outline_rounded, color: _muted, size: 16),
+        const SizedBox(width: 10),
+        Text(
+          hint,
+          style: const TextStyle(color: _muted, fontSize: 13),
         ),
       ],
     ),
   );
+
+  /// Chip read-only untuk layanan yang tidak bisa diubah (non-Malang = Home Care)
+  Widget _readonlyServiceChip(String label, IconData icon, Color color) =>
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 17),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            Icon(Icons.check_circle_rounded, color: color, size: 18),
+          ],
+        ),
+      );
 
   Widget _buildMapPreview({double height = 142, MapController? controller}) =>
       Stack(
@@ -1358,7 +1975,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 children: [
                   TileLayer(
                     urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
                     userAgentPackageName: 'com.kedota.physiotherapy',
                   ),
                   MarkerLayer(
@@ -1403,6 +2020,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   Widget _buildHomeCareLocation() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      // Field alamat di atas peta
       _field(
         _addressController,
         t(context, 'reservationAddress'),
@@ -1410,8 +2028,80 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         icon: Icons.location_on_outlined,
         readOnly: _isReschedule,
       ),
-      const SizedBox(height: 12),
-      _buildMapPreview(),
+      const SizedBox(height: 10),
+
+      // Peta
+      ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Stack(
+          children: [
+            SizedBox(
+              height: 180,
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: _mapCenter,
+                  initialZoom: 15,
+                  onTap: _isReschedule
+                      ? null
+                      : (_, point) => _setMapLocation(point),
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
+                    userAgentPackageName: 'com.kedota.physiotherapy',
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _mapCenter,
+                        width: 42,
+                        height: 42,
+                        child: const Icon(
+                          Icons.location_on_rounded,
+                          color: _teal,
+                          size: 38,
+                        ),
+                      ),
+                    ],
+                  ),
+                  RichAttributionWidget(
+                    attributions: [
+                      TextSourceAttribution('OpenStreetMap contributors'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Tombol expand
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.white.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(10),
+                child: IconButton(
+                  tooltip: t(context, 'reservationMapExpand'),
+                  onPressed: _openExpandedMap,
+                  icon: const Icon(
+                    Icons.fullscreen_rounded,
+                    color: _tealDark,
+                    size: 20,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+
+      // Gunakan Lokasi Terkini
       InkWell(
         onTap: _isReschedule || _locating ? null : _useCurrentLocation,
         borderRadius: BorderRadius.circular(8),
@@ -1448,7 +2138,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       ),
     ],
   );
-
   Widget _buildClinicLocation() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1492,132 +2181,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       ),
     ],
   );
-
-  Widget _serviceChoice() => Padding(
-    padding: const EdgeInsets.only(top: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          t(context, 'reservationService'),
-          style: const TextStyle(
-            color: _muted,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _serviceCard(
-                value: _homeCareService,
-                title: t(context, 'homeCare'),
-                description: t(context, 'homeCareDesc'),
-                icon: Icons.home_rounded,
-                color: _tealDark,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _serviceCard(
-                value: _clinicService,
-                title: t(context, 'klinik'),
-                description: t(context, 'klinikDesc'),
-                icon: Icons.local_hospital_rounded,
-                color: const Color(0xFF5B5FC8),
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-
-  Widget _serviceCard({
-    required String value,
-    required String title,
-    required String description,
-    required IconData icon,
-    required Color color,
-  }) {
-    final selected = _serviceType == value;
-    return InkWell(
-      onTap: _isReschedule
-          ? null
-          : () => setState(() {
-              _serviceType = value;
-              _clinic = value == _clinicService ? _clinicLocation.name : '';
-              if (_serviceType != _homeCareService) _addressController.clear();
-            }),
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.fromLTRB(12, 13, 10, 12),
-        decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.10) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? color : const Color(0xFFE1E9E8),
-            width: selected ? 1.5 : 1,
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.10),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: selected ? 0.16 : 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: color, size: 19),
-                ),
-                const Spacer(),
-                Icon(
-                  selected
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  color: selected ? color : const Color(0xFFB4C5C5),
-                  size: 19,
-                ),
-              ],
-            ),
-            const SizedBox(height: 11),
-            Text(
-              title,
-              style: const TextStyle(
-                color: _ink,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: _muted, fontSize: 10, height: 1.3),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildSessionStep() => _flatSection(
     t(context, 'reservationChooseSession'),
@@ -2043,7 +2606,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       _paymentTotal(),
       const SizedBox(height: 10),
       Text(
-        'Selesaikan pembayaran sebelum batas waktu yang ditentukan.',
+        t(context, 'paymentDeadlineReminder'),
         style: const TextStyle(color: _muted, fontSize: 11),
       ),
       const SizedBox(height: 14),
@@ -2439,49 +3002,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     );
   }
 
-  Widget _section(String title, Widget child) => TweenAnimationBuilder<double>(
-    tween: Tween(begin: 0, end: 1),
-    duration: const Duration(milliseconds: 520),
-    curve: Curves.easeOutCubic,
-    builder: (context, value, animatedChild) => Opacity(
-      opacity: value,
-      child: Transform.translate(
-        offset: Offset(0, 12 * (1 - value)),
-        child: animatedChild,
-      ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 21,
-            fontWeight: FontWeight.w800,
-            color: _ink,
-          ),
-        ),
-        const SizedBox(height: 14),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0D172B2D),
-                blurRadius: 18,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: child,
-        ),
-      ],
-    ),
-  );
-
   Widget _field(
     TextEditingController controller,
     String label, {
@@ -2495,30 +3015,49 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     String? Function(String?)? validator,
   }) => Padding(
     padding: const EdgeInsets.only(top: 12),
-    child: TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      readOnly: readOnly,
-      inputFormatters: inputFormatters,
-      maxLength: maxLength,
-      validator:
-          validator ??
-          (value) => value == null || value.trim().isEmpty ? label : null,
-      decoration: _decoration(label, hint, icon: icon).copyWith(
-        filled: true,
-        fillColor: readOnly ? const Color(0xFFE7ECEC) : Colors.white,
-        suffixIcon: readOnly
-            ? const Icon(Icons.lock_outline_rounded, size: 17, color: _muted)
-            : null,
-      ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fieldLabel(label),
+        const SizedBox(height: 5),
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          readOnly: readOnly,
+          inputFormatters: inputFormatters,
+          maxLength: maxLength,
+          validator:
+              validator ??
+              (value) => value == null || value.trim().isEmpty ? label : null,
+          decoration: _decoration(label, hint, icon: icon).copyWith(
+            filled: true,
+            fillColor: readOnly ? const Color(0xFFE7ECEC) : Colors.white,
+            suffixIcon: readOnly
+                ? const Icon(
+                    Icons.lock_outline_rounded,
+                    size: 17,
+                    color: _muted,
+                  )
+                : null,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _fieldLabel(String label) => Text(
+    label,
+    style: const TextStyle(
+      color: _muted,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
     ),
   );
 
   InputDecoration _decoration(String label, String? hint, {IconData? icon}) =>
       InputDecoration(
-        floatingLabelBehavior: FloatingLabelBehavior.auto,
-        labelText: label,
+        labelText: null,
         hintText: hint,
         filled: true,
         fillColor: Colors.white,
@@ -2546,66 +3085,55 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     DateTime? value,
     VoidCallback onTap, {
     IconData? icon,
+    bool showLabel = true,
   }) => Padding(
-    padding: const EdgeInsets.only(top: 12),
-    child: InkWell(
-      onTap: onTap,
-      child: InputDecorator(
-        decoration: _decoration(label, null, icon: icon),
-        child: Text(
-          value == null ? '--/--/----' : _formatDate(value),
-          style: TextStyle(color: value == null ? _muted : _ink),
+    padding: EdgeInsets.only(top: showLabel ? 12 : 0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showLabel) ...[
+          _fieldLabel(label),
+          const SizedBox(height: 5),
+        ],
+        InkWell(
+          onTap: onTap,
+          child: InputDecorator(
+            decoration: _decoration(label, null, icon: icon),
+            child: Text(
+              value == null ? '--/--/----' : _formatDate(value),
+              style: TextStyle(color: value == null ? _muted : _ink),
+            ),
+          ),
         ),
-      ),
+      ],
     ),
   );
 
-  Widget _timeField() => Padding(
-    padding: const EdgeInsets.only(top: 12),
-    child: InkWell(
-      onTap: _pickAppointmentTime,
-      child: InputDecorator(
-        decoration: _decoration(
-          t(context, 'reservationTime'),
-          null,
-          icon: Icons.access_time_outlined,
-        ),
-        child: Text(
-          _appointmentTime == null
-              ? '--:-- WIB'
-              : '${_appointmentTime!.format(context)} WIB',
-        ),
-      ),
-    ),
-  );
-
-  Widget _selectionField(
-    String label,
-    String value,
-    String placeholder,
-    IconData icon,
-    VoidCallback? onTap,
-  ) => Padding(
-    padding: const EdgeInsets.only(top: 12),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: InputDecorator(
-        decoration: _decoration(label, placeholder, icon: icon).copyWith(
-          suffixIcon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: _teal,
+  Widget _timeField({bool showLabel = true}) => Padding(
+    padding: EdgeInsets.only(top: showLabel ? 12 : 0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showLabel) ...[
+          _fieldLabel(t(context, 'reservationTime')),
+          const SizedBox(height: 5),
+        ],
+        InkWell(
+          onTap: _pickAppointmentTime,
+          child: InputDecorator(
+            decoration: _decoration(
+              t(context, 'reservationTime'),
+              null,
+              icon: Icons.access_time_outlined,
+            ),
+            child: Text(
+              _appointmentTime == null
+                  ? '--:-- WIB'
+                  : '${_appointmentTime!.format(context)} WIB',
+            ),
           ),
         ),
-        child: Text(
-          value.isEmpty ? placeholder : value,
-          style: TextStyle(
-            color: value.isEmpty ? _muted : _ink,
-            fontSize: 13,
-            fontWeight: value.isEmpty ? FontWeight.w400 : FontWeight.w600,
-          ),
-        ),
-      ),
+      ],
     ),
   );
 
@@ -2638,50 +3166,54 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     ),
   );
 
-  Widget _buildBottomAction() => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: _saving ? null : _next,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _teal,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            elevation: 5,
-            shadowColor: _teal.withValues(alpha: 0.28),
-          ),
-          child: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
+  Widget _buildBottomAction() => _step == 0
+      ? const SizedBox.shrink()
+      : SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _next,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _teal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      t(
-                        context,
-                        _step == 5 ? 'reservationPayNow' : 'reservationNext',
-                      ),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward_rounded, size: 18),
-                  ],
+                  elevation: 5,
+                  shadowColor: _teal.withValues(alpha: 0.28),
                 ),
-        ),
-      ),
-    ),
-  );
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            t(
+                              context,
+                              _step == 5
+                                  ? 'reservationPayNow'
+                                  : 'reservationNext',
+                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.arrow_forward_rounded, size: 18),
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        );
 
   Widget _buildSuccess() => Column(
     children: [
@@ -2776,7 +3308,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       if (_successCountdown <= 1) {
         timer.cancel();
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainScreen(initialIndex: 2)),
+          MaterialPageRoute(builder: (_) => const MainScreen(initialIndex: 1)),
           (route) => false,
         );
         return;

@@ -686,9 +686,9 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
                                   children: [
                                     _buildIndonesianFlag(),
                                     const SizedBox(width: 8),
-                                    const Text(
-                                      '+62',
-                                      style: TextStyle(
+                                    Text(
+                                      t(context, 'countryCode'),
+                                      style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w700,
                                         color: Color(0xFF1E293B),
@@ -787,18 +787,16 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
       ),
     );
 
-    return Scaffold(backgroundColor: const Color(0xFFF7F9F9), body: content);
+    return Scaffold(backgroundColor: const Color(0xFFDCF4F1), body: content);
   }
 
   Widget _buildIndonesianFlag() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(2),
+    return ClipOval(
       child: Container(
         width: 20,
-        height: 14,
+        height: 20,
         decoration: BoxDecoration(
           border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
-          borderRadius: BorderRadius.circular(2),
         ),
         child: Column(
           children: [
@@ -909,6 +907,7 @@ class _BirthDateVerificationScreenState
         initialDate: _selectedBirthDate ?? DateTime(2000, 1, 1),
         firstDate: DateTime(1920),
         lastDate: now,
+        restrictToFutureMonths: false,
       ),
     );
     if (picked != null) {
@@ -1451,14 +1450,18 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: _isPinError
-                              ? (isFilled ? const Color(0xFFEF4444) : Colors.transparent)
-                              : (isFilled ? const Color(0xFF00A79D) : Colors.transparent),
+                              ? (isFilled
+                                    ? const Color(0xFFEF4444)
+                                    : Colors.transparent)
+                              : (isFilled
+                                    ? const Color(0xFF00A79D)
+                                    : Colors.transparent),
                           border: Border.all(
                             color: _isPinError
                                 ? const Color(0xFFEF4444)
                                 : isFilled
-                                    ? const Color(0xFF00A79D)
-                                    : const Color(0xFFCBD5E1),
+                                ? const Color(0xFF00A79D)
+                                : const Color(0xFFCBD5E1),
                             width: 2,
                           ),
                         ),

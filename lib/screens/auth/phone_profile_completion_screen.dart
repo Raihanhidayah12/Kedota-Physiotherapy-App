@@ -51,9 +51,9 @@ class _PhoneProfileCompletionScreenState
   bool _agreeTerms = true;
   bool _isLoading = false;
 
-  bool _isNameError   = false;
-  bool _isEmailError  = false;
-  bool _isDobError    = false;
+  bool _isNameError = false;
+  bool _isEmailError = false;
+  bool _isDobError = false;
   bool _isGenderError = false;
 
   @override
@@ -75,6 +75,24 @@ class _PhoneProfileCompletionScreenState
       }
       _parseTypedDate(_dobController.text);
     });
+  }
+
+  Widget _buildIndonesianFlag() {
+    return ClipOval(
+      child: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
+        ),
+        child: Column(
+          children: [
+            Expanded(child: Container(color: const Color(0xFFCE1126))),
+            Expanded(child: Container(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
   }
 
   void _parseTypedDate(String input) {
@@ -117,6 +135,7 @@ class _PhoneProfileCompletionScreenState
         initialDate: _selectedBirthDate ?? DateTime(2000, 1, 1),
         firstDate: DateTime(1920),
         lastDate: now,
+        restrictToFutureMonths: false,
       ),
     );
     if (picked != null) {
@@ -134,9 +153,9 @@ class _PhoneProfileCompletionScreenState
     final email = _emailController.text.trim();
 
     setState(() {
-      _isNameError   = name.isEmpty;
-      _isEmailError  = email.isEmpty || !_isValidEmail(email);
-      _isDobError    = _selectedBirthDate == null;
+      _isNameError = name.isEmpty;
+      _isEmailError = email.isEmpty || !_isValidEmail(email);
+      _isDobError = _selectedBirthDate == null;
       _isGenderError = _gender == null;
     });
 
@@ -258,7 +277,7 @@ class _PhoneProfileCompletionScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F9),
+      backgroundColor: const Color(0xFFDCF4F1),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -478,13 +497,39 @@ class _PhoneProfileCompletionScreenState
                                     color: const Color(0xFFE2E8F0),
                                   ),
                                 ),
-                                child: Text(
-                                  widget.phoneNumber,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF64748B),
-                                  ),
+                                child: Row(
+                                  children: [
+                                    _buildIndonesianFlag(),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      '+62',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      width: 1,
+                                      height: 20,
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        widget.phoneNumber.replaceFirst(
+                                          RegExp(r'^\+62'),
+                                          '',
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -655,7 +700,7 @@ class _PhoneProfileCompletionScreenState
   Widget _buildGenderOption({required String label, required String value}) {
     final isSelected = _gender == value;
     final showError = _isGenderError && !isSelected;
-    
+
     return GestureDetector(
       onTap: () => setState(() {
         _gender = value;
@@ -670,8 +715,8 @@ class _PhoneProfileCompletionScreenState
             color: showError
                 ? const Color(0xFFEF4444)
                 : (isSelected
-                    ? const Color(0xFF00A79D)
-                    : const Color(0xFFE2E8F0)),
+                      ? const Color(0xFF00A79D)
+                      : const Color(0xFFE2E8F0)),
             width: (showError || isSelected) ? 1.5 : 1.0,
           ),
         ),
@@ -686,8 +731,8 @@ class _PhoneProfileCompletionScreenState
                 color: showError
                     ? const Color(0xFFEF4444)
                     : (isSelected
-                        ? const Color(0xFF00A79D)
-                        : const Color(0xFFCBD5E1)),
+                          ? const Color(0xFF00A79D)
+                          : const Color(0xFFCBD5E1)),
               ),
             ),
             const SizedBox(width: 8),
@@ -699,8 +744,8 @@ class _PhoneProfileCompletionScreenState
                 color: showError
                     ? const Color(0xFFEF4444)
                     : (isSelected
-                        ? const Color(0xFF00A79D)
-                        : const Color(0xFF64748B)),
+                          ? const Color(0xFF00A79D)
+                          : const Color(0xFF64748B)),
               ),
             ),
           ],

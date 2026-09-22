@@ -1,15 +1,38 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'l10n/app_language.dart';
+import 'services/client_error_log_service.dart';
 import 'services/notification_service.dart';
 import 'screens/splash/splash_screen.dart';
 import 'widgets/app_lock_overlay.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Global Flutter / Dart error handlers ────────────────────────────────
+  // These fire before runApp so they're always active, even during init.
+
+  // 1. Framework errors (widget build failures, rendering, etc.)
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details); // keeps default console output
+    _reportUnhandledError(
+      details.exception,
+      details.stack,
+      context: 'FlutterError.onError',
+    );
+  };
+
+  // 2. Platform-level / isolate errors not caught by Flutter framework
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    _reportUnhandledError(error, stack, context: 'PlatformDispatcher.onError');
+    return true; // mark as handled — prevents crash on release builds
+  };
 
   try {
     await dotenv.load(fileName: ".env");
@@ -29,7 +52,34 @@ Future<void> main() async {
   // Inisialisasi sistem notifikasi
   await NotificationService().init();
 
-  runApp(const KedotaApp());
+  // 3. Uncaught async errors in the root zone
+  runZonedGuarded(
+    () => runApp(const KedotaApp()),
+    (Object error, StackTrace stack) {
+      _reportUnhandledError(error, stack, context: 'runZonedGuarded');
+    },
+  );
+}
+
+/// Inspect [error] and forward to [ClientErrorLogService] when it carries a
+/// 5xx HTTP status code.  Never throws — logging must not crash the app.
+void _reportUnhandledError(
+  Object error,
+  StackTrace? stack, {
+  required String context,
+}) {
+  try {
+    debugPrint('[$context] Unhandled error: $error');
+    if (stack != null) debugPrint(stack.toString());
+
+    const ClientErrorLogService().logIfUnknownServerError(
+      error,
+      method: 'UNKNOWN',
+      path: context,
+    );
+  } catch (_) {
+    // Swallow any logging failure — this is a last-resort handler.
+  }
 }
 
 class KedotaApp extends StatelessWidget {

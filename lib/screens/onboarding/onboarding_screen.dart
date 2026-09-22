@@ -19,17 +19,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingPageData(
       title: t(context, 'onboardingTitle1'),
       description: t(context, 'onboardingDesc1'),
-      imagePath: 'assets/image/Boarding/boarding 1.png',
+      imagePath: 'assets/image/Boarding/Group.png',
     ),
     _OnboardingPageData(
       title: t(context, 'onboardingTitle2'),
       description: t(context, 'onboardingDesc2'),
-      imagePath: null, // Shows mockup placeholder box if no asset
+      imagePath: 'assets/image/Boarding/image 18.png',
     ),
     _OnboardingPageData(
       title: t(context, 'onboardingTitle3'),
       description: t(context, 'onboardingDesc3'),
-      imagePath: null, // Shows mockup placeholder box if no asset
+      imagePath: 'assets/image/Boarding/Group 2.png',
     ),
   ];
 
@@ -167,36 +167,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         child: Center(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 32),
-                            child: page.imagePath != null
-                                ? Image.asset(
-                                    page.imagePath!,
-                                    fit: BoxFit.contain,
-                                  )
-                                : LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final sz = (constraints.maxWidth * 0.7)
-                                          .clamp(160.0, 240.0);
-                                      return Container(
-                                        width: sz,
-                                        height: sz,
-                                        decoration: BoxDecoration(
-                                          color: const Color(
-                                            0xFFCBD5E1,
-                                          ).withValues(alpha: 0.6),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: Center(
-                                          child: Icon(
-                                            Icons.image_outlined,
-                                            size: sz * 0.28,
-                                            color: const Color(0xFF475569),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 390),
+                              child: Image.asset(
+                                page.imagePath,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -304,7 +281,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
                   child: Text(
-                    _currentPage < pages.length - 1
+                    _currentPage == 1
                         ? t(context, 'next')
                         : t(context, 'getStarted'),
                     style: const TextStyle(
@@ -326,11 +303,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 class _OnboardingPageData {
   final String title;
   final String description;
-  final String? imagePath;
+  final String imagePath;
 
   const _OnboardingPageData({
     required this.title,
     required this.description,
-    this.imagePath,
+    required this.imagePath,
   });
 }

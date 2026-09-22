@@ -229,14 +229,12 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Widget _buildIndonesianFlag() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(2),
+    return ClipOval(
       child: Container(
         width: 20,
-        height: 14,
+        height: 20,
         decoration: BoxDecoration(
           border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
-          borderRadius: BorderRadius.circular(2),
         ),
         child: Column(
           children: [
@@ -332,7 +330,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 TextSpan(
                                   children: [
                                     TextSpan(
-                                      text: '${t(context, 'welcome')} di ',
+                                      text: '${t(context, 'welcomeAt')} ',
                                       style: const TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.w700,
@@ -409,9 +407,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                   children: [
                                     _buildIndonesianFlag(),
                                     const SizedBox(width: 8),
-                                    const Text(
-                                      '+62',
-                                      style: TextStyle(
+                                    Text(
+                                      t(context, 'countryCode'),
+                                      style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w700,
                                         color: Color(0xFF1E293B),
@@ -434,14 +432,14 @@ class _SignInScreenState extends State<SignInScreen> {
                                               .digitsOnly,
                                           LengthLimitingTextInputFormatter(13),
                                         ],
-                                        decoration: const InputDecoration(
+                                        decoration: InputDecoration(
                                           border: InputBorder.none,
-                                          hintText: '08XX XXXX XXXX',
-                                          hintStyle: TextStyle(
+                                          hintText: t(context, 'phoneHint'),
+                                          hintStyle: const TextStyle(
                                             color: Color(0xFF94A3B8),
                                             fontSize: 14,
                                           ),
-                                          contentPadding: EdgeInsets.symmetric(
+                                          contentPadding: const EdgeInsets.symmetric(
                                             vertical: 14,
                                           ),
                                         ),
@@ -529,14 +527,14 @@ class _SignInScreenState extends State<SignInScreen> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     GoogleLogoIcon(size: 20),
                                     SizedBox(width: 8),
                                     Text(
-                                      'Google',
-                                      style: TextStyle(
+                                      t(context, 'signInWithGoogle'),
+                                      style: const TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w700,
                                         color: Color(0xFF1E293B),
@@ -563,18 +561,18 @@ class _SignInScreenState extends State<SignInScreen> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(
+                                    const Icon(
                                       Icons.apple,
                                       color: Color(0xFF1E293B),
                                       size: 22,
                                     ),
-                                    SizedBox(width: 8),
+                                    const SizedBox(width: 8),
                                     Text(
-                                      'Apple',
-                                      style: TextStyle(
+                                      t(context, 'signInWithApple'),
+                                      style: const TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w700,
                                         color: Color(0xFF1E293B),
@@ -596,6 +594,6 @@ class _SignInScreenState extends State<SignInScreen> {
       ),
     );
 
-    return Scaffold(backgroundColor: const Color(0xFFF7F9F9), body: content);
+    return Scaffold(backgroundColor: const Color(0xFFDCF4F1), body: content);
   }
 }

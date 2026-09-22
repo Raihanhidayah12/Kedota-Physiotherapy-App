@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
+import '../../utils/booking_code.dart';
 import 'appointment_detail_screen.dart';
 import 'reservation_flow_screen.dart';
+import 'settle_payment_screen.dart';
 import 'upcoming_appointment_card.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -17,16 +19,6 @@ const _ink3 = Color(0xFF8AA8AC);
 // ─── Dummy data ───────────────────────────────────────────────────────────────
 
 enum AppointmentStatus { mendatang, selesai, batasWaktu }
-
-String appointmentBookingCode(String appointmentId) {
-  var hash = 17;
-  for (final codeUnit in appointmentId.codeUnits) {
-    hash = (hash * 31 + codeUnit) & 0x7fffffff;
-  }
-  final sequence = (1000 + hash % 9000).toString();
-  final reference = (10000000 + hash % 90000000).toString();
-  return 'EMR-$sequence-$reference';
-}
 
 class AppointmentItem {
   final String id;
@@ -46,6 +38,17 @@ class AppointmentItem {
   final String bookingCode;
   final AppointmentStatus status;
   final bool bookedForOther;
+  final String? profilePhotoUrl;
+
+  // ── Clinical / progress data (nullable — filled only when completed) ──────
+  final String? clinicalNote;
+  final int? vasScore;
+  final int? romScore;
+  final int? mmtScore;
+  final int? odiScore;
+  final String? therapistRecommendation;
+  final String? therapistSipf;
+  final String? therapistPhotoUrl;
 
   const AppointmentItem({
     this.id = '',
@@ -64,15 +67,30 @@ class AppointmentItem {
     this.amountDue = 0,
     this.bookingCode = '',
     this.bookedForOther = false,
+    this.profilePhotoUrl,
+    this.clinicalNote,
+    this.vasScore,
+    this.romScore,
+    this.mmtScore,
+    this.odiScore,
+    this.therapistRecommendation,
+    this.therapistSipf,
+    this.therapistPhotoUrl,
     required this.status,
   });
 
+  static bool bookedForOtherFromRow(Map<String, dynamic> row) {
+    final raw = row['patient_is_self'];
+    if (raw is bool) return !raw;
+    if (raw is num) return raw == 0;
+    final text = raw?.toString().trim().toLowerCase() ?? '';
+    if (text == 'true' || text == 't' || text == '1') return false;
+    if (text == 'false' || text == 'f' || text == '0') return true;
+    return false;
+  }
+
   String get displayBookingCode {
-    final savedCode = bookingCode.trim();
-    if (savedCode.isEmpty || savedCode.toUpperCase().startsWith('KDT-')) {
-      return appointmentBookingCode(id);
-    }
-    return savedCode;
+    return canonicalBookingCode(appointmentId: id, storedCode: bookingCode);
   }
 }
 
@@ -92,7 +110,7 @@ class _HistoryBodyState extends State<HistoryBody>
   int _filterIndex = 0;
   List<AppointmentItem> _savedAppointments = [];
   List<AppointmentItem> _savedUpcomingAppointments = [];
-  String _currentUserName = '';
+  String? _currentUserPhotoUrl;
   bool _loadingAppointments = false;
 
   // ── animation controllers ─────────────────────────────────────────────────
@@ -129,7 +147,9 @@ class _HistoryBodyState extends State<HistoryBody>
       final user = service.client.auth.currentUser;
       if (user == null) return;
       final profile = await service.checkUserProfileExists();
-      _currentUserName = profile?['full_name']?.toString().trim() ?? '';
+      final rawPhotoUrl =
+          profile?['profile_photo_url']?.toString().trim() ?? '';
+      _currentUserPhotoUrl = rawPhotoUrl.isNotEmpty ? rawPhotoUrl : null;
       await service.expireOverdueAppointments();
       final rows = await service.client
           .from('appointments')
@@ -137,12 +157,7 @@ class _HistoryBodyState extends State<HistoryBody>
           .eq('booker_id', user.id)
           .order('appointment_date', ascending: false);
       final appointments = (rows as List)
-          .map(
-            (row) => _appointmentFromRow(
-              row as Map<String, dynamic>,
-              currentUserName: _currentUserName,
-            ),
-          )
+          .map((row) => _appointmentFromRow(row as Map<String, dynamic>))
           .toList();
       if (!mounted) return;
       setState(() {
@@ -158,10 +173,7 @@ class _HistoryBodyState extends State<HistoryBody>
     }
   }
 
-  AppointmentItem _appointmentFromRow(
-    Map<String, dynamic> row, {
-    String currentUserName = '',
-  }) {
+  AppointmentItem _appointmentFromRow(Map<String, dynamic> row) {
     final rawStatus = row['appointment_status']?.toString();
     final appointmentDate = row['appointment_date']?.toString() ?? '';
     final appointmentTime = row['appointment_time']?.toString() ?? '';
@@ -180,16 +192,12 @@ class _HistoryBodyState extends State<HistoryBody>
       _ => AppointmentStatus.mendatang,
     };
     final patientName = row['patient_full_name']?.toString().trim() ?? '';
-    final bookedForOther =
-        currentUserName.isNotEmpty &&
-        patientName.isNotEmpty &&
-        patientName.toLowerCase() != currentUserName.toLowerCase();
     return AppointmentItem(
       id: row['id']?.toString() ?? '',
-      therapistName: row['therapist_name']?.toString() ?? 'Kedota Therapist',
-      serviceType: row['service_type']?.toString() ?? 'Home Care',
+      therapistName: row['therapist_name']?.toString() ?? t(context, 'defaultTherapistName'),
+      serviceType: row['service_type']?.toString() ?? t(context, 'defaultServiceType'),
       date: row['appointment_date']?.toString() ?? '-',
-      time: row['appointment_time']?.toString() ?? '- WIB',
+      time: row['appointment_time']?.toString() ?? t(context, 'defaultTime'),
       patientName: patientName,
       medicalCode: row['patient_medical_code']?.toString() ?? '',
       address: row['address']?.toString() ?? '',
@@ -200,10 +208,25 @@ class _HistoryBodyState extends State<HistoryBody>
       paymentPlan: row['payment_plan']?.toString() ?? 'full',
       amountDue: int.tryParse(row['amount_due']?.toString() ?? '') ?? 0,
       bookingCode: row['booking_code']?.toString() ?? '',
-      bookedForOther: bookedForOther,
+      bookedForOther: AppointmentItem.bookedForOtherFromRow(row),
       status: status,
+      profilePhotoUrl: _currentUserPhotoUrl,
+      clinicalNote: _nullIfEmpty(row['clinical_note']?.toString()),
+      vasScore: _nullableInt(row['vas_score']),
+      romScore: _nullableInt(row['rom_score']),
+      mmtScore: _nullableInt(row['mmt_score']),
+      odiScore: _nullableInt(row['odi_score']),
+      therapistRecommendation: _nullIfEmpty(row['therapist_recommendation']?.toString()),
+      therapistSipf: _nullIfEmpty(row['therapist_sipf']?.toString()),
+      therapistPhotoUrl: _nullIfEmpty(row['therapist_photo_url']?.toString()),
     );
   }
+
+  static String? _nullIfEmpty(String? s) =>
+      (s == null || s.trim().isEmpty) ? null : s.trim();
+
+  static int? _nullableInt(dynamic v) =>
+      v == null ? null : int.tryParse(v.toString());
 
   void _setupAnimations() {
     _headerCtrl = AnimationController(
@@ -372,6 +395,20 @@ class _HistoryBodyState extends State<HistoryBody>
                                       ),
                                     );
                                     if (mounted) _loadAppointments();
+                                  },
+                                  onSettlePayment: () async {
+                                    final paid = await Navigator.of(
+                                      context,
+                                    ).push<bool>(
+                                      MaterialPageRoute(
+                                        builder: (_) => SettlePaymentScreen(
+                                          appointment: appointment,
+                                        ),
+                                      ),
+                                    );
+                                    if (paid == true && mounted) {
+                                      _loadAppointments();
+                                    }
                                   },
                                 ),
                                 if (appointment !=
@@ -830,8 +867,9 @@ class _HistoryBodyState extends State<HistoryBody>
         item.status == AppointmentStatus.batasWaktu &&
         item.paymentPlan == 'deposit' &&
         item.paymentStatus != 'paid';
-    final accentColor = _accentBorder(item.status);
-    final statusColor = isSelesai ? _c700 : const Color(0xFFD94F45);
+
+    final Color accentColor = _accentBorder(item.status);
+    final Color statusColor = isSelesai ? _c700 : const Color(0xFFD94F45);
     final badgeLabel = isDepositForfeited
         ? t(context, 'depositForfeitedTitle')
         : hasOutstandingPayment
@@ -843,15 +881,13 @@ class _HistoryBodyState extends State<HistoryBody>
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border(
-          top: BorderSide(color: accentColor.withValues(alpha: 0.5), width: 2),
-        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accentColor.withValues(alpha: 0.25), width: 1),
         boxShadow: [
           BoxShadow(
-            color: _ink.withValues(alpha: 0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
+            color: _ink.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -860,10 +896,11 @@ class _HistoryBodyState extends State<HistoryBody>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Top row: avatar + name/booking-type + badge ──────────────
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildAvatar(size: 56),
+                _buildAvatar(size: 52, item: item),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -874,12 +911,12 @@ class _HistoryBodyState extends State<HistoryBody>
                             ? t(context, 'patientName')
                             : item.patientName,
                         style: const TextStyle(
-                          color: _c700,
+                          color: _ink,
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 4),
                       _infoRow(
                         Icons.sell_outlined,
                         item.bookedForOther
@@ -900,7 +937,7 @@ class _HistoryBodyState extends State<HistoryBody>
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: statusColor.withValues(alpha: 0.18),
+                      color: statusColor.withValues(alpha: 0.2),
                     ),
                   ),
                   child: Text(
@@ -914,7 +951,9 @@ class _HistoryBodyState extends State<HistoryBody>
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+
+            // ── Date / time / session row ─────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -942,8 +981,11 @@ class _HistoryBodyState extends State<HistoryBody>
                 ),
               ],
             ),
+            const SizedBox(height: 10),
             const Divider(height: 1, color: Color(0xFFF0F5F5)),
             const SizedBox(height: 10),
+
+            // ── Service / therapist row ───────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -961,36 +1003,39 @@ class _HistoryBodyState extends State<HistoryBody>
                     fontSize: 11,
                   ),
                 ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => AppointmentDetailScreen(item: item),
-                      ),
-                    );
-                    if (mounted) _loadAppointments();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // ── Lihat Detail button — full width ──────────────────────────
+            SizedBox(
+              width: double.infinity,
+              child: GestureDetector(
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => AppointmentDetailScreen(item: item),
                     ),
-                    decoration: BoxDecoration(
-                      color: _c100,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Text(
-                      t(context, 'lihatDetail'),
-                      style: const TextStyle(
-                        color: _c700,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
+                  );
+                  if (mounted) _loadAppointments();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _c500,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    t(context, 'lihatDetail'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
           ],
         ),
@@ -1039,7 +1084,23 @@ class _HistoryBodyState extends State<HistoryBody>
 
   // ── shared widgets ────────────────────────────────────────────────────────
 
-  Widget _buildAvatar({double size = 52}) => Container(
+  Widget _buildAvatar({double size = 52, AppointmentItem? item}) {
+    final photoUrl = item?.profilePhotoUrl;
+    if (photoUrl != null && photoUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          photoUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stack) => _avatarPlaceholder(size),
+        ),
+      );
+    }
+    return _avatarPlaceholder(size);
+  }
+
+  Widget _avatarPlaceholder(double size) => Container(
     width: size,
     height: size,
     decoration: const BoxDecoration(

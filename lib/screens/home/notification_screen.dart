@@ -31,6 +31,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   bool _loading = true;
   bool _notificationsRead = false;
   final Set<String> _readNotificationKeys = {};
+  String? _currentUserPhotoUrl;
 
   @override
   void initState() {
@@ -54,6 +55,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
       if (user == null) {
         return;
       }
+      final profile = await service.checkUserProfileExists();
+      final rawPhotoUrl =
+          profile?['profile_photo_url']?.toString().trim() ?? '';
+      _currentUserPhotoUrl = rawPhotoUrl.isNotEmpty ? rawPhotoUrl : null;
       await service.expireOverdueAppointments();
       final rows = await service.client
           .from('appointments')
@@ -357,13 +362,31 @@ class _NotificationScreenState extends State<NotificationScreen> {
         row['payment_status']?.toString().toLowerCase() ?? 'paid';
     final paymentPlan = row['payment_plan']?.toString().toLowerCase() ?? 'full';
     final amountDue = int.tryParse(row['amount_due']?.toString() ?? '') ?? 0;
+    final appointmentStatus =
+        row['appointment_status']?.toString().toLowerCase() ?? '';
+
+    // DP Hangus: expired + deposit + belum lunas
+    final isDepositForfeited =
+        appointmentStatus == 'expired' &&
+        paymentPlan == 'deposit' &&
+        paymentStatus != 'paid';
+
+    // Tidak hadir / batas waktu — expired + sudah lunas
+    final isExpiredPaidNoShow =
+        appointmentStatus == 'expired' && paymentStatus == 'paid';
+
+    // Outstanding payment hanya untuk appointment yang masih upcoming
     final hasOutstandingPayment =
-        (paymentPlan == 'deposit' && paymentStatus != 'paid') ||
-        (amountDue > 0 && paymentStatus != 'paid');
+        !isDepositForfeited &&
+        appointmentStatus != 'expired' &&
+        ((paymentPlan == 'deposit' && paymentStatus != 'paid') ||
+            (amountDue > 0 && paymentStatus != 'paid'));
+
     final reminderBody = t(
       context,
       'appointmentReminderBody',
     ).replaceFirst('{time}', time);
+
     return {
       'appointment_id': row['id']?.toString() ?? '',
       'title': isReminder
@@ -372,6 +395,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ? t(context, 'paymentSuccessTitle')
           : isRescheduled
           ? t(context, 'notificationScheduleUpdatedTitle')
+          : isDepositForfeited
+          ? t(context, 'depositForfeitedTitle')
+          : isExpiredPaidNoShow
+          ? t(context, 'expiredAppointmentTitle')
           : hasOutstandingPayment
           ? t(context, 'paymentPendingNotificationTitle')
           : t(context, 'notificationReservationTitle'),
@@ -388,6 +415,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 )
           : isRescheduled
           ? '${t(context, 'notificationScheduleUpdatedBody')} ${_formatDateTime(date, time)}'
+          : isDepositForfeited
+          ? t(context, 'depositForfeitedBody')
+          : isExpiredPaidNoShow
+          ? t(context, 'expiredAppointmentBody')
           : hasOutstandingPayment
           ? '${t(context, 'paymentPendingNotificationBody')} ${_formatDateTime(date, time)}'
           : t(context, 'notificationReservationBody')
@@ -406,17 +437,24 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ? Icons.check_circle_rounded
           : isRescheduled
           ? Icons.edit_calendar_rounded
+          : isDepositForfeited
+          ? Icons.money_off_rounded
+          : isExpiredPaidNoShow
+          ? Icons.event_busy_rounded
           : hasOutstandingPayment
           ? Icons.account_balance_wallet_rounded
           : Icons.calendar_month_rounded,
       'color': isPaymentCompleted || isRescheduled
           ? _c500
+          : isDepositForfeited || isExpiredPaidNoShow
+          ? const Color(0xFFD94F45)
           : hasOutstandingPayment
           ? const Color(0xFFD94F45)
           : _c500,
       'notification_key':
           '${row['notification_type'] ?? 'appointment'}:${row['id'] ?? ''}:${row['created_at'] ?? ''}',
-      if (hasOutstandingPayment) 'appointment': row,
+      // DP Hangus — tap buka detail (bukan payment)
+      if (hasOutstandingPayment && !isDepositForfeited) 'appointment': row,
     };
   }
 
@@ -466,7 +504,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
       paymentStatus: row['payment_status']?.toString() ?? 'pending',
       paymentPlan: row['payment_plan']?.toString() ?? 'deposit',
       amountDue: int.tryParse(row['amount_due']?.toString() ?? '') ?? 0,
+      bookedForOther: AppointmentItem.bookedForOtherFromRow(row),
       status: AppointmentStatus.mendatang,
+      profilePhotoUrl: _currentUserPhotoUrl,
     );
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SettlePaymentScreen(appointment: item)),
@@ -505,6 +545,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         paymentStatus: row['payment_status']?.toString() ?? 'paid',
         paymentPlan: row['payment_plan']?.toString() ?? 'full',
         amountDue: int.tryParse(row['amount_due']?.toString() ?? '') ?? 0,
+        bookedForOther: AppointmentItem.bookedForOtherFromRow(row),
         status: rawStatus == 'completed'
             ? AppointmentStatus.selesai
             : rawStatus == 'expired'
@@ -512,6 +553,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
             : locallyExpired
             ? AppointmentStatus.batasWaktu
             : AppointmentStatus.mendatang,
+        profilePhotoUrl: _currentUserPhotoUrl,
       );
       await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => AppointmentDetailScreen(item: item)),
@@ -530,6 +572,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     ),
     'icon': Icons.celebration_rounded,
     'color': _c500,
+    'created_at': (_welcomeNotificationCreatedAt ?? DateTime.now()).toIso8601String(),
     'notification_key':
         'welcome:${_welcomeNotificationCreatedAt?.toIso8601String() ?? 'default'}',
   };
@@ -540,96 +583,102 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
     final appointment = notif['appointment'];
     final isPaymentNotification = appointment is Map<String, dynamic>;
-    final cardBorderColor = isPaymentNotification
-        ? const Color(0xFFFFD5D2)
-        : isUnread
-        ? const Color(0xFFD4F5F3)
-        : const Color(0xFFE1E9E8);
-    final iconColor = isUnread ? notif['color'] : _ink3;
-    final iconBackground = isUnread
-        ? notif['color'].withValues(alpha: 0.1)
-        : const Color(0xFFF0F7F7);
+
+    // Resolusi tanggal: pakai relative time dari notif map
+    final dateLabel = notif['time'] as String? ?? '';
+
+    // Warna icon per tipe notifikasi
+    final Color iconBg;
+    final Color iconFg;
+    final IconData icon = notif['icon'] as IconData;
+
+    if (isPaymentNotification) {
+      iconBg = const Color(0xFFFFEDE8);
+      iconFg = const Color(0xFFD94F45);
+    } else {
+      final notifColor = notif['color'] as Color? ?? _c500;
+      iconBg = notifColor.withValues(alpha: 0.12);
+      iconFg = notifColor;
+    }
 
     return GestureDetector(
       onTap: notif['notification_key'] != null
           ? () => _handleNotificationTap(notif)
           : null,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          color: isUnread ? const Color(0xFFF5FBFA) : Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: cardBorderColor),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isUnread
+                ? const Color(0xFFD4F5F3)
+                : const Color(0xFFEDF2F2),
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
-              color: _ink.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
+              color: _ink.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Icon bulat kecil
             Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: iconBackground,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(notif['icon'], color: iconColor, size: 24),
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+              child: Icon(icon, color: iconFg, size: 18),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
+            // Konten
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Title + Tanggal
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Text(
-                          notif['title'],
+                          notif['title'] as String,
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: isUnread
-                                ? FontWeight.w800
-                                : FontWeight.w700,
-                            color: isUnread ? _ink : _ink2,
+                                ? FontWeight.w700
+                                : FontWeight.w600,
+                            color: _ink,
                           ),
                         ),
                       ),
-                      if (isUnread)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(left: 8),
-                          decoration: const BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                          ),
+                      const SizedBox(width: 8),
+                      Text(
+                        dateLabel,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: isUnread ? _c700 : _ink3,
                         ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
+                  // Body
                   Text(
-                    notif['body'],
+                    notif['body'] as String,
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: isUnread ? FontWeight.w500 : FontWeight.w400,
                       color: isUnread ? _ink2 : _ink3,
                       height: 1.4,
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    notif['time'],
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: _ink3,
-                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

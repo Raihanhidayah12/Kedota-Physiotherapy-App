@@ -10,7 +10,6 @@ import '../../services/supabase_auth_service.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
 import 'edit_profile_screen.dart';
-import 'progress_screen.dart';
 import 'settings_screen.dart';
 
 /// Shell utama aplikasi dengan bottom navigation.
@@ -21,7 +20,7 @@ class MainScreen extends StatefulWidget {
     this.initialHistoryFilter = 0,
   });
 
-  /// 0 = Beranda, 1 = Progress, 2 = Janji Temu, 3 = Profil
+  /// 0 = Beranda, 1 = Janji Temu, 2 = Profil
   final int initialIndex;
   final int initialHistoryFilter;
 
@@ -93,10 +92,14 @@ class _MainScreenState extends State<MainScreen> {
     try {
       final expiredTitle = t(context, 'expiredAppointmentTitle');
       final expiredBody = t(context, 'expiredAppointmentBody');
+      final dpForfeitedTitle = t(context, 'depositForfeitedTitle');
+      final dpForfeitedBody = t(context, 'depositForfeitedNotifBody');
       final now = DateTime.now();
       final rowsBeforeExpire = await service.client
           .from('appointments')
-          .select('id, appointment_date, appointment_time, appointment_status')
+          .select(
+            'id, appointment_date, appointment_time, appointment_status, payment_plan, payment_status',
+          )
           .eq('booker_id', user.id)
           .eq('appointment_status', 'upcoming');
       final expiredCandidates = (rowsBeforeExpire as List)
@@ -113,20 +116,47 @@ class _MainScreenState extends State<MainScreen> {
       final prefs = await SharedPreferences.getInstance();
       final notifiedExpired =
           prefs.getStringList('expired_notifications_sent')?.toSet() ?? {};
+      final notifiedDpForfeited =
+          prefs.getStringList('dp_forfeited_notifications_sent')?.toSet() ?? {};
       for (final row in expiredCandidates) {
         final id = row['id']?.toString() ?? '';
-        if (id.isEmpty || notifiedExpired.contains(id)) continue;
-        await NotificationService().showNotification(
-          id: DateTime.now().millisecondsSinceEpoch.remainder(2147483647),
-          title: expiredTitle,
-          body: expiredBody,
-          payload: 'expired:$id',
-        );
-        notifiedExpired.add(id);
+        if (id.isEmpty) continue;
+
+        final isDepositForfeited =
+            row['payment_plan']?.toString() == 'deposit' &&
+            row['payment_status']?.toString() != 'paid';
+
+        if (isDepositForfeited) {
+          // Kirim notif DP Hangus — payload dp_forfeited: buka detail, bukan payment
+          if (!notifiedDpForfeited.contains(id)) {
+            await NotificationService().showNotification(
+              id: DateTime.now().millisecondsSinceEpoch.remainder(2147483647),
+              title: dpForfeitedTitle,
+              body: dpForfeitedBody,
+              payload: 'dp_forfeited:$id',
+            );
+            notifiedDpForfeited.add(id);
+          }
+        } else {
+          // Notif expired biasa
+          if (!notifiedExpired.contains(id)) {
+            await NotificationService().showNotification(
+              id: DateTime.now().millisecondsSinceEpoch.remainder(2147483647),
+              title: expiredTitle,
+              body: expiredBody,
+              payload: 'expired:$id',
+            );
+            notifiedExpired.add(id);
+          }
+        }
       }
       await prefs.setStringList(
         'expired_notifications_sent',
         notifiedExpired.toList(),
+      );
+      await prefs.setStringList(
+        'dp_forfeited_notifications_sent',
+        notifiedDpForfeited.toList(),
       );
       await NotificationService().cancelAllAppointmentReminders();
       final rows = await service.client
@@ -174,7 +204,6 @@ class _MainScreenState extends State<MainScreen> {
 
   List<({IconData icon, String labelKey})> get _tabs => [
     (icon: Icons.home_rounded, labelKey: 'tabBeranda'),
-    (icon: Icons.bar_chart_rounded, labelKey: 'tabProgress'),
     (icon: Icons.event_note_rounded, labelKey: 'tabJanjiTemu'),
     (icon: Icons.person_rounded, labelKey: 'tabProfil'),
   ];
@@ -314,8 +343,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildCurrentTab() {
     final child = switch (_currentIndex) {
       0 => const HomeBody(),
-      1 => const ProgressBody(),
-      2 => HistoryBody(initialFilterIndex: widget.initialHistoryFilter),
+      1 => HistoryBody(initialFilterIndex: widget.initialHistoryFilter),
       _ => const SettingsBody(),
     };
     return _AnimatedTab(key: ValueKey(_currentIndex), child: child);

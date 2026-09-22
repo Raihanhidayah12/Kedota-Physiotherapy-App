@@ -99,6 +99,24 @@ class _GoogleProfileCompletionScreenState
     });
   }
 
+  Widget _buildIndonesianFlag() {
+    return ClipOval(
+      child: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
+        ),
+        child: Column(
+          children: [
+            Expanded(child: Container(color: const Color(0xFFCE1126))),
+            Expanded(child: Container(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _parseTypedDate(String input) {
     final parts = input.split('/');
     if (parts.length == 3 &&
@@ -158,6 +176,7 @@ class _GoogleProfileCompletionScreenState
         initialDate: _selectedBirthDate ?? DateTime(2000, 1, 1),
         firstDate: DateTime(1920),
         lastDate: now,
+        restrictToFutureMonths: false,
       ),
     );
 
@@ -306,7 +325,7 @@ class _GoogleProfileCompletionScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F9),
+      backgroundColor: const Color(0xFFDCF4F1),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -526,25 +545,48 @@ class _GoogleProfileCompletionScreenState
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
                                 ),
-                                child: TextField(
-                                  controller: _phoneController,
-                                  keyboardType: TextInputType.phone,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1E293B),
-                                  ),
-                                  decoration: const InputDecoration(
-                                    hintText: '08XX XXXX XXXX',
-                                    hintStyle: TextStyle(
-                                      color: Color(0xFF94A3B8),
-                                      fontSize: 14,
+                                child: Row(
+                                  children: [
+                                    _buildIndonesianFlag(),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      '+62',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                      ),
                                     ),
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      vertical: 14,
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      width: 1,
+                                      height: 20,
+                                      color: const Color(0xFFE2E8F0),
                                     ),
-                                  ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _phoneController,
+                                        keyboardType: TextInputType.phone,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1E293B),
+                                        ),
+                                        decoration: const InputDecoration(
+                                          hintText: '08XX XXXX XXXX',
+                                          hintStyle: TextStyle(
+                                            color: Color(0xFF94A3B8),
+                                            fontSize: 14,
+                                          ),
+                                          border: InputBorder.none,
+                                          contentPadding: EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(height: 16),

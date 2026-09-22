@@ -73,7 +73,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   late final Animation<double> _fade;
   late final Animation<Offset> _slide;
 
-  static const _genders = ['Laki-laki', 'Perempuan'];
+  List<String> get _genders => [
+    t(context, 'genderMaleValue'),
+    t(context, 'genderFemaleValue'),
+  ];
 
   @override
   void initState() {
@@ -532,6 +535,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         initialDate: _birthDate ?? DateTime(2000),
         firstDate: DateTime(1920),
         lastDate: DateTime.now(),
+        restrictToFutureMonths: false,
       ),
     );
     if (picked != null) {
@@ -1077,7 +1081,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        g == 'Laki-laki'
+                        g == t(context, 'genderMaleValue')
                             ? t(context, 'male')
                             : t(context, 'female'),
                         style: TextStyle(

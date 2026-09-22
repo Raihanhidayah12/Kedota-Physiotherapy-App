@@ -77,8 +77,23 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
       _isBatasWaktu &&
       widget.item.paymentPlan == 'deposit' &&
       widget.item.paymentStatus != 'paid';
+
+  // Deposit juga dianggap hangus kalau scheduled time sudah lewat 15 menit
+  // meskipun status DB belum terupdate ke 'expired' (race condition)
+  bool get _isLocallyExpired {
+    final scheduled = _scheduledDateTime;
+    if (scheduled == null) return false;
+    return !scheduled.add(const Duration(minutes: 15)).isAfter(DateTime.now());
+  }
+
+  bool get _isEffectivelyDepositForfeited =>
+      _isDepositForfeited ||
+      (_isLocallyExpired &&
+          widget.item.paymentPlan == 'deposit' &&
+          widget.item.paymentStatus != 'paid');
+
   bool get _hasOutstandingPayment =>
-      !_isDepositForfeited &&
+      !_isEffectivelyDepositForfeited &&
       widget.item.amountDue > 0 &&
       (widget.item.paymentStatus != 'paid' ||
           widget.item.paymentPlan == 'deposit');
@@ -155,7 +170,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Banner batas waktu ───────────────────────────────
-                if (_isBatasWaktu && !_isDepositForfeited) ...[
+                if (_isBatasWaktu && !_isEffectivelyDepositForfeited) ...[
                   _buildExpiredBanner(),
                   const SizedBox(height: 20),
                 ],
@@ -166,11 +181,15 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
                 _sectionLabel(t(context, 'detailSection')),
                 const SizedBox(height: 12),
                 _buildDetailCard(),
+                if (_isSelesai) ...[
+                  const SizedBox(height: 12),
+                  _buildRecommendationBanner(),
+                ],
                 if (_isMendatang && widget.item.paymentPlan == 'deposit') ...[
                   const SizedBox(height: 12),
                   _buildDepositRescheduleNotice(),
                 ],
-                if (_isDepositForfeited) ...[
+                if (_isEffectivelyDepositForfeited) ...[
                   const SizedBox(height: 12),
                   _buildDepositForfeitedNotice(),
                 ],
@@ -378,7 +397,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _avatar(52),
+            _patientAvatar(52),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -388,53 +407,28 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
                     widget.item.patientName.isEmpty
                         ? t(context, 'patientName')
                         : widget.item.patientName,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: _c700,
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  if (!_isSelesai) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.sell_outlined, size: 15, color: _c500),
-                        const SizedBox(width: 6),
-                        Text(
-                          widget.item.bookedForOther
-                              ? t(context, 'reservationForOther')
-                              : t(context, 'reservationForSelf'),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _ink2,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-                  ],
+                  const SizedBox(height: 4),
                   GestureDetector(
                     onTap: () {
                       Clipboard.setData(
-                        ClipboardData(
-                          text: widget.item.medicalCode.isEmpty
-                              ? widget.item.displayBookingCode
-                              : widget.item.medicalCode,
-                        ),
+                        ClipboardData(text: widget.item.displayBookingCode),
                       );
                       showAppSnackBar(
                         context,
-                        t(context, 'emrCopied'),
+                        t(context, 'bookingCodeCopied'),
                         type: AppSnackBarType.success,
                         icon: Icons.copy_rounded,
                       );
                     },
                     child: Text(
-                      widget.item.medicalCode.isEmpty
-                          ? widget.item.displayBookingCode
-                          : widget.item.medicalCode,
-                      style: TextStyle(
+                      widget.item.displayBookingCode,
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: _ink2,
@@ -447,59 +441,39 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
             _statusBadge(),
           ],
         ),
-        if (!_isSelesai) const SizedBox(height: 12),
-        if (!_isSelesai)
-          GestureDetector(
-            onTap: () {
-              Clipboard.setData(
-                ClipboardData(text: widget.item.displayBookingCode),
-              );
-              showAppSnackBar(
-                context,
-                t(context, 'bookingCodeCopied'),
-                type: AppSnackBarType.success,
-                icon: Icons.copy_rounded,
-              );
-            },
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.confirmation_number_outlined,
-                  size: 16,
-                  color: _c700,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${t(context, 'bookingCode')}: ',
-                  style: const TextStyle(fontSize: 11, color: _ink3),
-                ),
-                Text(
-                  widget.item.displayBookingCode,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: _c700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 14),
+        if (!_isSelesai) const SizedBox(height: 8),
         const Divider(height: 1, color: Color(0xFFF0F5F5)),
         const SizedBox(height: 14),
 
         // date + time (selesai: simpel tanpa alamat & keluhan)
         if (_isSelesai) ...[
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _infoChip(Icons.calendar_month_outlined, _formattedDisplayDate),
-              const SizedBox(width: 8),
-              Container(width: 1, height: 16, color: const Color(0xFFE0EAEA)),
-              const SizedBox(width: 8),
               _infoChip(Icons.access_time_rounded, _displayTime),
             ],
           ),
         ] else ...[
+          // booking type
+          if (!_isSelesai) ...[
+            Row(
+              children: [
+                const Icon(Icons.sell_outlined, size: 16, color: _c500),
+                const SizedBox(width: 8),
+                Text(
+                  widget.item.bookedForOther
+                      ? t(context, 'reservationForOther')
+                      : t(context, 'reservationForSelf'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _ink2,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           // address
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,13 +490,27 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
           ),
           if (_isClinic) ...[
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _openClinicMap,
-                icon: const Icon(Icons.directions_rounded, size: 16),
-                label: Text(t(context, 'openClinicMap')),
-                style: TextButton.styleFrom(foregroundColor: _c700),
+            GestureDetector(
+              onTap: _openClinicMap,
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.location_searching_rounded,
+                    size: 16,
+                    color: _c500,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    t(context, 'openClinicMap'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: _c700,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                      decorationColor: _c700,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -564,14 +552,23 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
           const SizedBox(height: 14),
 
           if (_hasOutstandingPayment) ...[
-            _rowLabel(
-              Icons.receipt_long_outlined,
-              t(context, 'remainingPayment'),
-            ),
-            const SizedBox(height: 10),
-            _textBox(
-              '${t(context, 'remainingPayment')}: ${_formatRupiah(widget.item.amountDue)}',
-              isWarning: true,
+            Row(
+              children: [
+                const Icon(Icons.receipt_long_outlined, size: 16, color: _c500),
+                const SizedBox(width: 8),
+                Text(
+                  '${t(context, 'remainingPayment')} : ',
+                  style: const TextStyle(fontSize: 12, color: _ink2),
+                ),
+                Text(
+                  _formatRupiah(widget.item.amountDue),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _red,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 14),
           ],
@@ -579,7 +576,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
           // Keluhan
           _rowLabel(Icons.description_outlined, t(context, 'patientComplaint')),
           const SizedBox(height: 10),
-          _textBox(
+          _complaintBox(
             widget.item.complaint.isEmpty
                 ? t(context, 'patientComplaintBody')
                 : widget.item.complaint,
@@ -676,7 +673,6 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
 
   String _calendarDate(DateTime dateTime) {
     String twoDigits(int value) => value.toString().padLeft(2, '0');
-
     return '${dateTime.year}${twoDigits(dateTime.month)}${twoDigits(dateTime.day)}'
         'T${twoDigits(dateTime.hour)}${twoDigits(dateTime.minute)}${twoDigits(dateTime.second)}';
   }
@@ -747,7 +743,9 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    t(context, 'therapistLicense'),
+                    widget.item.therapistSipf?.isNotEmpty == true
+                        ? widget.item.therapistSipf!
+                        : t(context, 'therapistLicense'),
                     style: const TextStyle(fontSize: 11, color: _ink3),
                   ),
                 ],
@@ -796,7 +794,11 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
         if (_isMendatang)
           _placeholderChip(t(context, 'notesAfterTherapistInput')),
         if (_isSelesai)
-          _textBox(t(context, 'clinicalNoteCompleted'), minHeight: 80),
+          _clinicalNoteBox(
+            widget.item.clinicalNote?.isNotEmpty == true
+                ? widget.item.clinicalNote!
+                : t(context, 'clinicalNoteCompleted'),
+          ),
         if (_isBatasWaktu)
           _textBox(
             t(context, 'clinicalNoteExpired'),
@@ -815,12 +817,6 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
           const SizedBox(height: 16),
           _buildAssessmentSection(),
         ],
-
-        // ── Rekomendasi (selesai only) ────────────────────────────
-        if (_isSelesai) ...[
-          const SizedBox(height: 16),
-          _buildRecommendationBanner(),
-        ],
       ],
     ),
   );
@@ -833,7 +829,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
           Expanded(
             child: _rowLabel(
               Icons.show_chart_rounded,
-              t(context, 'quantitativeAssessmentScore'),
+              t(context, 'progressMonitoringIndicator'),
             ),
           ),
           if (_isSelesai)
@@ -846,10 +842,10 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.replay_rounded, size: 12, color: _c700),
+                  const Icon(Icons.radio_button_checked_rounded, size: 12, color: _c700),
                   const SizedBox(width: 4),
                   Text(
-                    t(context, 'sessionCount'),
+                    '${t(context, 'sessionUnit')} ${widget.item.sessionCount}',
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -865,85 +861,112 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
       if (_isBatasWaktu)
         _placeholderChip(
           t(context, 'notesAfterTherapistInput'),
-          isWarning: true,
         ),
       if (_isSelesai) _buildScoreGrid(),
     ],
   );
 
   // ── Score grid 2×2 ───────────────────────────────────────────────────────
-  Widget _buildScoreGrid() => Container(
-    decoration: BoxDecoration(
-      color: _bg,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFFE0EAEA)),
-    ),
-    child: Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _scoreCell(
-                label: t(context, 'painScale'),
-                value: '3',
-                unit: t(context, 'scoreUnitTen'),
-                trend: _improving('70%'),
-                trendUp: false,
+  Widget _buildScoreGrid() {
+    final vas = widget.item.vasScore;
+    final rom = widget.item.romScore;
+    final mmt = widget.item.mmtScore;
+    final odi = widget.item.odiScore;
+
+    // If all scores are null, show a placeholder instead of an empty grid
+    if (vas == null && rom == null && mmt == null && odi == null) {
+      return _placeholderChip(t(context, 'notesAfterTherapistInput'));
+    }
+
+    // VAS: lower is better (pain reduced)
+    // ROM: higher is better (range of motion improved)
+    // MMT: higher is better (muscle strength improved)
+    // ODI: lower is better (disability index reduced)
+
+    String vasTrend() {
+      if (vas == null) return '–';
+      final pct = ((10 - vas) / 10.0 * 100).round();
+      return _improving('$pct%');
+    }
+
+    String romTrend() {
+      if (rom == null) return '–';
+      final pct = (rom / 120.0 * 100).toStringAsFixed(2);
+      return _improving('$pct%');
+    }
+
+    String mmtTrend() {
+      if (mmt == null) return '–';
+      final pct = (mmt / 5.0 * 100).round();
+      return _improving('$pct%');
+    }
+
+    String odiTrend() {
+      if (odi == null) return '–';
+      final pct = ((50 - odi) / 50.0 * 100).round();
+      return _improving('$pct%');
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE0EAEA)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _scoreCell(
+                  label: t(context, 'painScale'),
+                  trend: vasTrend(),
+                  trendUp: vas != null ? vas <= 5 : true,
+                ),
               ),
-            ),
-            Container(width: 1, color: const Color(0xFFE0EAEA)),
-            Expanded(
-              child: _scoreCell(
-                label: t(context, 'romLabel'),
-                value: '115°',
-                unit: t(
-                  context,
-                  'scoreUnitOneTwenty',
-                ).replaceFirst('120', '120°'),
-                trend: _improving('95.83%'),
-                trendUp: true,
-                hasInfo: true,
+              Container(width: 1, color: const Color(0xFFE0EAEA)),
+              Expanded(
+                child: _scoreCell(
+                  label: t(context, 'romLabel'),
+                  trend: romTrend(),
+                  trendUp: true,
+                  hasInfo: true,
+                ),
               ),
-            ),
-          ],
-        ),
-        Divider(height: 1, color: const Color(0xFFE0EAEA)),
-        Row(
-          children: [
-            Expanded(
-              child: _scoreCell(
-                label: t(context, 'muscleStrength'),
-                value: '4',
-                unit: t(context, 'scoreUnitFive'),
-                trend: _improving('80%'),
-                trendUp: true,
+            ],
+          ),
+          const Divider(height: 1, color: Color(0xFFE0EAEA)),
+          Row(
+            children: [
+              Expanded(
+                child: _scoreCell(
+                  label: t(context, 'muscleStrength'),
+                  trend: mmtTrend(),
+                  trendUp: true,
+                ),
               ),
-            ),
-            Container(width: 1, color: const Color(0xFFE0EAEA)),
-            Expanded(
-              child: _scoreCell(
-                label: t(context, 'odiLabel'),
-                value: '18',
-                unit: t(context, 'scoreUnitFifty'),
-                trend: _improving('64%'),
-                trendUp: false,
+              Container(width: 1, color: const Color(0xFFE0EAEA)),
+              Expanded(
+                child: _scoreCell(
+                  label: t(context, 'odiLabel'),
+                  trend: odiTrend(),
+                  trendUp: odi != null ? odi <= 25 : false,
+                ),
               ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _scoreCell({
     required String label,
-    required String value,
-    required String unit,
     required String trend,
     required bool trendUp,
     bool hasInfo = false,
   }) => Padding(
-    padding: const EdgeInsets.all(14),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -952,7 +975,11 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(fontSize: 11, color: _ink3),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: _ink3,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             if (hasInfo)
@@ -961,41 +988,19 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
         ),
         const SizedBox(height: 6),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: _ink,
-              ),
-            ),
-            const SizedBox(width: 3),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Text(
-                unit,
-                style: const TextStyle(fontSize: 12, color: _ink3),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Row(
           children: [
             Icon(
               trendUp ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-              size: 13,
+              size: 14,
               color: trendUp ? _c500 : const Color(0xFFD4920A),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 5),
             Text(
               trend,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 color: trendUp ? _c500 : const Color(0xFFD4920A),
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -1008,43 +1013,47 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
       t(context, 'improvingPercent').replaceFirst('%s', percent);
 
   // ── Recommendation banner ─────────────────────────────────────────────────
-  Widget _buildRecommendationBanner() => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: const Color(0xFFFFF8EC),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFFFFDC82)),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFCC34).withValues(alpha: 0.25),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.lightbulb_rounded,
-            color: Color(0xFFD4920A),
-            size: 18,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            '"${t(context, 'recommendationBody')}"',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF7A5800),
-              height: 1.6,
-              fontStyle: FontStyle.italic,
+  Widget _buildRecommendationBanner() {
+    final rec = widget.item.therapistRecommendation;
+    if (rec == null || rec.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8EC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFFDC82)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFCC34).withValues(alpha: 0.25),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.lightbulb_rounded,
+              color: Color(0xFFD4920A),
+              size: 18,
             ),
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '"$rec"',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF7A5800),
+                height: 1.6,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
   Widget? _buildBottomBar() {
@@ -1082,7 +1091,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
       );
     }
     if (_isBatasWaktu) {
-      if (_isDepositForfeited) return null;
+      if (_isEffectivelyDepositForfeited) return null;
       return SizedBox(
         height: 76,
         child: SafeArea(
@@ -1204,7 +1213,39 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
     child: Padding(padding: const EdgeInsets.all(12), child: child),
   );
 
-  Widget _avatar(double size) => Container(
+  Widget _avatar(double size) {
+    final photoUrl = widget.item.therapistPhotoUrl;
+    if (photoUrl != null && photoUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          photoUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stack) => _avatarPlaceholder(size),
+        ),
+      );
+    }
+    return _avatarPlaceholder(size);
+  }
+
+  Widget _patientAvatar(double size) {
+    final photoUrl = widget.item.profilePhotoUrl;
+    if (photoUrl != null && photoUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          photoUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stack) => _avatarPlaceholder(size),
+        ),
+      );
+    }
+    return _avatarPlaceholder(size);
+  }
+
+  Widget _avatarPlaceholder(double size) => Container(
     width: size,
     height: size,
     decoration: const BoxDecoration(
@@ -1259,6 +1300,182 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
     ),
   );
 
+  /// Keluhan card — terpotong 2 baris, tap buka modal full text.
+  Widget _complaintBox(String text) {
+    return GestureDetector(
+      onTap: () => _showComplaintSheet(text),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE0EAEA)),
+        ),
+        child: Text(
+          text,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 12,
+            color: _ink2,
+            height: 1.6,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Catatan Klinis — terpotong 2 baris, tap buka modal full text.
+  Widget _clinicalNoteBox(String text) {
+    return GestureDetector(
+      onTap: () => _showClinicalNoteSheet(text),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE0EAEA)),
+        ),
+        child: Text(
+          text,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 12,
+            color: _ink2,
+            height: 1.6,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showClinicalNoteSheet(String text) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (_) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 80),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.description_outlined, size: 18, color: _c500),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      t(context, 'clinicalNotesAfterSession'),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Icon(Icons.close_rounded, color: _ink3, size: 22),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: Color(0xFFF0F5F5)),
+              const SizedBox(height: 14),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.40,
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    text,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: _ink2,
+                      height: 1.7,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showComplaintSheet(String text) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (_) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 80),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  const Icon(Icons.description_outlined, size: 18, color: _c500),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      t(context, 'patientComplaint'),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Icon(Icons.close_rounded, color: _ink3, size: 22),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: Color(0xFFF0F5F5)),
+              const SizedBox(height: 14),
+              // Teks keluhan — scrollable kalau sangat panjang
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.35,
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    text,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: _ink2,
+                      height: 1.7,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _placeholderChip(String text, {bool isWarning = false}) => Container(
     width: double.infinity,
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1300,7 +1517,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen>
   );
 
   Widget _statusBadge() {
-    if (_isDepositForfeited) {
+    if (_isEffectivelyDepositForfeited) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(

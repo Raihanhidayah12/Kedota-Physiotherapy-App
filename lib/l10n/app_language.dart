@@ -103,11 +103,11 @@ const _translations = {
     'welcomeToSignIn': 'Welcome To\n',
     'physiotherapyApp': ' Physiotherapy App',
     'signInSubtitle':
-        'A calm space to continue your healing journey with Kedota.',
-    'phoneNumber': 'Phone Number',
+        'Please sign in to your account or register now to start your journey with us.',
+    'phoneNumber': 'Enter Phone No.',
     'enterPin': 'Enter 6-digit PIN',
     'continuePhone': 'Continue with Phone Number',
-    'orContinueWith': 'or continue with',
+    'orContinueWith': 'or sign in with',
     'continueGoogle': 'Google',
     'continueApple': 'Apple',
     'dontHaveAccount': "Don't have an account? ",
@@ -163,6 +163,9 @@ const _translations = {
     'notificationPermissionBody':
         'Notification permission was denied. Open phone Settings to enable it manually.',
     'painScore': 'Pain Score',
+    'painScaleDropdown': 'Pain Scale',
+    'painLevel': 'Pain Level',
+    'session': 'Session',
     'downloadQr': 'Download QR',
     'retry': 'Try Again',
     'homeVisitAddress': 'Home visit',
@@ -255,7 +258,7 @@ const _translations = {
     'wrongPinOrSignInFailed': 'Wrong PIN or Sign in failed.',
     'signInFailedTitle': 'Sign-in Failed',
     'appleSignInFailed': 'Apple Sign-In failed',
-    'enterPinDesc': 'Please enter your 6-digit PIN to sign in.',
+    'enterPinDesc': 'Enter your 6-digit PIN.',
     'signedInSuccessfully': 'Signed in successfully',
     'noInternetTitle': 'No Internet Connection',
     'noInternetSubtitle': 'Please check your internet connection',
@@ -358,6 +361,8 @@ const _translations = {
     'promoWhatsAppTag': 'FREE SERVICE',
     'promoWhatsAppTitle': 'Free Consultation via\nWhatsApp',
     'promoWhatsAppSubtitle': 'All Branches',
+    'promoTickerPackage': 'Promo 2 Sessions Only 185,000',
+    'promoTickerConsultation': 'Free Consultation via WhatsApp',
     'promoClaim': 'Claim',
     'klinik': 'Clinic',
     'klinikDesc': 'Visit our physiotherapy clinic',
@@ -480,6 +485,12 @@ const _translations = {
     'reservationTherapistGender': 'Therapist Gender Preference',
     'reservationAnyGender': 'Any',
     'reservationFemale': 'Female',
+    'reservationPickPlace': 'Choose Location',
+    'reservationPickService': 'Choose Service',
+    'reservationPickServiceFirst': 'Choose a location first',
+    'reservationPickDateFirst': 'Choose a service first',
+    'reservationPickTimeFirst': 'Choose a date first',
+    'reservationClinicLocation': 'Clinic Location',
     'reservationMale': 'Male',
     'reservationNext': 'Continue',
     'reservationBack': 'Back',
@@ -653,6 +664,8 @@ const _translations = {
     'depositForfeitedTitle': 'Deposit Forfeited',
     'depositForfeitedBody':
         'The deposit you paid has been forfeited because the patient was not present for the scheduled session.',
+    'depositForfeitedNotifBody':
+        'Your deposit for the appointment has been forfeited due to no-show. Tap to view details.',
     'rescheduleDepositNotice':
         'Rescheduling is available only 24 hours before the appointment. If you do not attend, the deposit will be forfeited.',
     'reschedule24HourError':
@@ -677,7 +690,6 @@ const _translations = {
 
     // ── Tab navigation ───────────────────────────────────────────────────
     'tabBeranda': 'Home',
-    'tabProgress': 'Progress',
     'tabJanjiTemu': 'Appointment',
     'tabProfil': 'Profile',
 
@@ -764,43 +776,7 @@ const _translations = {
     'faqAnswer4':
         'The reservation will be marked No-show and the down payment that has been paid will be forfeited.',
 
-    // ── Progress screen ──────────────────────────────────────────────────
-    'progressTitle': 'Progress',
-    'progressSubtitle': 'Track your rehabilitation progress',
-    'progressTotalSessions': 'Total Sessions',
-    'progressPainScore': 'Pain Score',
-    'progressAverage': 'Average',
-    'progressWeekThis': 'This Week',
-    'progressWeekLast': 'Last Week',
-    'progressWeek2Ago': '2 Weeks Ago',
-    'progressPainChartTitle': 'Pain Score',
-    'progressPainChartDesc': 'Scale 0–10 (lower is better)',
-    'progressPainTrend': '−4.0 pts',
-    'progressStatCompleted': 'Completed Sessions',
-    'progressStatUpcoming': 'Upcoming Sessions',
-    'progressStatSatisfaction': 'Satisfaction',
-    'progressStatRemaining': 'Sessions Left',
-    'progressPackageTitle': 'Therapy Package Progress',
-    'progressSessionCount': '{completed} of {total} sessions completed',
-    'progressSessionsRemaining': '{count} sessions remaining',
-    'progressChartTitle': 'Session Completion',
-    'progressChartDesc': 'Your completed sessions in this therapy package',
-    'progressChartCompleted': 'Completed',
-    'progressChartRemaining': 'Remaining',
-    'progressNoSessions': 'No therapy sessions yet.',
     'rescheduleSave': 'Save New Schedule',
-    'progressSessionHistoryTitle': 'Session History',
-    'progressSessionLabel': 'Session',
-    'progressSessionDone': 'Done',
-    'progressServiceHomeCare': 'Home Care',
-    'progressServiceKlinik': 'Clinic',
-    'progressDayMon': 'Mon',
-    'progressDayTue': 'Tue',
-    'progressDayWed': 'Wed',
-    'progressDayThu': 'Thu',
-    'progressDayFri': 'Fri',
-    'progressDaySat': 'Sat',
-    'progressDaySun': 'Sun',
 
     'termsHeading': 'Terms and Conditions',
     'lastUpdated': 'Last updated: {date}',
@@ -894,13 +870,41 @@ Device information, application activity logs, and usage data for security and s
     'contact': 'Contact',
     'whatsapp': 'WhatsApp',
     'whatsappOpenFailed': 'Unable to open WhatsApp.',
+
+    // ── Hardcoded string fixes ──────────────────────────────────────────
+    // sign_in_screen
+    'welcomeAt': 'Welcome to',
+    'phoneHint': '08XX XXXX XXXX',
+    'signInWithGoogle': 'Google',
+    'signInWithApple': 'Apple',
+    'countryCode': '+62',
+    // reservation_flow_screen
+    'paymentDeadlineReminder':
+        'Complete your payment before the specified deadline.',
+    'stepOf': '{current} / {total}',
+    'homeCareCity': 'Home Care {city}',
+    // settle_payment_screen
+    'currencyPrefix': 'Rp',
+    'paymentErrorGeneric': 'Payment failed. Please try again.',
+    // history_screen
+    'defaultTherapistName': 'Kedota Therapist',
+    'defaultServiceType': 'Home Care',
+    'defaultTime': '- WIB',
+    // home_screen therapist specializations
+    'specGeneralPhysio': 'Home Care · General Physiotherapy',
+    'specPostOpRehab': 'Clinic · Post-Surgery Rehabilitation',
+    'specSportsPhysio': 'Home Care · Sports Physiotherapy',
+    'specRelaxation': 'Wellness · Relaxation Therapy',
+    // edit_profile_screen gender constants
+    'genderMaleValue': 'Laki-laki',
+    'genderFemaleValue': 'Perempuan',
   },
   AppLanguage.id: {
     'language': 'Bahasa',
     'skip': 'Lewati',
     'back': 'Kembali',
     'next': 'Lanjut',
-    'getStarted': 'Mulai',
+    'getStarted': 'Masuk',
     'welcomeTo': 'Pesan Jadwal',
     'kedotaPhysiotherapy': 'Tanpa Ribet!',
     'onboardingWelcomeDesc':
@@ -919,11 +923,11 @@ Device information, application activity logs, and usage data for security and s
     'welcomeToSignIn': 'Selamat datang di\nAplikasi ',
     'physiotherapyApp': ' Physiotherapy',
     'signInSubtitle':
-        'Ruang yang tenang untuk melanjutkan perjalanan pemulihan Anda bersama Kedota.',
-    'phoneNumber': 'Nomor Telepon',
+        'Silakan masuk ke akun Anda atau daftar sekarang untuk memulai perjalanan bersama kami.',
+    'phoneNumber': 'Masukkan No. Telp',
     'enterPin': 'Masukkan PIN 6 digit',
     'continuePhone': 'Lanjut dengan Nomor Telepon',
-    'orContinueWith': 'atau lanjut dengan',
+    'orContinueWith': 'atau masuk dengan',
     'continueGoogle': 'Google',
     'continueApple': 'Apple',
     'dontHaveAccount': 'Belum punya akun? ',
@@ -977,15 +981,20 @@ Device information, application activity logs, and usage data for security and s
     'notificationPermissionBody':
         'Izin notifikasi ditolak. Buka Pengaturan HP untuk mengaktifkannya secara manual.',
     'painScore': 'Skor Nyeri',
+    'painScaleDropdown': 'Skala Nyeri',
+    'painLevel': 'Tingkat Kesakitan',
+    'session': 'Sesi',
     'downloadQr': 'Unduh QR',
     'retry': 'Coba Lagi',
     'homeVisitAddress': 'Kunjungan ke Rumah',
-    'onboardingTitle1': 'Pesan Jadwal Tanpa Ribet!',
-    'onboardingDesc1': 'Atur Jadwal Konsultasi dengan\nGampang dan Efisien!',
-    'onboardingTitle2': 'Pantau Kesehatan Lebih Mudah',
-    'onboardingDesc2': 'Monitor Perkembangan Vital-mu\nSecara Real-time',
-    'onboardingTitle3': 'Perawatan Medis Di Rumah Anda',
-    'onboardingDesc3': 'Atur Jadwal Untuk Melakukan\nPerawatan Medis Di Rumah',
+    'onboardingTitle1': 'Optimalkan Pemulihan Gerakmu',
+    'onboardingDesc1':
+        'Aplikasi Kedota bantu pulihkan fungsi\ngerakmu dengan maksimal.',
+    'onboardingTitle2': 'Progres yang Terukur!',
+    'onboardingDesc2':
+        'Kami pantau progres terapimu dan\nberikan program pemulihan yang tepat.',
+    'onboardingTitle3': 'Buat Janji Temu!',
+    'onboardingDesc3': 'Atur Janji Temu dengan Gampang dan\nEfisien!',
     'notificationTherapyTitle': 'Jadwal Fisioterapi Besok',
     'notificationTherapyBody':
         'Jangan lupa jadwal sesi terapi Anda besok jam 10:00 WIB di Klinik Pusat.',
@@ -1073,7 +1082,7 @@ Device information, application activity logs, and usage data for security and s
     'wrongPinOrSignInFailed': 'PIN salah atau gagal masuk.',
     'signInFailedTitle': 'Gagal Masuk',
     'appleSignInFailed': 'Apple Sign-In gagal',
-    'enterPinDesc': 'Silakan masukkan PIN 6 digit Anda untuk masuk.',
+    'enterPinDesc': 'Masukkan 6 digit PIN Anda.',
     'signedInSuccessfully': 'Berhasil masuk',
     'noInternetTitle': 'Tidak Ada Koneksi Internet',
     'noInternetSubtitle': 'Tolong Periksa Koneksi Internet Anda',
@@ -1182,6 +1191,8 @@ Device information, application activity logs, and usage data for security and s
     'promoWhatsAppTag': 'LAYANAN GRATIS',
     'promoWhatsAppTitle': 'Konsultasi Gratis via\nWhatsApp',
     'promoWhatsAppSubtitle': 'Semua Cabang',
+    'promoTickerPackage': 'Promo 2x Sesi Hanya 185.000',
+    'promoTickerConsultation': 'Konsultasi Gratis via WhatsApp',
     'promoClaim': 'Klaim',
     'klinik': 'Klinik',
     'klinikDesc': 'Kunjungi klinik fisioterapi kami',
@@ -1301,6 +1312,12 @@ Device information, application activity logs, and usage data for security and s
     'reservationTherapistGender': 'Preferensi Jenis Kelamin Terapis',
     'reservationAnyGender': 'Bebas',
     'reservationFemale': 'Perempuan',
+    'reservationPickPlace': 'Pilih Lokasi',
+    'reservationPickService': 'Pilih Layanan',
+    'reservationPickServiceFirst': 'Pilih lokasi terlebih dahulu',
+    'reservationPickDateFirst': 'Pilih layanan terlebih dahulu',
+    'reservationPickTimeFirst': 'Pilih tanggal terlebih dahulu',
+    'reservationClinicLocation': 'Lokasi Klinik',
     'reservationMale': 'Laki-Laki',
     'reservationNext': 'Lanjut',
     'reservationBack': 'Kembali',
@@ -1474,6 +1491,8 @@ Device information, application activity logs, and usage data for security and s
     'depositForfeitedTitle': 'DP Hangus',
     'depositForfeitedBody':
         'DP yang Anda bayarkan telah hangus karena pasien tidak hadir pada sesi yang dijadwalkan.',
+    'depositForfeitedNotifBody':
+        'DP janji temu Anda telah hangus karena tidak hadir. Ketuk untuk melihat detail.',
     'rescheduleDepositNotice':
         'Penjadwalan ulang hanya bisa dilakukan 24 jam sebelum jadwal. Jika Anda tidak hadir, uang muka yang dibayarkan hangus.',
     'reschedule24HourError':
@@ -1498,7 +1517,6 @@ Device information, application activity logs, and usage data for security and s
 
     // ── Tab navigation ───────────────────────────────────────────────────
     'tabBeranda': 'Beranda',
-    'tabProgress': 'Progres',
     'tabJanjiTemu': 'Janji Temu',
     'tabProfil': 'Profil',
 
@@ -1583,43 +1601,7 @@ Device information, application activity logs, and usage data for security and s
     'faqAnswer4':
         'Reservasi akan berstatus Tidak Hadir (No-show) dan DP yang telah dibayarkan dianggap hangus.',
 
-    // ── Progress screen ──────────────────────────────────────────────────
-    'progressTitle': 'Progres',
-    'progressSubtitle': 'Pantau perkembangan rehabilitasi Anda',
-    'progressTotalSessions': 'Total Sesi',
-    'progressPainScore': 'Pain Score',
-    'progressAverage': 'Rata-rata',
-    'progressWeekThis': 'Minggu Ini',
-    'progressWeekLast': 'Minggu Lalu',
-    'progressWeek2Ago': '2 Minggu Lalu',
-    'progressPainChartTitle': 'Pain Score',
-    'progressPainChartDesc': 'Skala 0–10 (lebih rendah lebih baik)',
-    'progressPainTrend': '−4.0 pts',
-    'progressStatCompleted': 'Sesi Selesai',
-    'progressStatUpcoming': 'Sesi Mendatang',
-    'progressStatSatisfaction': 'Kepuasan',
-    'progressStatRemaining': 'Sisa Sesi',
-    'progressPackageTitle': 'Progress Paket Terapi',
-    'progressSessionCount': '{completed} dari {total} sesi selesai',
-    'progressSessionsRemaining': 'Tersisa {count} sesi',
-    'progressChartTitle': 'Penyelesaian Sesi',
-    'progressChartDesc': 'Sesi yang sudah diselesaikan dalam paket terapi',
-    'progressChartCompleted': 'Selesai',
-    'progressChartRemaining': 'Tersisa',
-    'progressNoSessions': 'Belum ada sesi terapi.',
     'rescheduleSave': 'Simpan Jadwal Baru',
-    'progressSessionHistoryTitle': 'Riwayat Sesi',
-    'progressSessionLabel': 'Sesi',
-    'progressSessionDone': 'Selesai',
-    'progressServiceHomeCare': 'Home Care',
-    'progressServiceKlinik': 'Klinik',
-    'progressDayMon': 'Sen',
-    'progressDayTue': 'Sel',
-    'progressDayWed': 'Rab',
-    'progressDayThu': 'Kam',
-    'progressDayFri': 'Jum',
-    'progressDaySat': 'Sab',
-    'progressDaySun': 'Min',
 
     'termsHeading': 'Syarat dan Ketentuan',
     'lastUpdated': 'Terakhir diperbarui: {date}',
@@ -1729,5 +1711,33 @@ Informasi perangkat, log aktivitas aplikasi, dan data penggunaan untuk keperluan
     'contact': 'Kontak',
     'whatsapp': 'WhatsApp',
     'whatsappOpenFailed': 'Tidak dapat membuka WhatsApp.',
+
+    // ── Hardcoded string fixes ──────────────────────────────────────────
+    // sign_in_screen
+    'welcomeAt': 'Selamat datang di',
+    'phoneHint': '08XX XXXX XXXX',
+    'signInWithGoogle': 'Google',
+    'signInWithApple': 'Apple',
+    'countryCode': '+62',
+    // reservation_flow_screen
+    'paymentDeadlineReminder':
+        'Selesaikan pembayaran sebelum batas waktu yang ditentukan.',
+    'stepOf': '{current} / {total}',
+    'homeCareCity': 'Home Care {city}',
+    // settle_payment_screen
+    'currencyPrefix': 'Rp',
+    'paymentErrorGeneric': 'Pembayaran gagal. Silakan coba lagi.',
+    // history_screen
+    'defaultTherapistName': 'Kedota Therapist',
+    'defaultServiceType': 'Home Care',
+    'defaultTime': '- WIB',
+    // home_screen therapist specializations
+    'specGeneralPhysio': 'Home Care · Fisioterapi Umum',
+    'specPostOpRehab': 'Klinik · Rehabilitasi Pasca Operasi',
+    'specSportsPhysio': 'Home Care · Fisioterapi Olahraga',
+    'specRelaxation': 'Wellness · Terapi Relaksasi',
+    // edit_profile_screen gender constants
+    'genderMaleValue': 'Laki-laki',
+    'genderFemaleValue': 'Perempuan',
   },
 };

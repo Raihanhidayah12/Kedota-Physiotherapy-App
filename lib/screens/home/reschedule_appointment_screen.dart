@@ -96,6 +96,7 @@ class _RescheduleAppointmentScreenState
             : _date,
         firstDate: DateTime.now(),
         lastDate: DateTime.now().add(const Duration(days: 365)),
+        restrictToFutureMonths: true,
         selectableDay: (date) => date.weekday != DateTime.sunday,
       ),
     );
@@ -109,10 +110,14 @@ class _RescheduleAppointmentScreenState
   }
 
   Future<void> _pickTime() async {
-    final picked = await showModalBottomSheet<TimeOfDay>(
+    final picked = await showDialog<TimeOfDay>(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _buildTimeSheet(),
+      barrierColor: Colors.black54,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: _buildTimeSheet(),
+      ),
     );
     if (picked != null && mounted) setState(() => _time = picked);
   }
@@ -121,45 +126,46 @@ class _RescheduleAppointmentScreenState
     final closingHour = _date.weekday == DateTime.saturday ? 18 : 20;
     final slots = [
       for (var hour = 8; hour < closingHour; hour++)
-        TimeOfDay(hour: hour, minute: 0),
+        if (hour != 12) TimeOfDay(hour: hour, minute: 0),
     ];
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       decoration: const BoxDecoration(
-        color: _background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        color: Colors.white,
+        borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD5DFDE),
-                  borderRadius: BorderRadius.circular(4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    t(context, 'reservationTime'),
+                    style: const TextStyle(
+                      color: _ink,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              t(context, 'reservationTime'),
-              style: const TextStyle(
-                color: _ink,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded, color: _muted),
+                  tooltip: t(context, 'close'),
+                ),
+              ],
             ),
             const SizedBox(height: 14),
             GridView.count(
-              crossAxisCount: 2,
+              crossAxisCount: 3,
               shrinkWrap: true,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 3.5,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 2.5,
+              physics: const NeverScrollableScrollPhysics(),
               children: slots.map((slot) {
                 final selected = _time.hour == slot.hour;
                 final slotDateTime = DateTime(
@@ -179,16 +185,16 @@ class _RescheduleAppointmentScreenState
                 final available = !isPast && !booked;
                 return InkWell(
                   onTap: available ? () => Navigator.pop(context, slot) : null,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(8),
                   child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: !available
                           ? const Color(0xFFE9EEEE)
                           : selected
-                          ? const Color(0xFFDDF5F2)
+                          ? const Color(0xFFF7FFFE)
                           : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: !available
                             ? const Color(0xFFD5DEDE)
@@ -199,7 +205,7 @@ class _RescheduleAppointmentScreenState
                       ),
                     ),
                     child: Text(
-                      '${slot.format(context)} WIB',
+                      '${slot.hour.toString().padLeft(2, '0')}:00',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: !available

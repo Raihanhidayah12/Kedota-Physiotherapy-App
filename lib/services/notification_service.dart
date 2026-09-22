@@ -54,6 +54,9 @@ class NotificationService {
         final payload = response.payload;
         if (payload != null && payload.startsWith('deposit:')) {
           _openAppointmentPayment(payload.substring('deposit:'.length));
+        } else if (payload != null && payload.startsWith('dp_forfeited:')) {
+          // DP Hangus — buka detail, BUKAN payment screen
+          _openAppointmentDetail(payload.substring('dp_forfeited:'.length));
         } else if (payload != null && payload.startsWith('expired:')) {
           _openAppointmentDetail(payload.substring('expired:'.length));
         } else if (payload != null && payload.startsWith('appointment:')) {
@@ -389,6 +392,7 @@ class NotificationService {
       paymentStatus: row['payment_status']?.toString() ?? 'paid',
       paymentPlan: row['payment_plan']?.toString() ?? 'full',
       amountDue: int.tryParse(row['amount_due']?.toString() ?? '') ?? 0,
+      bookedForOther: AppointmentItem.bookedForOtherFromRow(row),
       status: rawStatus == 'completed'
           ? AppointmentStatus.selesai
           : rawStatus == 'expired'

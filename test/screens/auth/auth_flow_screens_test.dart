@@ -37,7 +37,7 @@ void main() {
       await tester.pumpWidget(host(const OnboardingScreen()));
       await tester.pump();
 
-      expect(find.text('Pesan Jadwal Tanpa Ribet!'), findsOneWidget);
+      expect(find.text('Optimalkan Pemulihan Gerakmu'), findsOneWidget);
       expect(find.text('Lewati'), findsOneWidget);
       expect(find.byType(PageView), findsOneWidget);
     });

@@ -12,8 +12,14 @@ const _paymentWarning = Color(0xFFD94F45);
 class UpcomingAppointmentCard extends StatelessWidget {
   final AppointmentItem item;
   final VoidCallback? onTap;
+  final VoidCallback? onSettlePayment;
 
-  const UpcomingAppointmentCard({super.key, required this.item, this.onTap});
+  const UpcomingAppointmentCard({
+    super.key,
+    required this.item,
+    this.onTap,
+    this.onSettlePayment,
+  });
 
   bool get _hasOutstandingPayment {
     final paymentStatus = item.paymentStatus.toLowerCase();
@@ -120,28 +126,81 @@ class UpcomingAppointmentCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: GestureDetector(
-                onTap: onTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: _hasOutstandingPayment ? _paymentWarning : _c500,
-                    borderRadius: BorderRadius.circular(10),
+            if (_hasOutstandingPayment) ...[
+              // DP belum lunas → 2 button
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: onTap,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _c500, width: 1.5),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          t(context, 'lihatDetail'),
+                          style: const TextStyle(
+                            color: _c500,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    t(context, 'lihatDetail'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: onSettlePayment,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        decoration: BoxDecoration(
+                          color: _c700,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          t(context, 'settlePayment'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              // DP lunas / hangus → 1 button Lihat Detail
+              SizedBox(
+                width: double.infinity,
+                child: GestureDetector(
+                  onTap: onTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _c500,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      t(context, 'lihatDetail'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -168,7 +227,23 @@ class UpcomingAppointmentCard extends StatelessWidget {
     ),
   );
 
-  Widget _buildAvatar() => Container(
+  Widget _buildAvatar() {
+    final photoUrl = item.profilePhotoUrl;
+    if (photoUrl != null && photoUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          photoUrl,
+          width: 56,
+          height: 56,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stack) => _avatarPlaceholder(),
+        ),
+      );
+    }
+    return _avatarPlaceholder();
+  }
+
+  Widget _avatarPlaceholder() => Container(
     width: 56,
     height: 56,
     decoration: const BoxDecoration(

@@ -291,43 +291,48 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final formattedPhone = _formatPhoneNumber(widget.phoneNumber);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F9),
+      backgroundColor: const Color(0xFFDCF4F1),
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Column(
-                children: [
-                  Image.asset(
-                    'assets/image/logo 2.png',
-                    height: 56,
-                    fit: BoxFit.contain,
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Column(
+                    children: [
+                      Image.asset(
+                        'assets/image/logo 2.png',
+                        height: 56,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'K E D O T A',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF00A79D),
+                          letterSpacing: 4.0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'P H Y S I O T H E R A P Y',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(
+                            0xFF00A79D,
+                          ).withValues(alpha: 0.85),
+                          letterSpacing: 4.5,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'K E D O T A',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF00A79D),
-                      letterSpacing: 4.0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'P H Y S I O T H E R A P Y',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF00A79D).withValues(alpha: 0.85),
-                      letterSpacing: 4.5,
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fade(duration: 500.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
+                )
+                .animate()
+                .fade(duration: 500.ms)
+                .slideY(begin: 0.2, curve: Curves.easeOutQuad),
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -338,219 +343,246 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
                   child: Column(
-                    children: [
-                      if (widget.showStepIndicator) ...[
-                        _buildStepIndicator(widget.activeStep),
-                        const SizedBox(height: 18),
-                      ],
-                      Text(
-                        t(context, 'verifyOtp'),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF00A79D),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      RichText(
-                        textAlign: TextAlign.center,
-                        text: TextSpan(
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF475569),
-                            height: 1.45,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: t(context, 'enterOtpSentTo'),
-                            ),
-                            TextSpan(
-                              text: formattedPhone,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E293B),
-                              ),
-                            ),
-                            const TextSpan(text: '.'),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Teks error inline jika OTP salah
-                      if (_isError)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 12),
-                          child: Text(
-                            'Kode OTP tidak sesuai silakan coba lagi.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFFEF4444),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: GestureDetector(
-                          onTap: () => _focusNode.requestFocus(),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final boxSize = ((constraints.maxWidth - 36) / 4)
-                                  .clamp(0.0, 72.0);
-                              return Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(4, (index) {
-                                  final isActive =
-                                      index == _otpController.text.length;
-                                  final char =
-                                      _otpController.text.length > index
-                                          ? _otpController.text[index]
-                                          : "";
-
-                                  return Container(
-                                    margin: EdgeInsets.only(
-                                      right: index == 3 ? 0 : 12,
-                                    ),
-                                    width: boxSize,
-                                    height: boxSize * 1.07,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: _isError
-                                            ? const Color(0xFFEF4444)
-                                            : (isActive && _focusNode.hasFocus
-                                                  ? const Color(0xFF00A79D)
-                                                  : const Color(0xFFE2E8F0)),
-                                        width: _isError ||
-                                                (isActive &&
-                                                    _focusNode.hasFocus)
-                                            ? 1.5
-                                            : 1.0,
-                                      ),
-                                    ),
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        if (char.isNotEmpty)
-                                          Text(
-                                            char,
-                                            style: TextStyle(
-                                              fontSize: boxSize * 0.4,
-                                              fontWeight: FontWeight.bold,
-                                              color: _isError
-                                                  ? const Color(0xFFEF4444)
-                                                  : const Color(0xFF1E293B),
-                                            ),
-                                          )
-                                        else if (isActive &&
-                                            _focusNode.hasFocus)
-                                          const _BlinkingCursor(),
-                                        Positioned(
-                                          bottom: 10,
-                                          child: Container(
-                                            width: boxSize * 0.33,
-                                            height: 2,
-                                            decoration: BoxDecoration(
-                                              color: _isError
-                                                  ? const Color(0xFFEF4444)
-                                                  : (char.isNotEmpty ||
-                                                            (isActive &&
-                                                                _focusNode
-                                                                    .hasFocus)
-                                                        ? const Color(
-                                                            0xFF00A79D)
-                                                        : const Color(
-                                                            0xFFCBD5E1)),
-                                              borderRadius:
-                                                  BorderRadius.circular(1),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 1,
-                        height: 1,
-                        child: Opacity(
-                          opacity: 0,
-                          child: TextField(
-                            controller: _otpController,
-                            focusNode: _focusNode,
-                            keyboardType: TextInputType.number,
-                            autofocus: true,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(4),
-                            ],
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: [
-                          if (_secondsRemaining > 0) ...[
-                            Text(
-                              t(context, 'resendIn'),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Text(
-                              '00:${_secondsRemaining.toString().padLeft(2, '0')}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF00A79D),
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ] else ...[
-                            TextButton(
-                              onPressed: () {
-                                _startTimer();
-                                CustomBottomSheet.show(
-                                  context,
-                                  type: BottomSheetType.success,
-                                  title: t(context, 'otpSentTitle'),
-                                  subtitle: t(context, 'otpResent'),
-                                  singleButtonText:
-                                      t(context, 'close'),
-                                  onSinglePressed: () =>
-                                      Navigator.of(context).pop(),
-                                );
-                              },
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF00A79D),
-                              ),
-                              child: Text(
-                                t(context, 'resendOtp'),
+                    children:
+                        [
+                              if (widget.showStepIndicator) ...[
+                                _buildStepIndicator(widget.activeStep),
+                                const SizedBox(height: 18),
+                              ],
+                              Text(
+                                t(context, 'verifyOtp'),
                                 style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
                                   color: Color(0xFF00A79D),
                                 ),
                               ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
+                              const SizedBox(height: 10),
+                              RichText(
+                                textAlign: TextAlign.center,
+                                text: TextSpan(
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF475569),
+                                    height: 1.45,
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: t(context, 'enterOtpSentTo'),
+                                    ),
+                                    TextSpan(
+                                      text: formattedPhone,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const TextSpan(text: '.'),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Teks error inline jika OTP salah
+                              if (_isError)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 12),
+                                  child: Text(
+                                    'Kode OTP tidak sesuai silakan coba lagi.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFFEF4444),
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: GestureDetector(
+                                  onTap: () => _focusNode.requestFocus(),
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final boxSize =
+                                          ((constraints.maxWidth - 36) / 4)
+                                              .clamp(0.0, 72.0);
+                                      return Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: List.generate(4, (index) {
+                                          final isActive =
+                                              index ==
+                                              _otpController.text.length;
+                                          final char =
+                                              _otpController.text.length > index
+                                              ? _otpController.text[index]
+                                              : "";
+
+                                          return Container(
+                                            margin: EdgeInsets.only(
+                                              right: index == 3 ? 0 : 12,
+                                            ),
+                                            width: boxSize,
+                                            height: boxSize * 1.07,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: _isError
+                                                    ? const Color(0xFFEF4444)
+                                                    : (isActive &&
+                                                              _focusNode
+                                                                  .hasFocus
+                                                          ? const Color(
+                                                              0xFF00A79D,
+                                                            )
+                                                          : const Color(
+                                                              0xFFE2E8F0,
+                                                            )),
+                                                width:
+                                                    _isError ||
+                                                        (isActive &&
+                                                            _focusNode.hasFocus)
+                                                    ? 1.5
+                                                    : 1.0,
+                                              ),
+                                            ),
+                                            child: Stack(
+                                              alignment: Alignment.center,
+                                              children: [
+                                                if (char.isNotEmpty)
+                                                  Text(
+                                                    char,
+                                                    style: TextStyle(
+                                                      fontSize: boxSize * 0.4,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: _isError
+                                                          ? const Color(
+                                                              0xFFEF4444,
+                                                            )
+                                                          : const Color(
+                                                              0xFF1E293B,
+                                                            ),
+                                                    ),
+                                                  )
+                                                else if (isActive &&
+                                                    _focusNode.hasFocus)
+                                                  const _BlinkingCursor(),
+                                                Positioned(
+                                                  bottom: 10,
+                                                  child: Container(
+                                                    width: boxSize * 0.33,
+                                                    height: 2,
+                                                    decoration: BoxDecoration(
+                                                      color: _isError
+                                                          ? const Color(
+                                                              0xFFEF4444,
+                                                            )
+                                                          : (char.isNotEmpty ||
+                                                                    (isActive &&
+                                                                        _focusNode
+                                                                            .hasFocus)
+                                                                ? const Color(
+                                                                    0xFF00A79D,
+                                                                  )
+                                                                : const Color(
+                                                                    0xFFCBD5E1,
+                                                                  )),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            1,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 1,
+                                height: 1,
+                                child: Opacity(
+                                  opacity: 0,
+                                  child: TextField(
+                                    controller: _otpController,
+                                    focusNode: _focusNode,
+                                    keyboardType: TextInputType.number,
+                                    autofocus: true,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(4),
+                                    ],
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: [
+                                  if (_secondsRemaining > 0) ...[
+                                    Text(
+                                      t(context, 'resendIn'),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF64748B),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      '00:${_secondsRemaining.toString().padLeft(2, '0')}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF00A79D),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    TextButton(
+                                      onPressed: () {
+                                        _startTimer();
+                                        CustomBottomSheet.show(
+                                          context,
+                                          type: BottomSheetType.success,
+                                          title: t(context, 'otpSentTitle'),
+                                          subtitle: t(context, 'otpResent'),
+                                          singleButtonText: t(context, 'close'),
+                                          onSinglePressed: () =>
+                                              Navigator.of(context).pop(),
+                                        );
+                                      },
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: const Color(
+                                          0xFF00A79D,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        t(context, 'resendOtp'),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF00A79D),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ]
+                            .animate(interval: 50.ms)
+                            .fade(duration: 400.ms)
+                            .slideY(begin: 0.1, curve: Curves.easeOutQuad),
                   ),
                 ),
               ),

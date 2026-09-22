@@ -1,17 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
-import '../../utils/app_snackbar.dart';
 import 'notification_screen.dart';
-import 'reservation_flow_screen.dart';
 import 'main_screen.dart';
 import 'appointment_detail_screen.dart';
 import 'history_screen.dart';
+import 'settle_payment_screen.dart';
 import 'upcoming_appointment_card.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -23,9 +22,6 @@ const _bg = Color(0xFFF0F7F7);
 const _ink = Color(0xFF0E2C2F);
 const _ink2 = Color(0xFF3D6065);
 const _ink3 = Color(0xFF8AA8AC);
-final _whatsappConsultationUri = Uri.parse(
-  'https://api.whatsapp.com/send/?phone=6281645460939&text=Halo+Kedota%21+Saya+mempunyai+keluhan+fungsi+gerak%2C+dan+ingin+konsultasi+fisioterapi.&type=phone_number&app_absent=0',
-);
 
 /// Konten tab Beranda — dirender oleh [MainScreen] di dalam IndexedStack.
 class HomeBody extends StatefulWidget {
@@ -51,7 +47,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   late List<Animation<double>> _sectionFades;
   late List<Animation<Offset>> _sectionSlides;
   // promo / search
-  late PageController _promoCtrl;
+  Timer? _promoTimer;
   late TextEditingController _searchCtrl;
   late FocusNode _searchFocus;
   int _promoPage = 0;
@@ -59,6 +55,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   String _searchQuery = '';
   Map<String, dynamic>? _upcomingAppointment;
   bool _hasUnreadNotifications = true;
+  int _progressMetricIndex = 0;
   final Set<int> _completedTasks = {0};
 
   // number of staggered sections:
@@ -133,7 +130,10 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       );
     });
 
-    _promoCtrl = PageController();
+    _promoTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted) return;
+      setState(() => _promoPage = (_promoPage + 1) % 2);
+    });
     _searchCtrl = TextEditingController();
     _searchFocus = FocusNode();
 
@@ -214,7 +214,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   void dispose() {
     _headerCtrl.dispose();
     _staggerCtrl.dispose();
-    _promoCtrl.dispose();
+    _promoTimer?.cancel();
     _searchCtrl.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -355,7 +355,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       const SizedBox(height: 20),
-                      _fadeSlide(0, _buildPromoBanner()),
+                      _fadeSlide(0, _buildPromoTicker()),
                       const SizedBox(height: 28),
                       _fadeSlide(
                         1,
@@ -365,7 +365,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                           onAction: () => Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => const MainScreen(
-                                initialIndex: 2,
+                                initialIndex: 1,
                                 initialHistoryFilter: 1,
                               ),
                             ),
@@ -382,14 +382,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                       const SizedBox(height: 14),
                       _fadeSlide(2, _buildTasksCard()),
                       const SizedBox(height: 28),
-                      _fadeSlide(
-                        3,
-                        _buildSectionRow(
-                          t(context, 'rehabProgress'),
-                          t(context, 'detail'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
                       _fadeSlide(3, _buildProgressCard()),
                       const SizedBox(height: 28),
                       _fadeSlide(4, _buildTipsCard()),
@@ -608,17 +600,17 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   List<({String name, String spec})> get _searchableTherapists => [
     (
       name: 'Marvin McKinney',
-      spec: '${t(context, 'homeCare')} · Fisioterapi Umum',
+      spec: t(context, 'specGeneralPhysio'),
     ),
     (
       name: 'Sinta Dewi',
-      spec: '${t(context, 'klinik')} · Rehabilitasi Pasca Operasi',
+      spec: t(context, 'specPostOpRehab'),
     ),
     (
       name: 'Budi Santoso',
-      spec: '${t(context, 'homeCare')} · Fisioterapi Olahraga',
+      spec: t(context, 'specSportsPhysio'),
     ),
-    (name: 'Rina Kusuma', spec: '${t(context, 'wellness')} · Terapi Relaksasi'),
+    (name: 'Rina Kusuma', spec: t(context, 'specRelaxation')),
   ];
 
   List<({String title, String body})> get _searchableTips => [
@@ -750,7 +742,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                     t(context, 'rehab'),
                     t(context, 'wellness'),
                     t(context, 'klinik'),
-                    'Marvin McKinney',
+                    t(context, 'defaultTherapistName'),
                   ]
                   .map(
                     (s) => GestureDetector(
@@ -873,161 +865,33 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     );
   }
 
-  // ── promo banner ─────────────────────────────────────────────────────────
-  static const _promos = [
-    (
-      titleKey: 'promoNewPatientTitle',
-      subtitleKey: 'promoNewPatientSubtitle',
-      colors: [Color(0xFFE5F8F6), Color(0xFFD8F3F1)],
-      accentIcon: Icons.local_offer_outlined,
-    ),
-    (
-      titleKey: 'promoWhatsAppTitle',
-      subtitleKey: 'promoWhatsAppSubtitle',
-      colors: [Color(0xFFE5F8F6), Color(0xFFD8F3F1)],
-      accentIcon: Icons.chat_bubble_outline_rounded,
-    ),
-  ];
-
-  Widget _buildPromoBanner() {
-    final screenW = MediaQuery.of(context).size.width;
-    final bannerH = (screenW * 0.22).clamp(78.0, 92.0);
-    return Column(
-      children: [
-        SizedBox(
-          height: bannerH,
-          child: PageView.builder(
-            controller: _promoCtrl,
-            itemCount: _promos.length,
-            onPageChanged: (i) => setState(() => _promoPage = i),
-            itemBuilder: (_, i) {
-              final p = _promos[i];
-              return _buildPromoItem(
-                onTap: i == 0
-                    ? () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ReservationFlowScreen(
-                            clinicNewPatientPromo: true,
-                          ),
-                        ),
-                      )
-                    : _openWhatsAppConsultation,
-                title: t(context, p.titleKey),
-                subtitle: t(context, p.subtitleKey),
-                colors: p.colors,
-                accentIcon: p.accentIcon,
-              );
-            },
+  // ── promo ticker ──────────────────────────────────────────────────────────
+  Widget _buildPromoTicker() => SizedBox(
+    height: 22,
+    child: Center(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 450),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.35),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
           ),
         ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(_promos.length, (i) {
-            final active = i == _promoPage;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: active ? 20 : 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: active ? _c500 : _c100,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _openWhatsAppConsultation() async {
-    final opened = await launchUrl(
-      _whatsappConsultationUri,
-      mode: LaunchMode.externalApplication,
-    );
-    if (!opened && mounted) {
-      showAppSnackBar(
-        context,
-        t(context, 'whatsappOpenFailed'),
-        type: AppSnackBarType.error,
-      );
-    }
-  }
-
-  Widget _buildPromoItem({
-    VoidCallback? onTap,
-    required String title,
-    required String subtitle,
-    required List<Color> colors,
-    required IconData accentIcon,
-  }) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(20),
-    child: Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: colors,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colors.first.withValues(alpha: 0.35),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
+        child: Text(
+          _promoPage == 0
+              ? t(context, 'promoTickerPackage')
+              : t(context, 'promoTickerConsultation'),
+          key: ValueKey(_promoPage),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: _c500,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: _c100,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(accentIcon, color: _c500, size: 25),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _c500,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _ink3,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     ),
@@ -1095,6 +959,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     return UpcomingAppointmentCard(
       item: item,
       onTap: () => _openUpcomingDetail(appointment),
+      onSettlePayment: () => _openSettlePayment(appointment),
     );
     /*
     final serviceType = appointment['service_type']?.toString() ?? 'Home Care';
@@ -1290,6 +1155,12 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     */
   }
 
+  // ── helpers for reading nullable clinical columns ─────────────────────────
+  static String? _nullIfEmpty(String? s) =>
+      (s == null || s.trim().isEmpty) ? null : s.trim();
+  static int? _nullableInt(dynamic v) =>
+      v == null ? null : int.tryParse(v.toString());
+
   AppointmentItem _appointmentItemFromRow(Map<String, dynamic> appointment) {
     final appointmentDate = appointment['appointment_date']?.toString() ?? '';
     final appointmentTime = appointment['appointment_time']?.toString() ?? '';
@@ -1320,7 +1191,17 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       paymentStatus: appointment['payment_status']?.toString() ?? 'paid',
       paymentPlan: appointment['payment_plan']?.toString() ?? 'full',
       amountDue: int.tryParse(appointment['amount_due']?.toString() ?? '') ?? 0,
+      bookedForOther: AppointmentItem.bookedForOtherFromRow(appointment),
       status: status,
+      profilePhotoUrl: _profileImageUrl,
+      clinicalNote: _nullIfEmpty(appointment['clinical_note']?.toString()),
+      vasScore: _nullableInt(appointment['vas_score']),
+      romScore: _nullableInt(appointment['rom_score']),
+      mmtScore: _nullableInt(appointment['mmt_score']),
+      odiScore: _nullableInt(appointment['odi_score']),
+      therapistRecommendation: _nullIfEmpty(appointment['therapist_recommendation']?.toString()),
+      therapistSipf: _nullIfEmpty(appointment['therapist_sipf']?.toString()),
+      therapistPhotoUrl: _nullIfEmpty(appointment['therapist_photo_url']?.toString()),
     );
   }
 
@@ -1352,6 +1233,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       paymentPlan: appointment['payment_plan']?.toString() ?? 'full',
       amountDue: int.tryParse(appointment['amount_due']?.toString() ?? '') ?? 0,
       bookingCode: appointment['booking_code']?.toString() ?? '',
+      bookedForOther: AppointmentItem.bookedForOtherFromRow(appointment),
       status: rawStatus == 'completed'
           ? AppointmentStatus.selesai
           : rawStatus == 'expired'
@@ -1359,11 +1241,72 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
           : locallyExpired
           ? AppointmentStatus.batasWaktu
           : AppointmentStatus.mendatang,
+      profilePhotoUrl: _profileImageUrl,
+      clinicalNote: _nullIfEmpty(appointment['clinical_note']?.toString()),
+      vasScore: _nullableInt(appointment['vas_score']),
+      romScore: _nullableInt(appointment['rom_score']),
+      mmtScore: _nullableInt(appointment['mmt_score']),
+      odiScore: _nullableInt(appointment['odi_score']),
+      therapistRecommendation: _nullIfEmpty(appointment['therapist_recommendation']?.toString()),
+      therapistSipf: _nullIfEmpty(appointment['therapist_sipf']?.toString()),
+      therapistPhotoUrl: _nullIfEmpty(appointment['therapist_photo_url']?.toString()),
     );
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => AppointmentDetailScreen(item: item)),
     );
     if (mounted) _loadUpcomingAppointment();
+  }
+
+  Future<void> _openSettlePayment(Map<String, dynamic> appointment) async {
+    final rawStatus = appointment['appointment_status']?.toString();
+    final scheduledAt = DateTime.tryParse(
+      '${appointment['appointment_date']} ${appointment['appointment_time']}',
+    );
+    final locallyExpired =
+        scheduledAt != null &&
+        !scheduledAt.add(const Duration(minutes: 15)).isAfter(DateTime.now());
+    final item = AppointmentItem(
+      id: appointment['id']?.toString() ?? '',
+      therapistName:
+          appointment['therapist_name']?.toString().isNotEmpty == true
+          ? appointment['therapist_name'].toString()
+          : t(context, 'therapistDefault'),
+      serviceType: appointment['service_type']?.toString() ?? 'Home Care',
+      date: appointment['appointment_date']?.toString() ?? '-',
+      time: appointment['appointment_time']?.toString() ?? '- WIB',
+      patientName: appointment['patient_full_name']?.toString() ?? '',
+      medicalCode: appointment['patient_medical_code']?.toString() ?? '',
+      address: appointment['address']?.toString() ?? '',
+      complaint: appointment['patient_complaint']?.toString() ?? '',
+      clinicName: appointment['clinic_name']?.toString() ?? '',
+      sessionCount:
+          int.tryParse(appointment['session_count']?.toString() ?? '') ?? 1,
+      paymentStatus: appointment['payment_status']?.toString() ?? 'paid',
+      paymentPlan: appointment['payment_plan']?.toString() ?? 'full',
+      amountDue: int.tryParse(appointment['amount_due']?.toString() ?? '') ?? 0,
+      bookingCode: appointment['booking_code']?.toString() ?? '',
+      bookedForOther: AppointmentItem.bookedForOtherFromRow(appointment),
+      status: rawStatus == 'completed'
+          ? AppointmentStatus.selesai
+          : rawStatus == 'expired'
+          ? AppointmentStatus.batasWaktu
+          : locallyExpired
+          ? AppointmentStatus.batasWaktu
+          : AppointmentStatus.mendatang,
+      profilePhotoUrl: _profileImageUrl,
+      clinicalNote: _nullIfEmpty(appointment['clinical_note']?.toString()),
+      vasScore: _nullableInt(appointment['vas_score']),
+      romScore: _nullableInt(appointment['rom_score']),
+      mmtScore: _nullableInt(appointment['mmt_score']),
+      odiScore: _nullableInt(appointment['odi_score']),
+      therapistRecommendation: _nullIfEmpty(appointment['therapist_recommendation']?.toString()),
+      therapistSipf: _nullIfEmpty(appointment['therapist_sipf']?.toString()),
+      therapistPhotoUrl: _nullIfEmpty(appointment['therapist_photo_url']?.toString()),
+    );
+    final paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => SettlePaymentScreen(appointment: item)),
+    );
+    if (paid == true && mounted) _loadUpcomingAppointment();
   }
 
   // ── independent tasks ────────────────────────────────────────────────────
@@ -1434,68 +1377,141 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   }
 
   // ── progress card ─────────────────────────────────────────────────────────
-  Widget _buildProgressCard() => Container(
-    padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: _ink.withValues(alpha: 0.06),
-          blurRadius: 16,
-          offset: const Offset(0, 6),
-        ),
-      ],
+
+  // Data per metrik: tren menurun (nyeri, ODI) atau naik (ROM, kekuatan)
+  static const _progressMetrics = [
+    _ProgressMetric(
+      key: 'painScaleDropdown',
+      yLabelKey: 'painLevel',
+      data: [9.0, 8.5, 7.8, 7.0, 6.0, 5.0, 4.2, 3.5, 2.8],
+      trendDown: true,  // nilai makin kecil = makin baik
     ),
-    child: Column(
+    _ProgressMetric(
+      key: 'romLabel',
+      yLabelKey: 'romLabel',
+      data: [40.0, 50.0, 58.0, 68.0, 76.0, 84.0, 90.0, 100.0, 110.0],
+      trendDown: false, // nilai makin besar = makin baik
+    ),
+    _ProgressMetric(
+      key: 'muscleStrength',
+      yLabelKey: 'muscleStrength',
+      data: [1.5, 2.0, 2.5, 2.8, 3.2, 3.5, 3.8, 4.0, 4.5],
+      trendDown: false,
+    ),
+    _ProgressMetric(
+      key: 'odiLabel',
+      yLabelKey: 'odiLabel',
+      data: [42.0, 38.0, 34.0, 30.0, 26.0, 22.0, 17.0, 12.0, 8.0],
+      trendDown: true,
+    ),
+  ];
+
+  Widget _buildProgressCard() {
+    final metric = _progressMetrics[_progressMetricIndex];
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Header + dropdown DI LUAR card ───────────────────────────────
         Row(
           children: [
             Text(
-              t(context, 'painScore'),
+              t(context, 'rehabProgress'),
               style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
                 color: _ink,
               ),
             ),
             const Spacer(),
-            _weekChip(t(context, 'weeklyProgress'), true),
+            PopupMenuButton<int>(
+              initialValue: _progressMetricIndex,
+              onSelected: (i) => setState(() => _progressMetricIndex = i),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              color: Colors.white,
+              elevation: 4,
+              itemBuilder: (_) => List.generate(
+                _progressMetrics.length,
+                (i) => PopupMenuItem<int>(
+                  value: i,
+                  child: Text(
+                    t(context, _progressMetrics[i].key),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: _progressMetricIndex == i
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color: _progressMetricIndex == i ? _c700 : _ink,
+                    ),
+                  ),
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFD4E8E8)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      t(context, metric.key),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _c700,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 14,
+                      color: _c700,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          t(context, 'tipsStretchBody'),
-          style: const TextStyle(fontSize: 11, color: _ink3),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 130,
-          child: CustomPaint(
-            painter: _ModernProgressPainter(),
-            child: const SizedBox.expand(),
+        const SizedBox(height: 14),
+        // ── Grafik DI DALAM card ─────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: _ink.withValues(alpha: 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: SizedBox(
+            height: 185,
+            child: CustomPaint(
+              painter: _RehabProgressPainter(
+                yLabel: t(context, metric.yLabelKey),
+                xLabel: t(context, 'session'),
+                data: metric.data,
+                trendDown: metric.trendDown,
+              ),
+              child: const SizedBox.expand(),
+            ),
           ),
         ),
       ],
-    ),
-  );
+    );
+  }
 
-  Widget _weekChip(String label, bool active) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: active ? _c100 : Colors.transparent,
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      label,
-      style: TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w600,
-        color: active ? _c700 : _ink3,
-      ),
-    ),
-  );
 
   // ── tips card ─────────────────────────────────────────────────────────────
   Widget _buildTipsCard() => Container(
@@ -1577,53 +1593,111 @@ class _SearchResult {
   });
 }
 
-// ─── Modern Progress Painter ──────────────────────────────────────────────────
+// ─── Progress metric model ────────────────────────────────────────────────────
 
-class _ModernProgressPainter extends CustomPainter {
-  static const _data = [7.5, 6.0, 6.5, 4.5, 5.0, 3.5, 4.0];
-  // Days are kept short codes — same in both languages
-  static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+class _ProgressMetric {
+  final String key;       // localization key untuk label dropdown
+  final String yLabelKey; // localization key untuk Y-axis label
+  final List<double> data;
+  final bool trendDown;   // true = nilai kecil lebih baik (nyeri, ODI)
+
+  const _ProgressMetric({
+    required this.key,
+    required this.yLabelKey,
+    required this.data,
+    required this.trendDown,
+  });
+}
+
+// ─── Rehab Progress Painter ───────────────────────────────────────────────────
+
+class _RehabProgressPainter extends CustomPainter {
+  final String yLabel;
+  final String xLabel;
+  final List<double> data;
+  final bool trendDown;
+
+  const _RehabProgressPainter({
+    required this.yLabel,
+    required this.xLabel,
+    required this.data,
+    required this.trendDown,
+  });
+
+  static const _sessions = ['S1','S2','S3','S4','S5','S6','S7','S8','S9'];
 
   @override
   void paint(Canvas canvas, Size size) {
-    const padL = 10.0;
+    const padL = 42.0; // ruang untuk label Y + judul rotated
     const padR = 10.0;
     const padT = 8.0;
-    const padB = 24.0;
+    const padB = 32.0;
     final chartW = size.width - padL - padR;
     final chartH = size.height - padT - padB;
 
-    final maxVal = 10.0;
-    final minVal = 0.0;
+    // Hitung min/max dari data aktual dengan sedikit padding
+    final dataMax = data.reduce((a, b) => a > b ? a : b);
+    final dataMin = data.reduce((a, b) => a < b ? a : b);
+    final range = (dataMax - dataMin).clamp(1.0, double.infinity);
+    final maxVal = dataMax + range * 0.1;
+    final minVal = (dataMin - range * 0.1).clamp(0.0, double.infinity);
+    const steps = 5;
 
-    double xOf(int i) => padL + i * chartW / (_data.length - 1);
+    double xOf(int i) => padL + i * chartW / (data.length - 1);
     double yOf(double v) =>
         padT + chartH - (v - minVal) / (maxVal - minVal) * chartH;
 
-    // grid lines
+    // ── grid lines & Y axis labels ────────────────────────────────────────
     final gridPaint = Paint()
-      ..color = const Color(0xFFF0F5F5)
+      ..color = const Color(0xFFEEF4F4)
       ..strokeWidth = 1;
-    for (var i = 0; i <= 5; i++) {
-      final y = padT + i * chartH / 5;
-      canvas.drawLine(Offset(padL, y), Offset(size.width - padR, y), gridPaint);
-    }
 
-    // gradient fill
-    final fillPath = Path();
-    fillPath.moveTo(xOf(0), yOf(_data[0]));
-    for (var i = 1; i < _data.length; i++) {
-      final cpx = (xOf(i - 1) + xOf(i)) / 2;
-      fillPath.cubicTo(
-        cpx,
-        yOf(_data[i - 1]),
-        cpx,
-        yOf(_data[i]),
-        xOf(i),
-        yOf(_data[i]),
+    for (var i = 0; i <= steps; i++) {
+      final y = padT + i * chartH / steps;
+      canvas.drawLine(Offset(padL, y), Offset(size.width - padR, y), gridPaint);
+
+      // Y label (10, 8, 6, 4, 2, 0)
+      final val = maxVal - i * (maxVal / steps);
+      final tp = TextPainter(
+        text: TextSpan(
+          text: val.toInt().toString(),
+          style: const TextStyle(fontSize: 9, color: Color(0xFF8AA8AC)),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(
+        canvas,
+        Offset(padL - tp.width - 4, y - tp.height / 2),
       );
     }
-    fillPath.lineTo(xOf(_data.length - 1), padT + chartH);
+
+    // ── Y axis title (rotated) ────────────────────────────────────────────
+    final yTitlePainter = TextPainter(
+      text: TextSpan(
+        text: yLabel,
+        style: const TextStyle(fontSize: 8, color: Color(0xFF8AA8AC)),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    canvas.save();
+    canvas.translate(8, padT + chartH / 2 + yTitlePainter.width / 2);
+    canvas.rotate(-3.14159 / 2);
+    yTitlePainter.paint(canvas, Offset.zero);
+    canvas.restore();
+
+    // ── gradient fill ─────────────────────────────────────────────────────
+    final fillPath = Path();
+    fillPath.moveTo(xOf(0), yOf(data[0]));
+    for (var i = 1; i < data.length; i++) {
+      final cpx = (xOf(i - 1) + xOf(i)) / 2;
+      fillPath.cubicTo(
+        cpx, yOf(data[i - 1]),
+        cpx, yOf(data[i]),
+        xOf(i), yOf(data[i]),
+      );
+    }
+    fillPath.lineTo(xOf(data.length - 1), padT + chartH);
     fillPath.lineTo(xOf(0), padT + chartH);
     fillPath.close();
 
@@ -1631,69 +1705,84 @@ class _ModernProgressPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [_c500.withValues(alpha: 0.25), _c500.withValues(alpha: 0.0)],
+        colors: [
+          const Color(0xFF00A79D).withValues(alpha: 0.22),
+          const Color(0xFF00A79D).withValues(alpha: 0.0),
+        ],
       ).createShader(Rect.fromLTWH(0, padT, size.width, chartH));
     canvas.drawPath(fillPath, fillPaint);
 
-    // line
+    // ── line ──────────────────────────────────────────────────────────────
     final linePath = Path();
-    linePath.moveTo(xOf(0), yOf(_data[0]));
-    for (var i = 1; i < _data.length; i++) {
+    linePath.moveTo(xOf(0), yOf(data[0]));
+    for (var i = 1; i < data.length; i++) {
       final cpx = (xOf(i - 1) + xOf(i)) / 2;
       linePath.cubicTo(
-        cpx,
-        yOf(_data[i - 1]),
-        cpx,
-        yOf(_data[i]),
-        xOf(i),
-        yOf(_data[i]),
+        cpx, yOf(data[i - 1]),
+        cpx, yOf(data[i]),
+        xOf(i), yOf(data[i]),
       );
     }
-    final linePaint = Paint()
-      ..color = _c500
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    canvas.drawPath(linePath, linePaint);
+    canvas.drawPath(
+      linePath,
+      Paint()
+        ..color = const Color(0xFF00A79D)
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
 
-    // dots + highlight last
-    for (var i = 0; i < _data.length; i++) {
+    // ── dots ──────────────────────────────────────────────────────────────
+    for (var i = 0; i < data.length; i++) {
       final cx = xOf(i);
-      final cy = yOf(_data[i]);
-      final isLast = i == _data.length - 1;
-
-      if (isLast) {
-        canvas.drawCircle(
-          Offset(cx, cy),
-          8,
-          Paint()..color = _c500.withValues(alpha: 0.2),
-        );
-      }
+      final cy = yOf(data[i]);
       canvas.drawCircle(
         Offset(cx, cy),
-        isLast ? 5 : 3.5,
-        Paint()..color = isLast ? _c700 : _c300,
+        3.0,
+        Paint()..color = const Color(0xFF007F78),
       );
       canvas.drawCircle(
         Offset(cx, cy),
-        isLast ? 2.5 : 1.5,
+        1.5,
         Paint()..color = Colors.white,
       );
     }
 
-    // day labels
-    for (var i = 0; i < _days.length; i++) {
+    // ── X axis session labels ─────────────────────────────────────────────
+    for (var i = 0; i < _sessions.length; i++) {
       final tp = TextPainter(
         text: TextSpan(
-          text: _days[i],
-          style: const TextStyle(fontSize: 9, color: _ink3),
+          text: _sessions[i],
+          style: const TextStyle(fontSize: 8, color: Color(0xFF8AA8AC)),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(canvas, Offset(xOf(i) - tp.width / 2, size.height - padB + 6));
+      tp.paint(
+        canvas,
+        Offset(xOf(i) - tp.width / 2, size.height - padB + 4),
+      );
     }
+
+    // ── X axis title "Sesi" ───────────────────────────────────────────────
+    final xTitlePainter = TextPainter(
+      text: TextSpan(
+        text: xLabel,
+        style: const TextStyle(fontSize: 8, color: Color(0xFF8AA8AC)),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    xTitlePainter.paint(
+      canvas,
+      Offset(
+        padL + chartW / 2 - xTitlePainter.width / 2,
+        size.height - 10,
+      ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
+  bool shouldRepaint(covariant _RehabProgressPainter old) =>
+      old.data != data || old.yLabel != yLabel;
 }
+
+

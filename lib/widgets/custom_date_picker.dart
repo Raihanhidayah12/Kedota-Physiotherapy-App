@@ -5,6 +5,7 @@ class CustomDatePickerDialog extends StatefulWidget {
   final DateTime firstDate;
   final DateTime lastDate;
   final bool Function(DateTime date)? selectableDay;
+  final bool restrictToFutureMonths;
 
   const CustomDatePickerDialog({
     super.key,
@@ -12,6 +13,7 @@ class CustomDatePickerDialog extends StatefulWidget {
     required this.firstDate,
     required this.lastDate,
     this.selectableDay,
+    this.restrictToFutureMonths = false,
   });
 
   @override
@@ -21,6 +23,7 @@ class CustomDatePickerDialog extends StatefulWidget {
 class _CustomDatePickerDialogState extends State<CustomDatePickerDialog> {
   late DateTime _displayedMonth;
   DateTime? _selectedDate;
+  bool _monthYearMode = false;
 
   final List<String> _months = [
     'Januari',
@@ -50,13 +53,122 @@ class _CustomDatePickerDialogState extends State<CustomDatePickerDialog> {
   void _onMonthSelected(int monthIndex) {
     setState(() {
       _displayedMonth = DateTime(_displayedMonth.year, monthIndex + 1);
+      _monthYearMode = false;
     });
   }
 
   void _onYearSelected(int year) {
+    final availableMonths = _availableMonthIndexes(year);
+    final month = availableMonths.contains(_displayedMonth.month - 1)
+        ? _displayedMonth.month
+        : availableMonths.first + 1;
     setState(() {
-      _displayedMonth = DateTime(year, _displayedMonth.month);
+      _displayedMonth = DateTime(year, month);
+      _monthYearMode = false;
     });
+  }
+
+  bool _isMonthAvailable(int year, int month) {
+    if (!widget.restrictToFutureMonths) return true;
+    final currentMonth = DateTime(year, month);
+    final firstMonth = DateTime(widget.firstDate.year, widget.firstDate.month);
+    final lastMonth = DateTime(widget.lastDate.year, widget.lastDate.month);
+    return !currentMonth.isBefore(firstMonth) &&
+        !currentMonth.isAfter(lastMonth);
+  }
+
+  List<int> _availableMonthIndexes(int year) => [
+    for (var index = 0; index < _months.length; index++)
+      if (_isMonthAvailable(year, index + 1)) index,
+  ];
+
+  Widget _buildMonthYearOptions(List<int> years, List<int> monthIndexes) {
+    Widget option({
+      required String label,
+      required bool selected,
+      required VoidCallback onTap,
+    }) => InkWell(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFEAF7F4) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            color: selected ? const Color(0xFF00A79D) : const Color(0xFF1E293B),
+          ),
+        ),
+      ),
+    );
+
+    return SizedBox(
+      height: 210,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x18000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: monthIndexes
+                    .map(
+                      (index) => option(
+                        label: _months[index],
+                        selected: _displayedMonth.month == index + 1,
+                        onTap: () => _onMonthSelected(index),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x18000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: years
+                    .map(
+                      (year) => option(
+                        label: year.toString(),
+                        selected: _displayedMonth.year == year,
+                        onTap: () => _onYearSelected(year),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onDateSelected(DateTime date) {
@@ -85,10 +197,14 @@ class _CustomDatePickerDialogState extends State<CustomDatePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final firstYear = widget.restrictToFutureMonths
+        ? DateTime.now().year
+        : widget.firstDate.year;
     final years = List.generate(
-      widget.lastDate.year - widget.firstDate.year + 1,
-      (index) => widget.firstDate.year + index,
+      widget.lastDate.year - firstYear + 1,
+      (index) => firstYear + index,
     );
+    final availableMonths = _availableMonthIndexes(_displayedMonth.year);
 
     return Dialog(
       backgroundColor: Colors.white,
@@ -114,7 +230,7 @@ class _CustomDatePickerDialogState extends State<CustomDatePickerDialog> {
                     ),
                     onSelected: _onMonthSelected,
                     itemBuilder: (context) {
-                      return List.generate(_months.length, (index) {
+                      return availableMonths.map((index) {
                         final isSelected = _displayedMonth.month == index + 1;
                         return PopupMenuItem<int>(
                           value: index,
@@ -130,7 +246,7 @@ class _CustomDatePickerDialogState extends State<CustomDatePickerDialog> {
                             ),
                           ),
                         );
-                      });
+                      }).toList();
                     },
                     child: Text(
                       _months[_displayedMonth.month - 1],
@@ -187,8 +303,7 @@ class _CustomDatePickerDialogState extends State<CustomDatePickerDialog> {
                   // PENCIL ICON
                   GestureDetector(
                     onTap: () {
-                      // Close dialog without returning a date (so parent can focus input)
-                      Navigator.of(context).pop();
+                      setState(() => _monthYearMode = !_monthYearMode);
                     },
                     child: Container(
                       width: 32,
@@ -197,11 +312,23 @@ class _CustomDatePickerDialogState extends State<CustomDatePickerDialog> {
                         shape: BoxShape.circle,
                         color: Color(0xFFEAF7F4), // Light teal background
                       ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.edit,
-                          size: 16,
-                          color: Color(0xFF00A79D),
+                      child: Center(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          transitionBuilder: (child, animation) =>
+                              RotationTransition(
+                                turns: animation,
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              ),
+                          child: Icon(
+                            _monthYearMode ? Icons.calendar_month : Icons.edit,
+                            key: ValueKey(_monthYearMode),
+                            size: 16,
+                            color: const Color(0xFF00A79D),
+                          ),
                         ),
                       ),
                     ),
@@ -210,98 +337,137 @@ class _CustomDatePickerDialogState extends State<CustomDatePickerDialog> {
               ),
               const SizedBox(height: 24),
 
-              // DAYS OF WEEK HEADER
-              Row(
-                children: ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map(
-                  (day) {
-                    return Expanded(
-                      child: Center(
-                        child: Text(
-                          day,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
+              Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Column(
+                    children: [
+                      // DAYS OF WEEK HEADER
+                      Row(
+                        children:
+                            [
+                              'Min',
+                              'Sen',
+                              'Sel',
+                              'Rab',
+                              'Kam',
+                              'Jum',
+                              'Sab',
+                            ].map((day) {
+                              return Expanded(
+                                child: Center(
+                                  child: Text(
+                                    day,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                       ),
-                    );
-                  },
-                ).toList(),
-              ),
-              const SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
-              // DAYS GRID
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7,
-                  childAspectRatio: 1.0,
-                  crossAxisSpacing: 4,
-                  mainAxisSpacing: 4,
-                ),
-                itemCount: _firstDayOffset + _daysInMonth,
-                itemBuilder: (context, index) {
-                  if (index < _firstDayOffset) {
-                    return const SizedBox.shrink();
-                  }
+                      // DAYS GRID
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 7,
+                              childAspectRatio: 1.0,
+                              crossAxisSpacing: 4,
+                              mainAxisSpacing: 4,
+                            ),
+                        itemCount: _firstDayOffset + _daysInMonth,
+                        itemBuilder: (context, index) {
+                          if (index < _firstDayOffset) {
+                            return const SizedBox.shrink();
+                          }
 
-                  final dayNumber = index - _firstDayOffset + 1;
-                  final currentDate = DateTime(
-                    _displayedMonth.year,
-                    _displayedMonth.month,
-                    dayNumber,
-                  );
+                          final dayNumber = index - _firstDayOffset + 1;
+                          final currentDate = DateTime(
+                            _displayedMonth.year,
+                            _displayedMonth.month,
+                            dayNumber,
+                          );
 
-                  final isSelected =
-                      _selectedDate != null &&
-                      _selectedDate!.year == currentDate.year &&
-                      _selectedDate!.month == currentDate.month &&
-                      _selectedDate!.day == currentDate.day;
+                          final isSelected =
+                              _selectedDate != null &&
+                              _selectedDate!.year == currentDate.year &&
+                              _selectedDate!.month == currentDate.month &&
+                              _selectedDate!.day == currentDate.day;
 
-                  // Simple check if date is outside bounds
-                  final isSelectable =
-                      currentDate.isAfter(
-                        widget.firstDate.subtract(const Duration(days: 1)),
-                      ) &&
-                      currentDate.isBefore(
-                        widget.lastDate.add(const Duration(days: 1)),
-                      ) &&
-                      (widget.selectableDay?.call(currentDate) ?? true);
+                          // Simple check if date is outside bounds
+                          final isSelectable =
+                              currentDate.isAfter(
+                                widget.firstDate.subtract(
+                                  const Duration(days: 1),
+                                ),
+                              ) &&
+                              currentDate.isBefore(
+                                widget.lastDate.add(const Duration(days: 1)),
+                              ) &&
+                              (widget.selectableDay?.call(currentDate) ?? true);
 
-                  return GestureDetector(
-                    onTap: isSelectable
-                        ? () => _onDateSelected(currentDate)
-                        : null,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? const Color(0xFFD8E4EB)
-                            : Colors.transparent, // Light blue from Figma
-                        borderRadius: BorderRadius.circular(6),
+                          return GestureDetector(
+                            onTap: isSelectable
+                                ? () => _onDateSelected(currentDate)
+                                : null,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(0xFFD8E4EB)
+                                    : Colors
+                                          .transparent, // Light blue from Figma
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  dayNumber.toString(),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.w600,
+                                    color: !isSelectable
+                                        ? const Color(
+                                            0xFFCBD5E1,
+                                          ) // Greyed out if unselectable
+                                        : const Color(
+                                            0xFF1E293B,
+                                          ), // Dark text otherwise
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                      child: Center(
-                        child: Text(
-                          dayNumber.toString(),
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.w600,
-                            color: !isSelectable
-                                ? const Color(
-                                    0xFFCBD5E1,
-                                  ) // Greyed out if unselectable
-                                : const Color(
-                                    0xFF1E293B,
-                                  ), // Dark text otherwise
-                          ),
+                    ],
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    child: IgnorePointer(
+                      ignoring: !_monthYearMode,
+                      child: AnimatedScale(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        scale: _monthYearMode ? 1 : 0.96,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 220),
+                          opacity: _monthYearMode ? 1 : 0,
+                          child: _buildMonthYearOptions(years, availableMonths),
                         ),
                       ),
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
             ],
           ),

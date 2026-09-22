@@ -97,7 +97,7 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
       final start = (end - 3).clamp(0, end);
       groups.insert(0, digits.substring(start, end));
     }
-    return 'Rp ${groups.join('.')}';
+    return '${t(context, 'currencyPrefix')} ${groups.join('.')}';
   }
 
   Future<void> _settle() async {
@@ -158,7 +158,11 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
       }
     } catch (error) {
       if (mounted) {
-        showAppSnackBar(context, error.toString(), type: AppSnackBarType.error);
+        showAppSnackBar(
+          context,
+          t(context, 'paymentErrorGeneric'),
+          type: AppSnackBarType.error,
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -360,7 +364,7 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
       if (_successCountdown <= 1) {
         timer.cancel();
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainScreen(initialIndex: 2)),
+          MaterialPageRoute(builder: (_) => const MainScreen(initialIndex: 1)),
           (route) => false,
         );
         return;

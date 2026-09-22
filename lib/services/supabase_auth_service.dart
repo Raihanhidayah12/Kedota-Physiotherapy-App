@@ -12,6 +12,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'supabase_api_client.dart';
 import 'client_error_log_service.dart';
+import '../utils/booking_code.dart';
 
 String get _supabasePublishableKey =>
     dotenv.env['SUPABASE_ANON_KEY'] ??
@@ -41,6 +42,80 @@ class SupabaseAuthService {
       await client.rpc('expire_overdue_appointments');
     } catch (error) {
       debugPrint('Expire overdue appointments failed: $error');
+      _errorLog.logIfUnknownServerError(
+        error,
+        method: 'POST',
+        path: '/rest/v1/rpc/expire_overdue_appointments',
+      );
+    }
+    await backfillEmrBookingCodes();
+  }
+
+  Future<void> persistEmrBookingCode({
+    required String appointmentId,
+    String? storedCode,
+  }) async {
+    if (appointmentId.isEmpty || !isLegacyKdtBookingCode(storedCode)) return;
+    try {
+      await client
+          .from('appointments')
+          .update({'booking_code': appointmentBookingCode(appointmentId)})
+          .eq('id', appointmentId);
+    } catch (error) {
+      debugPrint('Persist EMR booking code failed: $error');
+    }
+  }
+
+  Future<void> backfillEmrBookingCodes() async {
+    final user = client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final rows = await client
+          .from('appointments')
+          .select('id, booking_code')
+          .eq('booker_id', user.id);
+      for (final raw in rows as List) {
+        final row = raw as Map<String, dynamic>;
+        await persistEmrBookingCode(
+          appointmentId: row['id']?.toString() ?? '',
+          storedCode: row['booking_code']?.toString(),
+        );
+      }
+    } catch (error) {
+      debugPrint('Backfill EMR booking codes failed: $error');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5xx logging helpers for Supabase client calls (auth, postgrest, storage).
+  // These are fire-and-forget — they never throw or block callers.
+  // ---------------------------------------------------------------------------
+
+  // Lazily-constructed log service — const so no allocation cost.
+  static const _errorLog = ClientErrorLogService();
+
+  void _logSupabaseError(
+    Object error, {
+    required String method,
+    required String path,
+  }) {
+    if (error is AuthException) {
+      _errorLog.logIfAuthServerError(
+        error,
+        operation: path,
+      );
+    } else if (error is PostgrestException) {
+      _errorLog.logIfPostgrestServerError(
+        error,
+        method: method,
+        path: path,
+      );
+    } else {
+      _errorLog.logIfUnknownServerError(
+        error,
+        method: method,
+        path: path,
+      );
     }
   }
 
@@ -261,6 +336,7 @@ class SupabaseAuthService {
       return AuthResult(userId: user.id, email: authEmail, supabaseUser: user);
     } catch (error, stackTrace) {
       debugPrint('Supabase signUp failed: $error');
+      _logSupabaseError(error, method: 'POST', path: '/auth/v1/signup');
       debugPrint(stackTrace.toString());
       throw Exception(_formatSupabaseError(error));
     }
@@ -358,6 +434,7 @@ class SupabaseAuthService {
       );
     } catch (error, stackTrace) {
       debugPrint('Supabase signIn failed: $error');
+      _logSupabaseError(error, method: 'POST', path: '/auth/v1/token');
       debugPrint(stackTrace.toString());
       throw Exception(_formatSupabaseError(error));
     }
@@ -475,6 +552,7 @@ class SupabaseAuthService {
         await client.from('profiles').upsert(profilePayload);
       } catch (upsertErr) {
         debugPrint('Upsert error, falling back to _persistProfile: $upsertErr');
+        _logSupabaseError(upsertErr, method: 'POST', path: '/rest/v1/profiles');
         await _persistProfile(
           userId: user.id,
           email: user.email ?? email,
@@ -491,6 +569,7 @@ class SupabaseAuthService {
       );
     } catch (error, stackTrace) {
       debugPrint('Supabase completeSocialProfile failed: $error');
+      _logSupabaseError(error, method: 'POST', path: '/auth/v1/user');
       debugPrint(stackTrace.toString());
       throw Exception(_formatSupabaseError(error));
     }
@@ -508,13 +587,22 @@ class SupabaseAuthService {
     final ext = contentType.contains('png') ? 'png' : 'jpg';
     final photoPath = '${user.id}/profile.$ext';
 
-    await client.storage
-        .from('profile-photos')
-        .uploadBinary(
-          photoPath,
-          Uint8List.fromList(imageBytes),
-          fileOptions: FileOptions(contentType: contentType, upsert: true),
-        );
+    try {
+      await client.storage
+          .from('profile-photos')
+          .uploadBinary(
+            photoPath,
+            Uint8List.fromList(imageBytes),
+            fileOptions: FileOptions(contentType: contentType, upsert: true),
+          );
+    } catch (storageErr) {
+      _logSupabaseError(
+        storageErr,
+        method: 'POST',
+        path: '/storage/v1/object/profile-photos/$photoPath',
+      );
+      rethrow;
+    }
 
     final publicUrl = client.storage
         .from('profile-photos')
@@ -523,13 +611,18 @@ class SupabaseAuthService {
     // Tambahkan cache-buster agar UI langsung refresh
     final bustedUrl = '$publicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
 
-    await client
-        .from('profiles')
-        .update({
-          'profile_photo_url': bustedUrl,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .eq('id', user.id);
+    try {
+      await client
+          .from('profiles')
+          .update({
+            'profile_photo_url': bustedUrl,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', user.id);
+    } catch (updateErr) {
+      _logSupabaseError(updateErr, method: 'PATCH', path: '/rest/v1/profiles');
+      rethrow;
+    }
 
     return bustedUrl;
   }
@@ -579,6 +672,11 @@ class SupabaseAuthService {
           .eq('id', user.id);
     } catch (error) {
       debugPrint('Profile photo sync failed: $error');
+      _logSupabaseError(
+        error,
+        method: 'POST',
+        path: '/storage/v1/object/profile-photos',
+      );
     }
   }
 
@@ -740,6 +838,7 @@ class SupabaseAuthService {
       throw Exception(_formatSupabaseError(authError));
     } catch (error, stackTrace) {
       debugPrint('Supabase createPhoneProfile failed: $error');
+      _logSupabaseError(error, method: 'POST', path: '/auth/v1/signup');
       debugPrint(stackTrace.toString());
       throw Exception(_formatSupabaseError(error));
     }
@@ -776,6 +875,7 @@ class SupabaseAuthService {
       debugPrint(
         '_upsertPhoneProfile upsert failed, trying _persistProfile: $upsertErr',
       );
+      _logSupabaseError(upsertErr, method: 'POST', path: '/rest/v1/profiles');
       await _persistProfile(
         userId: userId,
         email: authEmail,
@@ -816,6 +916,7 @@ class SupabaseAuthService {
       return result != null; // If result exists, email is taken
     } catch (e) {
       debugPrint('Error checking email: $e');
+      _logSupabaseError(e, method: 'GET', path: '/rest/v1/profiles');
       return false; // On error, allow user to proceed (will catch on signup)
     }
   }
@@ -858,6 +959,7 @@ class SupabaseAuthService {
           .maybeSingle();
     } catch (error, stackTrace) {
       debugPrint('Error checking profile existence: $error');
+      _logSupabaseError(error, method: 'GET', path: '/rest/v1/profiles');
       debugPrint(stackTrace.toString());
       return null;
     }
@@ -899,6 +1001,7 @@ class SupabaseAuthService {
       }
     } catch (e) {
       debugPrint('inFilter lookup failed: $e');
+      _logSupabaseError(e, method: 'GET', path: '/rest/v1/profiles');
     }
 
     // 2. Fallback: Client-side digit matching against all profiles table rows
@@ -933,6 +1036,7 @@ class SupabaseAuthService {
       }
     } catch (e) {
       debugPrint('Client-side fallback lookup failed: $e');
+      _logSupabaseError(e, method: 'GET', path: '/rest/v1/profiles');
     }
 
     return null;
@@ -978,6 +1082,7 @@ class SupabaseAuthService {
       );
     } catch (error, stackTrace) {
       debugPrint('Error checking account status: $error');
+      _logSupabaseError(error, method: 'GET', path: '/rest/v1/profiles');
       debugPrint(stackTrace.toString());
       return AccountCheckResult(isRegistered: false);
     }
@@ -999,6 +1104,7 @@ class SupabaseAuthService {
       return true;
     } catch (error) {
       debugPrint('Error checking phone existence: $error');
+      _logSupabaseError(error, method: 'GET', path: '/rest/v1/profiles');
       return false; // Fail safe
     }
   }
@@ -1111,19 +1217,29 @@ class SupabaseAuthService {
       if (currentUser != null && currentUser.id == profileId) {
         debugPrint('updateUserPin: using current session for direct update');
 
-        await client
-            .from('profiles')
-            .update({
-              'pin_hash': newPinHash,
-              'updated_at': DateTime.now().toIso8601String(),
-            })
-            .eq('id', profileId);
+        try {
+          await client
+              .from('profiles')
+              .update({
+                'pin_hash': newPinHash,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', profileId);
+        } catch (updateErr) {
+          _logSupabaseError(
+            updateErr,
+            method: 'PATCH',
+            path: '/rest/v1/profiles',
+          );
+          rethrow;
+        }
 
         try {
           await client.auth.updateUser(UserAttributes(password: newPin));
           debugPrint('updateUserPin: direct session update successful');
         } catch (authErr) {
           debugPrint('updateUserPin: auth password sync notice: $authErr');
+          _logSupabaseError(authErr, method: 'PUT', path: '/auth/v1/user');
         }
         return true;
       }
@@ -1171,6 +1287,7 @@ class SupabaseAuthService {
       throw Exception('Unable to update PIN: $detail');
     } catch (error) {
       debugPrint('Error updating user PIN: $error');
+      _logSupabaseError(error, method: 'PATCH', path: '/rest/v1/profiles');
       rethrow;
     }
   }
@@ -1341,6 +1458,7 @@ class SupabaseAuthService {
       return false;
     } catch (e) {
       debugPrint('Error verifying PIN: $e');
+      _logSupabaseError(e, method: 'GET', path: '/rest/v1/profiles');
       rethrow;
     }
   }
@@ -1382,6 +1500,7 @@ class SupabaseAuthService {
       await client.auth.signOut();
     } catch (e) {
       debugPrint('deleteAccount error: $e');
+      _logSupabaseError(e, method: 'DELETE', path: '/rest/v1/profiles');
       rethrow;
     }
   }

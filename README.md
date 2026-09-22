@@ -2,13 +2,14 @@
 
 > **"Your Comfort, Our Care"** — Aplikasi layanan fisioterapi berbasis Flutter dan Supabase.
 
-Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memantau progres, menerima pengingat, dan mengatur pembayaran. Aplikasi mendukung Android, iOS, Web, Windows, macOS, dan Linux melalui Flutter.
+Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memantau progres, menerima pengingat, dan mengatur pembayaran. Aplikasi mendukung Android, iOS, dan Web melalui Flutter.
 
 ## Status Saat Ini
 
 - Framework: Flutter dengan Dart SDK `^3.12.2`
 - Backend: Supabase Auth, PostgreSQL, Storage, REST API, RPC, dan Edge Functions
-- Bahasa UI: Bahasa Indonesia dan English
+- Bahasa UI: Bahasa Indonesia (default) dan English — seluruh string UI terlokalisasi penuh, tidak ada hardcoded text
+- Peta & Geocoding: `flutter_map` (OpenStreetMap tile) + Geoapify API (geocoding akurat) dengan fallback Nominatim
 - Pembayaran: alur UI dan RPC pelunasan tersedia; payment gateway masih demo
 - Environment: URL dan publishable/anon key Supabase dibaca dari file `.env`
 - Test otomatis: 27 unit/widget test lulus; OAuth production dan integration flow memerlukan device, backend, serta credential nyata
@@ -19,38 +20,38 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 
 | Fitur / Modul | Status | Keterangan |
 | :--- | :---: | :--- |
-| 🌐 Multi-Language (ID / EN) | 🟢 Selesai | Paritas 100% ID & EN di Auth, OTP, Edit Profile, Notifikasi, Settings & Forgot PIN (`AppLanguageScope`) |
-| 🧪 Auth Flow Tests | 🟢 Selesai | Test widget untuk Onboarding, Sign In, Forgot PIN/OTP, sign-up phone, Google profile, dan pembuatan PIN phone/Google |
+| 🌐 Multi-Language (ID / EN) | 🟢 Selesai | Paritas 100% ID & EN di seluruh aplikasi — tidak ada hardcoded string di UI |
+| 🧪 Auth Flow Tests | 🟢 Selesai | Test widget untuk Onboarding, Sign In, Forgot PIN/OTP, sign-up phone, Google profile, dan pembuatan PIN |
 | 🚀 Onboarding Screen | 🟢 Selesai | Tampil sekali saat pertama buka, 3 slide interaktif (`SharedPreferences`) |
-| 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home Screen (Handled 400 pre-check & 422 password sync gracefully) |
+| 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home Screen |
 | 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil → Buat PIN → Account Created Screen |
 | 🌐 Google Sign-In | 🟢 Selesai | OAuth Google → Picker Akun → Lengkapi Profil / Direct PIN → Home |
 | 🍎 Apple Sign-In | 🟢 Selesai | OAuth Apple terintegrasi (`signInWithOAuth`) |
-| 📩 OTP Verifikasi | 🟢 Selesai | Teks & Dialog terverifikasi dinamis (ID/EN), Dummy codes: `123456`, `555555`, `000000`, `999999` |
+| 📩 OTP Verifikasi | 🟢 Selesai | Dummy codes: `123456`, `555555`, `000000`, `999999` |
 | 📡 OTP Production (Plan) | 🔵 Siap Migrasi | Endpoint `/auth/otp` & `/auth/verify` disiapkan di Swagger |
 | 🔓 Lupa PIN | 🟢 Selesai | OTP → Verifikasi Tanggal Lahir → PIN Baru → PIN Reset Success |
 | 🔑 Ganti PIN (Settings) | 🟢 Selesai | Verifikasi PIN Lama → Input PIN Baru → Konfirmasi PIN Baru (Rate limit 3x) |
 | 👤 Edit Profil | 🟢 Selesai | Ubah Nama, TTL, Gender, Upload/Hapus Foto Profil Supabase Storage |
 | 👁️ Privasi Nomor HP | 🟢 Selesai | Default hidden (`+628••••9436`) + Eye Icon toggle di Settings & Edit Profile |
-| 🔔 Preferensi Notifikasi | 🟢 Selesai | Push notif, reminder 1 jam sebelum janji, notifikasi DP/expired, dan deep-link ke detail atau pelunasan |
-| 🕒 Urutan & Waktu Notifikasi | 🟢 Selesai | Notifikasi terbaru tampil paling atas dengan waktu relatif seperti `2 menit yang lalu` atau `1 jam yang lalu` |
+| 🔔 Preferensi Notifikasi | 🟢 Selesai | Push notif, reminder, notifikasi DP/expired, dan deep-link ke detail atau pelunasan |
+| 🕒 Urutan & Waktu Notifikasi | 🟢 Selesai | Notifikasi terbaru tampil paling atas dengan waktu relatif |
 | ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan Lengkap + Hapus Akun Permanen (Verifikasi PIN 6-digit) |
 | 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → cooldown 30 detik |
 | 💤 Dormant Account | 🟢 Selesai | Deteksi akun >60 hari tidak aktif → verifikasi via email |
-| 🎨 UI & Layout Stability | 🟢 Selesai | Numpad, DatePicker & Flex Badge responsive 0 overflow di mobile/web |
+| 🎨 UI & Layout Stability | 🟢 Selesai | Responsive 0 overflow di mobile/web |
 | ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (`update-pin` Deno runtime) |
-| 📊 HTTP 5xx Error Logging | 🟢 Selesai | Client mendeteksi response `500-599`, mengirim metadata aman ke Edge Function `client-error-log`, dan server mencatatnya |
-| 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion dengan tanggal pembaruan dinamis |
+| 📊 HTTP 5xx Error Logging | 🟢 Selesai | Deteksi & log metadata error HTTP 5xx ke Edge Function `client-error-log` |
+| 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion |
 | 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
-| 🔔 SnackBar UI | 🟢 Selesai | Semua SnackBar memakai helper bersama dengan style, ikon, warna, margin, durasi, dan behavior yang konsisten |
-| 📅 Reservasi & Paket Sesi | 🟢 Selesai | Paket 1, 3, 6, atau 9 sesi dengan harga paket tetap |
-| 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, validasi slot, batas waktu, notifikasi perubahan, dan reminder baru |
-| 💳 DP & Pelunasan | 🟢 Selesai (Demo Gateway) | Instruksi pembayaran, konfirmasi, screen sukses, redirect History 3 detik, dan RPC pelunasan |
-| 🧾 Identitas Pasien & Booking | 🟢 Selesai | `profiles.medical_code` memakai format `KDT-` + 12 karakter acak unik; `appointments.booking_code` memakai format `EMR-` |
-| ⏱️ Auto Expire | 🟢 Selesai | Janji berubah menjadi `expired` 15 menit setelah waktu mulai dan mengirim push ke pengguna |
-| 🔒 Proteksi Slot | 🟢 Selesai | Unique index mencegah dua janji aktif memakai slot yang sama |
-| 🪪 Profil Wajib Reservasi | 🟢 Selesai | NIK 16 digit dan alamat wajib dilengkapi sebelum reservasi; pengingat tampil di Home dan Informasi Akun |
-| 🚫 DP Hangus & No-Show | 🟢 Selesai | DP belum lunas hangus saat tidak hadir; pembayaran lunas dapat reschedule maksimal 24 jam setelah sesi |
+| 📅 Reservasi Step-by-Step | 🟢 Selesai | Step 3 baru: Pilih Kota → Pilih Layanan → Jadwal → Jam → Alamat (berurutan, wajib diisi) |
+| 🗺️ Peta Interaktif (Home Care) | 🟢 Selesai | `flutter_map` + Geoapify tile + reverse geocoding akurat; tap peta, gunakan lokasi terkini, ketik alamat → peta sync |
+| 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, validasi slot, dan reminder baru |
+| 💳 DP & Pelunasan | 🟢 Selesai (Demo Gateway) | Card appointment tampilkan 2 tombol (Lihat Detail + Lunaskan) saat DP belum lunas |
+| 🧾 Identitas Pasien & Booking | 🟢 Selesai | `medical_code` format `KDT-` + 12 karakter; `booking_code` format `EMR-` |
+| ⏱️ Auto Expire | 🟢 Selesai | Janji `expired` 15 menit setelah waktu mulai |
+| 🔒 Proteksi Slot | 🟢 Selesai | Unique index mencegah dua janji aktif di slot yang sama |
+| 📋 Detail Riwayat Done | 🟢 Selesai | Tampilkan catatan klinis, skor progres (VAS/ROM/MMT/ODI), dan rekomendasi terapis dari DB |
+| 🚫 DP Hangus & No-Show | 🟢 Selesai | DP belum lunas hangus saat tidak hadir; pembayaran lunas dapat reschedule maks 24 jam |
 
 ---
 
@@ -60,10 +61,6 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 - 3 slide interaktif dengan animasi page transition.
 - Hanya muncul sekali saat pertama kali membuka aplikasi.
 - Status disimpan secara lokal menggunakan `SharedPreferences`.
-- Konten slide:
-  1. **Pesan Jadwal Tanpa Ribet!** — Atur jadwal konsultasi dengan gampang dan efisien
-  2. **Pantau Kesehatan Lebih Mudah** — Monitor perkembangan vital-mu secara real-time
-  3. **Perawatan Medis Dirumah Anda** — Atur jadwal untuk melakukan perawatan medis dirumah
 
 ---
 
@@ -88,6 +85,7 @@ Sign In → Input Nomor HP
 ```
 
 **Validasi nomor HP Indonesia:**
+
 | Format Input | Contoh | Hasil Normalisasi |
 |---|---|---|
 | `08xxxxxxxxx` | `081234567890` | `+6281234567890` |
@@ -102,140 +100,156 @@ Sign In → Input Nomor HP
 ```
 Sign In → Continue with Google
   → Dialog Pilih Akun Google (always prompt)
-  → Lengkapi Profil (Nama auto-fill, No. HP & TTL isi manual)
-  → OTP Verification (verifikasi nomor HP yang diisi)
-  → Buat PIN (6-digit) → Konfirmasi PIN
-  → Account Created Screen → Home Screen
+  → Lengkapi Profil → OTP Verification → Buat PIN → Home Screen
 ```
 
 **Alur akun terdaftar:**
 ```
-Sign In → Continue with Google
-  → Dialog Pilih Akun Google
-  → PIN Verification → Home Screen
+Sign In → Continue with Google → PIN Verification → Home Screen
 ```
 
 ---
 
 ### 4. ⚙️ Pengaturan, Edit Profil & Keamanan Akun
 
-- **Edit Profil**:
-  - Ubah Nama Lengkap, Tanggal Lahir (Date Picker + nama bulan dinamis ID/EN), dan Gender.
-  - Upload dan Hapus Foto Profil terintegrasi dengan **Supabase Storage**.
-- **Privasi Nomor HP (Hide/Show Phone)**:
-  - Tombol icon mata (`Icons.visibility` / `Icons.visibility_off`) pada header **Settings** dan **Edit Profile** untuk menyembunyikan nomor HP (misal `+628••••9436`) demi menjaga kerahasiaan.
-- **Ganti PIN (Change PIN)**:
-  - Verifikasi PIN lama (rate limit 3x) → Buat PIN Baru → Konfirmasi PIN Baru.
-- **Preferensi Notifikasi**:
-  - Push Notifications, pengingat jadwal terapi 1 jam sebelum sesi, promo & penawaran, serta update berita via email.
-- **Hapus Akun Permanen**:
-  - Dialog konfirmasi bahaya + Verifikasi PIN 6-digit sebelum akun dan data dihapus permanen dari Supabase.
+- **Edit Profil**: Nama, TTL, Gender, Upload/Hapus Foto ke Supabase Storage.
+- **Privasi Nomor HP**: Toggle hide/show nomor HP di Settings & Edit Profile.
+- **Ganti PIN**: Verifikasi lama → PIN baru → Konfirmasi.
+- **Preferensi Notifikasi**: Push, reminder jadwal, promo, berita email.
+- **Hapus Akun Permanen**: Konfirmasi + verifikasi PIN 6-digit.
 
 ---
 
 ### 5. 🌐 Multi-Language Support (ID / EN)
 
-- Mendukung **Bahasa Indonesia (ID)** dan **English (EN)** secara penuh di seluruh aplikasi.
-- Toggle bahasa cepat di halaman Settings.
-- Seluruh teks UI, dialog, Toast/SnackBar, hint input, hingga nama bulan pada DatePicker terjemah secara otomatis tanpa perlu restart aplikasi (`AppLanguageScope`).
+- Default **Bahasa Indonesia** untuk semua pengguna baru.
+- Seluruh string UI, dialog, SnackBar, hint, nama bulan, hingga label teknis terlokalisasi — **tidak ada hardcoded text di UI**.
+- Toggle bahasa di Settings tanpa restart aplikasi (`AppLanguageScope`).
+- Bahasa tersimpan **per device** di `SharedPreferences` — tidak direset saat logout, sehingga preferensi bahasa tetap berlaku untuk semua akun yang login di device yang sama.
+
+**Cakupan lokalisasi yang difix:**
+
+| File | String yang difix |
+|---|---|
+| `sign_in_screen.dart` | Greeting, country code `+62`, hint nomor HP, label Google & Apple |
+| `forgot_pin_screen.dart` | Country code `+62` |
+| `edit_profile_screen.dart` | Gender constants (`Laki-laki`/`Perempuan`) |
+| `home_screen.dart` | 4 spesialisasi terapis dummy |
+| `reservation_flow_screen.dart` | Kalimat deadline pembayaran, step counter, nama kota Home Care |
+| `settle_payment_screen.dart` | Prefix mata uang `Rp`, pesan error generik |
+| `history_screen.dart` | Fallback nama terapis, tipe layanan, dan waktu |
 
 ---
 
-### 6. 📅 Reservasi, Paket Sesi & Janji Temu
+### 6. 📅 Reservasi Jadwal & Layanan (Step 3 — Baru)
 
-- Pilihan paket terapi:
-  - 1 sesi — Rp225.000
-  - 3 sesi — Rp660.000
-  - 6 sesi — Rp1.290.000
-  - 9 sesi — Rp1.890.000
-- Setiap record `appointments` merepresentasikan satu jadwal pertemuan.
-- `session_count` menyimpan jumlah sesi dalam paket dan dipakai untuk menghitung Progress.
-- Slot divalidasi berdasarkan tanggal, jam, layanan, dan lokasi.
-- Slot lama terbuka kembali setelah reschedule, sedangkan slot baru dikunci oleh unique index database.
-- Screen reschedule terpisah memakai kalender custom dan pemilih jam yang sama dengan reservasi utama.
-- Janji yang belum selesai otomatis menjadi `expired` setelah 15 menit dari waktu mulai ketika data dimuat.
-- Setiap pasien memiliki `medical_code` tetap berformat `KDT-` + 12 karakter acak heksadesimal, yang ditampilkan sebagai **ID Pasien** di profil.
-- Setiap reservasi memiliki `booking_code` yang ditampilkan dengan format `EMR-####-########`.
-- Card janji temu menampilkan nama pasien, tujuan reservasi (mandiri/orang lain), jadwal, sesi, layanan, terapis, dan tombol detail dari data appointment.
-- Card mendatang, selesai, dan batas waktu menggunakan struktur UI yang konsisten serta aksen status tipis di bagian atas card.
-- Profil yang belum memiliki NIK 16 digit atau alamat mendapat modal terpusat di Home dan diarahkan langsung ke Informasi Akun.
-- Pada halaman edit profil, pengguna tidak dapat keluar atau menyimpan sebelum NIK dan alamat lengkap.
-- Tab Janji Temu dan Beranda menampilkan penanda merah untuk appointment dengan DP yang belum lunas.
-- Screen Atur Jadwal Ulang memakai date picker dan time picker dengan validasi slot tersedia.
-- Appointment lunas yang berstatus tidak hadir dapat diubah jadwal sejak waktu sesi sampai maksimal 24 jam setelahnya.
-- Setelah jendela reschedule 24 jam berakhir, pengguna hanya mendapat opsi **Hubungi CS**.
-- Reschedule divalidasi kembali di layar reschedule sebelum RPC dikirim, sehingga aturan tidak hanya bergantung pada tampilan tombol.
-- Saat reschedule, reminder lama dibatalkan dan reminder baru dijadwalkan ulang.
-- Teks UI terbaru, pesan WhatsApp CS, dan metode pembayaran mengikuti localization ID/EN.
+Flow step 3 menggunakan urutan berurutan yang **wajib diisi secara berurutan** sebelum lanjut:
 
-### 7. 💳 Pembayaran DP & Pelunasan
+```
+1. Pilih Kota         → dropdown (Malang, Surabaya, Sidoarjo, Surakarta, Yogyakarta)
+2. Pilih Layanan      → Malang: Klinik atau Home Care | Kota lain: Home Care saja
+3. Pilih Jadwal       → terbuka setelah layanan dipilih
+4. Pilih Jam          → terbuka setelah tanggal dipilih
+5. Alamat / Lokasi    → Home Care: field + peta interaktif | Klinik: info lokasi + peta
+```
 
-- Reservasi penuh menyimpan `payment_status = paid`.
-- Reservasi DP menyimpan `payment_status = pending` dan `amount_due` sebagai sisa pembayaran.
-- Detail janji, Beranda, dan tab Janji Temu menampilkan badge merah **Pembayaran Tertunda** serta nominal sisa pembayaran.
-- Pelunasan menyediakan metode yang sama dengan reservasi: QRIS, OVO, GoPay, ShopeePay, BCA, BNI, BRI, Permata, Mandiri, kartu, dan tunai.
-- Setelah memilih metode, pengguna melihat instruksi pembayaran dan nomor rekening/QRIS sebelum konfirmasi.
-- Konfirmasi pelunasan menggunakan RPC `settle_appointment_payment`.
-- Setelah berhasil, aplikasi menampilkan screen sukses dengan countdown 3 detik lalu kembali ke tab History.
-- Notifikasi DP belum lunas tersedia di dalam aplikasi dan sebagai notifikasi HP; tap notifikasi membuka screen pelunasan appointment terkait.
-- Reminder appointment dikirim ke HP satu jam sebelum jadwal; appointment yang dibuat kurang dari satu jam akan mendapat reminder segera.
-- Reminder lama dibersihkan dan menggunakan ID stabil agar tidak muncul berulang setelah aplikasi dibuka atau jadwal diubah.
-- Lima belas menit setelah jadwal dimulai, appointment yang belum selesai mendapat notifikasi expired; tap notifikasi membuka detail dengan pilihan **Ubah Jadwal** atau **Hubungi CS**.
-- Appointment dengan `payment_plan = deposit`, `payment_status != paid`, dan status expired ditampilkan sebagai **DP Hangus** dengan pemberitahuan khusus.
-- Appointment DP yang belum lunas tidak menyediakan reschedule setelah tidak hadir dan tidak menyediakan pelunasan dari detail yang sudah expired.
-- Detail appointment menampilkan banner informasi reschedule dan konsekuensi uang muka sesuai status pembayaran.
-- Tombol **Hubungi CS** membuka WhatsApp dengan kode booking, tanggal, dan jam appointment.
-- Pembayaran sukses dikirim sebagai notifikasi HP dan notifikasi in-app.
-- Push reservasi baru, reminder, reschedule, dan pembayaran berhasil dapat diketuk untuk membuka Detail Appointment.
-- Push DP menggunakan deep-link khusus untuk langsung membuka Pelunasan Pembayaran.
-- Push expired membuka Detail Appointment agar pengguna dapat memilih reschedule atau menghubungi CS.
-- Pembayaran masih berstatus demo sampai payment gateway/webhook diterapkan.
+Field yang belum bisa diisi ditampilkan abu-abu dengan ikon 🔒 dan teks keterangan.
+
+**Khusus Malang:** tersedia pilihan Klinik **dan** Home Care. Kota lain hanya Home Care.
 
 ---
 
-### 8. 🔔 Notifikasi In-App
+### 7. 🗺️ Peta Interaktif (Home Care)
 
-- Notifikasi terbaru tampil paling atas berdasarkan `created_at`.
-- Waktu ditampilkan relatif seperti `Baru saja`, `2 menit yang lalu`, `3 jam yang lalu`, atau `Kemarin`.
-- Label waktu tersedia dalam Bahasa Indonesia dan English.
+- Tile peta: **Geoapify** (`osm-bright` style) — lebih detail dari OpenStreetMap standar.
+- **Geocoding akurat** menggunakan Geoapify API (3000 req/hari gratis) dengan fallback otomatis ke Nominatim lalu `geocoding` package.
+- **Reverse geocoding** (koordinat → alamat lengkap): tap di peta atau gunakan lokasi terkini → field Alamat terisi otomatis dengan format `Jalan, Kelurahan, Kecamatan, Kota, Provinsi, Kode Pos`.
+- **Forward geocoding** (ketik alamat → pindah peta): debounce 900ms setelah berhenti ketik → peta dan marker sync ke lokasi.
+- **Popup peta** (fullscreen): tampil floating label alamat di atas peta, field detail di bawah, tombol ✕ untuk confirm & tutup.
+- **Gunakan Lokasi Terkini**: `LocationAccuracy.bestForNavigation` untuk akurasi GPS tertinggi.
 
-### 9. 📑 Syarat, Ketentuan & Kebijakan Privasi
+**Fallback chain geocoding:**
+```
+Geoapify API (akurat, 3000/hari)
+    ↓ quota habis / error
+Nominatim OpenStreetMap (gratis unlimited)
+    ↓ error
+geocoding package (butuh Google Play Services)
+```
 
-- Kedua dokumen menggunakan UI accordion agar setiap section dapat dibuka dan ditutup.
-- Tanggal `Terakhir diperbarui` mengikuti tanggal perangkat saat ini.
+---
 
-### 10. 📊 Logging Error HTTP 5xx
+### 8. 💳 Pembayaran DP & Pelunasan
 
-- Client mendeteksi response HTTP `500-599` dari API Dio.
-- Metadata aman dikirim ke Edge Function `client-error-log`.
-- Server memvalidasi payload dan mencatat log di Supabase Edge Function Logs.
-- Token, password, dan body request tidak dikirim ke logger.
+- Card appointment menampilkan **2 tombol** saat DP belum lunas: "Lihat Detail" (outline) + "Lunaskan Pembayaran" (solid).
+- Saat DP lunas atau hangus: hanya tombol "Lihat Detail".
+- Metode pembayaran: QRIS, OVO, GoPay, ShopeePay, BCA, BNI, BRI, Permata, Mandiri, kartu, tunai.
+- Pelunasan menggunakan RPC `settle_appointment_payment`.
+- Setelah berhasil: screen sukses countdown 3 detik → tab History.
+- Pembayaran masih demo sampai payment gateway/webhook diterapkan.
 
-### 11. 🔓 Lupa PIN Flow
+---
+
+### 9. 📋 Detail Riwayat — Status Done
+
+Appointment yang sudah selesai (`completed`) menampilkan data klinis nyata dari DB:
+
+| Field DB | Tampilan |
+|---|---|
+| `clinical_note` | Catatan klinis pasca sesi (collapsible, tap untuk baca penuh) |
+| `vas_score` | Skala Nyeri VAS dengan persentase perbaikan |
+| `rom_score` | Range of Motion dengan persentase |
+| `mmt_score` | Kekuatan Otot MMT dengan persentase |
+| `odi_score` | Oswestry Disability Index dengan persentase |
+| `therapist_recommendation` | Banner kuning rekomendasi terapis |
+| `therapist_sipf` | Nomor lisensi terapis |
+| `therapist_photo_url` | Foto avatar terapis |
+
+Kolom-kolom di atas perlu ditambahkan ke tabel `appointments` di Supabase. Selama kosong, tampilan fallback ke teks placeholder dari localization.
+
+---
+
+### 10. 🔔 Notifikasi In-App
+
+- Terbaru tampil paling atas berdasarkan `created_at`.
+- Waktu relatif: `Baru saja`, `2 menit yang lalu`, `3 jam yang lalu`, `Kemarin`.
+- Label tersedia dalam ID & EN.
+
+### 11. 📑 Syarat, Ketentuan & Kebijakan Privasi
+
+- UI accordion — setiap section buka/tutup.
+- Tanggal `Terakhir diperbarui` mengikuti tanggal perangkat.
+
+### 12. 📊 Logging Error HTTP 5xx
+
+- Global error handler aktif sejak app dibuka.
+- Mendeteksi response `500-599` dari semua jalur: Dio, Supabase Auth, DB, Storage, RPC.
+- Metadata aman dikirim ke Edge Function `client-error-log` secara background.
+- Data tersimpan permanen di tabel `error_logs`.
+- Dokumentasi: [`docs/5xx-error-logging.md`](docs/5xx-error-logging.md)
+
+### 13. 🔓 Lupa PIN Flow
 
 ```
 PIN Verification → Lupa PIN
-  → Input Nomor HP          [layout: header teal + white card]
-  → OTP Verification        [layout: header teal + white card]
-  → Verifikasi Tanggal Lahir [layout: header teal + white card]
-  → Buat PIN Baru           [layout: putih penuh + icon gembok + numpad]
-  → Konfirmasi PIN          [layout: putih penuh + icon gembok + numpad]
+  → Input Nomor HP → OTP Verification → Verifikasi Tanggal Lahir
+  → Buat PIN Baru → Konfirmasi PIN
   → PIN Reset Success Screen (animasi ✓ + countdown 3 detik)
   → Sign In Screen
 ```
 
 ---
 
-### 12. 🛡️ Keamanan & Stabilitas Layout
+### 14. 🛡️ Keamanan & Stabilitas
 
 | Mekanisme | Detail |
 |---|---|
-| PIN Hashing | SHA-256 (tersimpan di kolom `pin_hash`) |
-| PIN Rate Limit | Salah 3x → layar kunci 5 menit |
-| OTP Rate Limit | Salah 3x → redirect ke OTP Rate Limit Screen (cooldown 30 detik) |
-| Layout Stability | Layout scrollable berbasis `SingleChildScrollView` + `ConstrainedBox` mencegah RenderFlex overflow di layar HP & Web |
-| Google Account Picker | `signOut()` sebelum `signIn()` — dialog pilih akun selalu muncul |
-| Service-Role Key | Hanya digunakan di Edge Function (server-side), tidak pernah di client |
+| PIN Hashing | SHA-256 (kolom `pin_hash`) |
+| PIN Rate Limit | Salah 3x → kunci 5 menit |
+| OTP Rate Limit | Salah 3x → cooldown 30 detik |
+| Layout Stability | `SingleChildScrollView` + `ConstrainedBox` mencegah overflow |
+| Google Account Picker | `signOut()` sebelum `signIn()` — dialog selalu muncul |
+| Service-Role Key | Hanya di Edge Function, tidak pernah di client |
 
 ---
 
@@ -262,14 +276,13 @@ App dibuka
 | Sign In | Header teal (logo KEDOTA) + white card bawah |
 | OTP Verification | Header teal (logo KEDOTA) + white card bawah |
 | PIN Verification | Putih penuh + icon gembok + numpad |
-| Profil Completion (HP & Google) | Glassmorphism card dengan gradient background |
-| Create PIN (HP & Google) | Putih penuh + icon gembok + numpad |
-| Lupa PIN — Input No. Telp | Header teal (logo KEDOTA) + white card bawah |
-| Lupa PIN — Verif OTP | Header teal (logo KEDOTA) + white card bawah |
-| Lupa PIN — Verif TTL | Header teal (logo KEDOTA) + white card bawah |
-| Lupa PIN — Buat PIN Baru | Putih penuh + icon gembok + numpad |
+| Profil Completion | Glassmorphism card dengan gradient background |
+| Create PIN | Putih penuh + icon gembok + numpad |
+| Lupa PIN | Header teal (logo KEDOTA) + white card bawah |
 | Edit Profil | White card layout + avatar gradient + dialogs |
 | Settings | Header gradient teal + profile card + menu list |
+| Reservasi Step 3 | Flat tanpa card — field berurutan + peta interaktif |
+| Detail Riwayat Done | Card data klinis + grid progres 2×2 + banner rekomendasi |
 
 ---
 
@@ -277,35 +290,21 @@ App dibuka
 
 ### Update PIN Function (`update-pin`)
 
-Aplikasi ini menggunakan **Supabase Edge Function** untuk menangani update PIN secara aman, khususnya pada alur lupa PIN di mana user tidak memiliki session aktif.
-
-**Arsitektur Edge Function:**
 ```
-┌────────────────────────────────────────────┐
-│         Flutter App (Client)               │
-│  • Tidak punya service-role key ✓          │
-│  • Kirim request dengan JWT/anon key ✓     │
-└────────────────────────────────────────────┘
-                    │
-                    │ HTTPS + JWT
-                    ▼
-┌────────────────────────────────────────────┐
-│    Edge Function: update-pin (Server)      │
-│  • Validasi JWT token ✓                    │
-│  • Gunakan service-role key (aman) ✓       │
-│  • Update profiles.pin_hash ✓              │
-│  • Sync Supabase Auth password ✓           │
-│  • Rollback jika gagal ✓                   │
-└────────────────────────────────────────────┘
+Flutter App (Client)          Edge Function: update-pin (Server)
+  • Tidak punya service-role  →  • Validasi JWT token
+  • Kirim JWT/anon key           • Gunakan service-role key (aman)
+                                 • Update profiles.pin_hash
+                                 • Sync Supabase Auth password
+                                 • Rollback jika gagal
 ```
 
-**Endpoint:** `POST /functions/v1/update-pin`
-
-**Deployment Command:**
+**Deployment:**
 ```bash
 supabase login
 supabase link --project-ref wwmctqhbqpsbkyxkeaqv
 supabase functions deploy update-pin
+supabase functions deploy client-error-log
 ```
 
 ---
@@ -316,154 +315,48 @@ supabase functions deploy update-pin
 
 | Kolom | Tipe | Keterangan |
 |---|---|---|
-| `id` | uuid | Primary key janji temu |
-| `booker_id` | uuid | Pemilik janji, terhubung ke `auth.users` |
+| `id` | uuid | Primary key |
+| `booker_id` | uuid | FK ke `auth.users` |
 | `service_type` | text | `Klinik` atau `Home Care` |
-| `clinic_name` | text | Klinik/lokasi layanan |
+| `clinic_name` | text | Nama klinik/lokasi |
 | `appointment_date` | date | Tanggal pertemuan |
 | `appointment_time` | time | Jam pertemuan |
 | `session_count` | integer | Jumlah sesi dalam paket |
-| `appointment_status` | text | `upcoming`, `completed`, `expired`, atau `cancelled` |
+| `appointment_status` | text | `upcoming`, `completed`, `expired`, `cancelled` |
 | `payment_plan` | text | `full` atau `deposit` |
-| `payment_status` | text | `paid`, `pending`, `failed`, atau `expired` |
+| `payment_status` | text | `paid`, `pending`, `failed`, `expired` |
 | `amount_due` | numeric | Sisa pembayaran |
-| `booking_code` | text | Kode unik reservasi dengan format `EMR-####-########` |
-| `assigned_therapist_id` | uuid | Terapis yang ditugaskan, jika tersedia |
-| `created_at` / `updated_at` | timestamptz | Waktu pembuatan/perubahan |
-
-Status `completed` seharusnya diubah oleh terapis atau admin melalui RPC, bukan oleh pasien.
-
-### Migration operasional penting
-
-- `20260909000000_add_staff_appointment_status.sql` — role terapis/admin dan RPC update status.
-- `20260909000100_prevent_duplicate_appointment_slots.sql` — mencegah slot aktif ganda.
-- `20260909000200_expire_overdue_appointments.sql` — auto-expire 15 menit setelah jadwal.
-- `20260909000300_reschedule_appointment_rpc.sql` — reschedule aman oleh pemilik janji.
-- `20260909000400_settle_appointment_payment_rpc.sql` — RPC pelunasan pembayaran.
-- `20260909000000_add_booking_code.sql` — sequence dan kolom kode booking unik.
-- `20260909000500_secure_patient_medical_codes.sql` — migrasi ID pasien ke kode acak dan unique index.
+| `booking_code` | text | Format `EMR-####-########` |
+| `clinical_note` | text | *(opsional)* Catatan klinis terapis pasca sesi |
+| `vas_score` | integer | *(opsional)* Skala nyeri VAS (0-10) |
+| `rom_score` | integer | *(opsional)* Range of Motion (0-120°) |
+| `mmt_score` | integer | *(opsional)* Kekuatan otot MMT (0-5) |
+| `odi_score` | integer | *(opsional)* Oswestry Disability Index (0-50) |
+| `therapist_recommendation` | text | *(opsional)* Rekomendasi terapis |
+| `therapist_sipf` | text | *(opsional)* Nomor lisensi terapis |
+| `therapist_photo_url` | text | *(opsional)* URL foto terapis |
+| `created_at` / `updated_at` | timestamptz | Timestamp |
 
 ### Tabel `profiles`
 
 | Kolom | Tipe | Keterangan |
 |---|---|---|
-| `id` | uuid | Primary key, terhubung ke `auth.users` |
-| `phone` | text | Nomor HP format `+62xxx` |
-| `full_name` | text | Nama lengkap pengguna |
-| `email` | text | Email display pengguna |
+| `id` | uuid | PK, FK ke `auth.users` |
+| `phone` | text | Format `+62xxx` |
+| `full_name` | text | Nama lengkap |
+| `email` | text | Email display |
 | `auth_email` | text | Email identitas Supabase Auth |
-| `pin_hash` | text | SHA-256 hash dari PIN 6-digit |
-| `birth_date` | date | Tanggal lahir format `YYYY-MM-DD` |
+| `pin_hash` | text | SHA-256 dari PIN 6-digit |
+| `birth_date` | date | Format `YYYY-MM-DD` |
 | `gender` | text | `Laki-laki` / `Perempuan` / `Lainnya` |
-| `profile_photo_url` | text | URL foto profil dari Supabase Storage |
-| `nik` | text | NIK 16 digit pasien |
-| `address` | text | Alamat pasien untuk kebutuhan reservasi |
+| `profile_photo_url` | text | URL foto dari Supabase Storage |
+| `nik` | text | NIK 16 digit |
+| `address` | text | Alamat untuk reservasi |
 | `signup_method` | text | `phone` / `google` / `apple` |
 | `status` | text | `active` / `deactivated` / `recycled` |
-| `is_profile_complete` | bool | Flag kelengkapan profil |
-| `medical_code` | text | ID pasien tetap dengan format `KDT-` + 12 karakter acak unik |
-| `last_login_at` | timestamptz | Untuk deteksi akun dormant (>60 hari) |
-| `created_at` | timestamptz | Waktu registrasi |
-| `updated_at` | timestamptz | Waktu perbaruan terakhir |
-
----
-
-## 📄 Dokumentasi API (OpenAPI 3.0 / Swagger)
-
-Spesifikasi API lengkap tersedia di file: `swagger_supabase_api_spec.txt`.
-
-### Daftar Endpoint Utama:
-
-| Tag | Endpoint | Method | Deskripsi |
-|---|---|:---:|---|
-| Auth | `/auth/signup` | POST | Registrasi akun via nomor HP |
-| Auth | `/auth/signin` | POST | Login via nomor HP + PIN |
-| Auth | `/auth/google` | POST | Login / Registrasi Google OAuth |
-| Auth | `/auth/apple` | POST | Login Apple OAuth |
-| Auth | `/auth/signout` | POST | Logout dari session aktif |
-| Auth | `/auth/otp` | POST | Send OTP SMS *(Production Plan)* |
-| Auth | `/auth/verify` | POST | Verify OTP token *(Production Plan)* |
-| Profiles | `/profiles` | GET / POST | Ambil / Buat data profil |
-| Profiles | `/profiles/{id}` | GET / PATCH / DELETE | Detail / Update / Hapus profil |
-| Profiles | `/profiles/{id}/pin` | PATCH | Update PIN (session aktif) |
-| Profiles | `/profiles/{id}/verify-birth-date` | POST | Verifikasi TTL untuk lupa PIN |
-| Profiles | `/profiles/{id}/status` | PATCH | Update status profil |
-| Profiles | `/profiles/check-phone` | GET | Cek duplikat nomor HP |
-| Profiles | `/profiles/check-email` | GET | Cek duplikat email |
-| Profiles | `/profiles/check-status` | GET | Cek status & dormant akun |
-| Functions | `/functions/v1/update-pin` | POST | Update PIN via Edge Function (Server-side) |
-
----
-
-## 🗂️ Struktur Folder Repository
-
-```
-lib/
-├── l10n/
-│   └── app_language.dart                    # Kamus terjemahan lengkap Bahasa Indonesia & English
-├── screens/
-│   ├── auth/
-│   │   ├── account_created_screen.dart      # Screen sukses registrasi
-│   │   ├── forgot_pin_screen.dart           # Screen lupa PIN (Input HP, OTP, Verif TTL, Reset PIN)
-│   │   ├── google_create_pin_screen.dart    # Buat PIN akun Google
-│   │   ├── google_profile_completion_screen.dart # Lengkapi profil Google
-│   │   ├── otp_verification_screen.dart     # Input & Verifikasi OTP
-│   │   ├── phone_create_pin_screen.dart     # Buat PIN akun HP
-│   │   ├── phone_profile_completion_screen.dart # Lengkapi profil HP
-│   │   ├── pin_verification_screen.dart     # Input PIN login
-│   │   └── sign_in_screen.dart              # Entry screen Sign In & OAuth
-│   ├── errors/
-│   │   ├── no_internet_screen.dart
-│   │   ├── otp_rate_limit_screen.dart       # Cooldown 30s OTP
-│   │   ├── pin_rate_limit_screen.dart       # Lock 5m PIN
-│   │   └── verification_rate_limit_screen.dart
-│   ├── home/
-│   │   ├── support_info_screens.dart         # FAQ, support, terms, dan privacy accordion
-│   │   ├── change_pin_screen.dart           # Ganti PIN dari Settings
-│   │   ├── edit_profile_screen.dart         # Edit profil, foto, hide phone, hapus akun
-│   │   ├── history_screen.dart              # Riwayat aktivitas & medis
-│   │   ├── home_screen.dart                 # Dashboard utama pasien Kedota
-│   │   ├── main_screen.dart                 # Bottom Navigation Bar (4 tab)
-│   │   ├── notification_preferences_screen.dart # Preferensi notifikasi
-│   │   ├── notification_screen.dart         # Halaman daftar notifikasi
-│   │   ├── reservation_flow_screen.dart     # Alur reservasi dan pembayaran
-│   │   ├── reschedule_appointment_screen.dart # Ubah jadwal appointment
-│   │   ├── settle_payment_screen.dart        # Instruksi dan pelunasan pembayaran
-│   │   ├── progress_screen.dart             # Monitor perkembangan kesehatan
-│   │   ├── upcoming_appointment_card.dart   # Card appointment bersama Home/Riwayat
-│   │   └── settings_screen.dart             # Settings, toggle bahasa, header profil
-│   ├── onboarding/
-│   │   └── onboarding_screen.dart
-│   └── splash/
-│       └── splash_screen.dart               # Auto-routing berdasarkan sesi
-├── services/
-│   ├── client_error_log_service.dart         # Pengiriman metadata error HTTP 5xx
-│   ├── supabase_auth_service.dart           # Service logika autentikasi & profile DB
-│   ├── notification_service.dart             # Push notification, reminder, dan deep-link
-│   ├── supabase_api_client.dart             # Retrofit API client
-│   └── supabase_api_client.g.dart           # Code-generated Retrofit client
-├── widgets/
-│   ├── app_lock_overlay.dart                 # App lock saat resume dari background
-│   ├── custom_bottom_sheet.dart              # Reusable bottom sheet
-│   ├── custom_error_screen.dart
-│   ├── google_logo_icon.dart
-│   ├── language_button.dart
-│   └── data_error_widget.dart                # Error state dengan retry terlokalisasi
-├── utils/
-│   ├── app_snackbar.dart                     # SnackBar standar seluruh aplikasi
-│   └── phone_validator.dart
-├── test/
-│   ├── screens/auth/auth_flow_screens_test.dart # Test onboarding, Forgot PIN, phone/Google sign-up
-│   ├── screens/auth/sign_in_screen_test.dart   # Test UI Sign In dan provider OAuth
-│   ├── services/supabase_auth_service_test.dart
-│   └── utils/phone_validator_test.dart
-└── supabase/
-  ├── config.toml                           # Project config Supabase lokal
-  ├── migrations/                           # Schema, RPC, constraint, dan policy database
-  └── functions/
-    ├── update-pin/index.ts               # Edge Function update PIN
-    └── client-error-log/index.ts         # Logging error HTTP 5xx dari client
-```
+| `medical_code` | text | Format `KDT-` + 12 karakter acak unik |
+| `last_login_at` | timestamptz | Deteksi akun dormant (>60 hari) |
+| `created_at` / `updated_at` | timestamptz | Timestamp |
 
 ---
 
@@ -471,37 +364,102 @@ lib/
 
 | Komponen | Teknologi |
 |---|---|
-| Framework | Flutter 3.x (Dart) |
+| Framework | Flutter 3.x (Dart SDK `^3.12.2`) |
 | Backend | Supabase (PostgreSQL + Auth + Storage + Edge Functions) |
-| OAuth | Google Sign-In (Native SDK + Supabase) & Apple Sign-In (OAuth) |
+| OAuth | Google Sign-In & Apple Sign-In (OAuth) |
 | HTTP Client | Dio + Retrofit (generated) |
+| Peta | `flutter_map` v8 + Geoapify tile & geocoding |
+| Lokasi | `geolocator` + `geocoding` (fallback) |
 | Local Storage | `shared_preferences` |
 | Security | SHA-256 PIN Hashing + Phone Masking |
 | Server Functions | Supabase Edge Functions (Deno Runtime) |
-| API Spec | OpenAPI 3.0 (Swagger) — `swagger_supabase_api_spec.txt` |
-| Multi-Language | `AppLanguageScope` (Indonesia & English) |
-| Observability | Dio interceptor + Supabase Edge Function `client-error-log` |
+| Multi-Language | `AppLanguageScope` (Indonesia default + English) |
+| Observability | Dio interceptor + Flutter error handler + `client-error-log` Edge Function |
+| API Spec | OpenAPI 3.0 — `swagger_supabase_api_spec.txt` |
+
+---
+
+## 🗂️ Struktur Folder
+
+```
+lib/
+├── l10n/
+│   └── app_language.dart                    # Kamus terjemahan ID & EN — tidak ada hardcoded text
+├── screens/
+│   ├── auth/
+│   │   ├── account_created_screen.dart
+│   │   ├── forgot_pin_screen.dart
+│   │   ├── google_create_pin_screen.dart
+│   │   ├── google_profile_completion_screen.dart
+│   │   ├── otp_verification_screen.dart
+│   │   ├── phone_create_pin_screen.dart
+│   │   ├── phone_profile_completion_screen.dart
+│   │   ├── pin_verification_screen.dart
+│   │   └── sign_in_screen.dart
+│   ├── errors/
+│   │   ├── no_internet_screen.dart
+│   │   ├── otp_rate_limit_screen.dart
+│   │   ├── pin_rate_limit_screen.dart
+│   │   └── verification_rate_limit_screen.dart
+│   ├── home/
+│   │   ├── appointment_detail_screen.dart   # Detail janji — data klinis, progres, rekomendasi
+│   │   ├── change_pin_screen.dart
+│   │   ├── edit_profile_screen.dart
+│   │   ├── history_screen.dart              # AppointmentItem model + riwayat
+│   │   ├── home_screen.dart
+│   │   ├── main_screen.dart                 # Bottom nav 4 tab
+│   │   ├── notification_preferences_screen.dart
+│   │   ├── notification_screen.dart
+│   │   ├── reservation_flow_screen.dart     # Alur reservasi 6 step + peta Geoapify
+│   │   ├── reschedule_appointment_screen.dart
+│   │   ├── settle_payment_screen.dart
+│   │   ├── settings_screen.dart
+│   │   ├── support_info_screens.dart
+│   │   └── upcoming_appointment_card.dart   # Card dengan 2 tombol saat DP belum lunas
+│   ├── onboarding/
+│   │   └── onboarding_screen.dart
+│   └── splash/
+│       └── splash_screen.dart
+├── services/
+│   ├── client_error_log_service.dart
+│   ├── supabase_auth_service.dart
+│   ├── notification_service.dart
+│   ├── supabase_api_client.dart
+│   └── supabase_api_client.g.dart
+├── widgets/
+│   ├── app_lock_overlay.dart
+│   ├── custom_bottom_sheet.dart
+│   ├── custom_date_picker.dart
+│   ├── custom_error_screen.dart
+│   ├── google_logo_icon.dart
+│   ├── language_button.dart
+│   └── data_error_widget.dart
+└── utils/
+    ├── app_snackbar.dart
+    ├── booking_code.dart
+    └── phone_validator.dart
+```
+
+---
 
 ## 🧪 Testing
 
 Test widget dan unit tersedia untuk:
 
-- Splash dan branding aplikasi.
-- Validasi nomor telepon.
-- Service hashing PIN.
-- Sign In phone dan validasi input.
-- Onboarding, termasuk skip ke Sign In dan penyimpanan `has_seen_onboarding`.
-- Forgot PIN, validasi nomor, serta OTP dummy.
-- Sign-up phone: profile completion dan create PIN.
-- Google sign-up: profile completion dan create PIN.
-
-Jalankan seluruh test dengan:
+- Splash dan branding aplikasi
+- Validasi nomor telepon
+- Service hashing PIN
+- Sign In phone dan validasi input
+- Onboarding, skip, dan penyimpanan `has_seen_onboarding`
+- Forgot PIN, validasi nomor, dan OTP dummy
+- Sign-up phone: profile completion dan create PIN
+- Google sign-up: profile completion dan create PIN
 
 ```bash
-flutter test
+flutter test   # 27 test lulus
 ```
 
-Perintah tersebut saat ini menghasilkan **27 test lulus**. Integration smoke test tersedia di `integration_test/app_test.dart` dan membutuhkan device Android/iOS, file `.env`, serta koneksi Supabase. OAuth Google/Apple dan OTP production tidak diuji dengan credential nyata dalam widget test.
+Integration test di `integration_test/app_test.dart` membutuhkan device Android/iOS, `.env`, dan koneksi Supabase.
 
 ---
 
@@ -512,9 +470,9 @@ Perintah tersebut saat ini menghasilkan **27 test lulus**. Integration smoke tes
 git clone https://github.com/Raihanhidayah12/Kedota-Physiotherapy-App.git
 cd Kedota-Physiotherapy-App
 
-# 2. Siapkan environment Supabase
-copy .env.example .env       # Windows PowerShell: Copy-Item .env.example .env
-# Isi SUPABASE_URL dan SUPABASE_ANON_KEY pada .env
+# 2. Siapkan environment
+Copy-Item .env.example .env   # Windows PowerShell
+# Isi SUPABASE_URL dan SUPABASE_ANON_KEY
 
 # 3. Install dependencies
 flutter pub get
@@ -522,24 +480,20 @@ flutter pub get
 # 4. Jalankan aplikasi
 flutter run
 
-# 5. Jalankan unit dan widget tests
+# 5. Test
 flutter test
 
-# 6. Jalankan integration test di device/emulator Android yang terhubung
-flutter test integration_test/app_test.dart -d <device-id>
-
-# 7. Deploy Edge Functions jika memiliki akses ke project Supabase
+# 6. Deploy Edge Functions
 supabase login
 supabase link --project-ref wwmctqhbqpsbkyxkeaqv
 supabase functions deploy update-pin
 supabase functions deploy client-error-log
+supabase db push
 ```
 
-> Jangan commit `.env`. Gunakan `.env.example` sebagai template dan isi hanya dengan publishable/anon key pada aplikasi Flutter. Service-role key hanya boleh digunakan oleh Edge Function.
+> Jangan commit `.env`. Service-role key hanya boleh digunakan oleh Edge Function.
 
 ### Supabase Lokal
-
-Konfigurasi lokal tersedia di `supabase/config.toml`. Supabase CLI dapat menjalankan API, database, Auth, Storage, Studio, Inbucket, dan Edge Runtime secara lokal:
 
 ```bash
 supabase start
@@ -547,7 +501,23 @@ supabase functions serve update-pin
 supabase functions serve client-error-log
 ```
 
-Migration database berada di `supabase/migrations/`. Setelah perubahan schema, jalankan migration sesuai workflow Supabase yang digunakan oleh tim.
+---
+
+## 🗒️ Catatan Migrasi DB
+
+Untuk mengaktifkan fitur Detail Riwayat Done dengan data klinis nyata, tambahkan kolom berikut ke tabel `appointments`:
+
+```sql
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS clinical_note TEXT,
+  ADD COLUMN IF NOT EXISTS vas_score INTEGER,
+  ADD COLUMN IF NOT EXISTS rom_score INTEGER,
+  ADD COLUMN IF NOT EXISTS mmt_score INTEGER,
+  ADD COLUMN IF NOT EXISTS odi_score INTEGER,
+  ADD COLUMN IF NOT EXISTS therapist_recommendation TEXT,
+  ADD COLUMN IF NOT EXISTS therapist_sipf TEXT,
+  ADD COLUMN IF NOT EXISTS therapist_photo_url TEXT;
+```
 
 ---
 
