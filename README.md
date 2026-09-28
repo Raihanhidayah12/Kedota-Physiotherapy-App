@@ -193,6 +193,14 @@ Batas pembayaran berlaku 10 menit sejak metode dipilih atau pengguna masuk ke in
 - iOS memasang privacy cover native pada `sceneWillResignActive` dan menghapusnya saat scene aktif kembali. Cover ini mencegah konten Flutter terlihat di app switcher.
 - Perilaku ini hanya menyamarkan tampilan preview; tidak mengubah status login atau preferensi biometric.
 
+### 8a. 🍎 Dukungan iOS
+
+- Target iOS tersedia dengan minimum deployment iOS 13.0.
+- `Info.plist` menjelaskan izin kamera, lokasi saat aplikasi digunakan, dan Face ID.
+- `SceneDelegate` memasang privacy cover saat aplikasi berpindah ke app switcher.
+- `file_saver` menyediakan penyimpanan file untuk iOS; aksi simpan QR menggunakan dialog/pemilih file native.
+- Build dan pengujian di iPhone atau simulator belum diverifikasi. Build iOS memerlukan macOS dan Xcode.
+
 ---
 
 ### 9. 🗺️ Peta Interaktif (Home Care)
@@ -410,12 +418,14 @@ supabase functions deploy client-error-log
 | Lokasi | `geolocator` + `geocoding` (fallback) |
 | Koneksi | `connectivity_plus` + probe HTTP Supabase untuk deteksi internet |
 | Local Storage | `shared_preferences` |
-| Simpan QR | `file_saver` + pemilih file native pada platform yang mendukung |
+| Simpan QR | `file_saver` 0.6.0 + pemilih file native pada platform yang mendukung |
 | Security | SHA-256 PIN Hashing + Phone Masking |
 | Server Functions | Supabase Edge Functions (Deno Runtime) |
 | Multi-Language | `AppLanguageScope` (Indonesia default + English) |
 | Observability | Dio interceptor + Flutter error handler + `client-error-log` Edge Function |
 | API Spec | OpenAPI 3.0 — `swagger_supabase_api_spec.txt` |
+
+`file_saver` 0.6.0 memakai `meta ^1.19.0`. Flutter 3.44.6 mematok `meta 1.18.0` lewat `flutter_test`, sehingga `pubspec.yaml` memakai `dependency_overrides` untuk menyelesaikan dependensi. Setelah Flutter SDK diperbarui ke versi dengan pin `meta` yang sesuai, override ini dapat dievaluasi kembali.
 
 ---
 
