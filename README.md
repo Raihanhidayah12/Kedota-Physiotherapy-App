@@ -35,7 +35,7 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 👁️ Privasi Nomor HP | 🟢 Selesai | Default hidden (`+628••••9436`) + Eye Icon toggle di Settings & Edit Profile |
 | 🔔 Preferensi Notifikasi | 🟢 Selesai | Push notif, reminder, notifikasi DP/expired, dan deep-link ke detail atau pelunasan |
 | 🕒 Urutan & Waktu Notifikasi | 🟢 Selesai | Notifikasi terbaru tampil paling atas dengan waktu relatif |
-| ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan Lengkap + Hapus Akun Permanen (Verifikasi PIN 6-digit) |
+| ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan profil, preferensi, keamanan, dukungan, dan logout |
 | 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → cooldown 30 detik |
 | 📴 Deteksi Internet & Error Screen | 🟢 Selesai | Status koneksi device dan akses internet diverifikasi; screen offline dan limit memakai hitung mundur |
 | 🕶️ Privasi App Switcher | 🟢 Selesai | Konten aplikasi ditutup saat masuk app switcher pada Android dan iOS |
@@ -119,8 +119,8 @@ Sign In → Continue with Google → PIN Verification → Home Screen
 - **Privasi Nomor HP**: Toggle hide/show nomor HP di Settings & Edit Profile.
 - **Ganti PIN**: Verifikasi lama → PIN baru → Konfirmasi.
 - **Preferensi Notifikasi**: Push, reminder jadwal, promo, berita email.
-- **Hapus Akun Permanen**: Konfirmasi + verifikasi PIN 6-digit.
 - **Logout dan biometric**: Preferensi biometric dan PIN lokal akun yang logout dihapus dari device. Penguncian ketika aplikasi masuk background tidak menghapus preferensi.
+- **Hapus akun**: Tidak tersedia sebagai fitur/menu di versi aplikasi saat ini.
 
 ### 4a. 🏠 Beranda & Pengingat Kelengkapan Profil
 

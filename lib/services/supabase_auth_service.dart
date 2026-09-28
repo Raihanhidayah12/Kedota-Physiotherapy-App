@@ -1477,40 +1477,6 @@ class SupabaseAuthService {
       debugPrint('Error signing out: $e');
     }
   }
-
-  /// Hapus akun user secara permanen:
-  /// 1. Set status = 'recycled' di tabel profiles
-  /// 2. Delete row profiles
-  /// 3. Sign out dari Supabase Auth
-  ///
-  /// Catatan: Supabase Auth user hanya bisa dihapus via admin/service-role key
-  /// (tidak bisa dari client SDK), sehingga data Auth tetap ada tapi tidak
-  /// bisa diakses lagi karena profiles sudah dihapus.
-  Future<void> deleteAccount() async {
-    final user = client.auth.currentUser;
-    if (user == null) throw Exception('Not logged in');
-
-    try {
-      // 1. Tandai dulu sebagai recycled (soft delete sementara)
-      await client
-          .from('profiles')
-          .update({
-            'status': 'recycled',
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', user.id);
-
-      // 2. Hapus row profil
-      await client.from('profiles').delete().eq('id', user.id);
-
-      // 3. Sign out
-      await client.auth.signOut();
-    } catch (e) {
-      debugPrint('deleteAccount error: $e');
-      _logSupabaseError(e, method: 'DELETE', path: '/rest/v1/profiles');
-      rethrow;
-    }
-  }
 }
 
 class AccountCheckResult {

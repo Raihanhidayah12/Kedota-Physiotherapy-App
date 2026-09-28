@@ -776,11 +776,6 @@ const _translations = {
         'You need to set up fingerprint or face recognition on your device first. Go to your phone Settings to add biometric authentication.',
     'allowBtn': 'Allow',
     'openSettingsBtn': 'Open Settings',
-    'deleteAccountPermanent': 'Delete Account Permanently',
-    'deleteAccountTitle': 'Delete Account',
-    'deleteAccountDesc':
-        'Your account and all your data will be permanently deleted. This action cannot be undone.',
-    'deleteBtn': 'Delete',
     'phoneNotFound': 'Phone number not found',
     'sessionExpiredUsePIN': 'Session expired. Please login with your PIN.',
     'appLockedTitle': 'App Locked',
@@ -791,7 +786,6 @@ const _translations = {
     'enterPinToContinue': 'Enter your PIN to continue',
     'verifyBtn': 'Verify',
     'wrongPinShort': 'Wrong PIN',
-    'deleteAccountFailed': 'Failed to delete account. Please try again.',
     'faqIntro': 'Find answers to common questions about Kedota.',
     'faqQuestion1': 'Is my NIK safe if I enter it in the application?',
     'faqAnswer1':
@@ -1639,11 +1633,6 @@ Device information, application activity logs, and usage data for security and s
         'Anda perlu mengatur sidik jari atau pengenalan wajah di perangkat Anda terlebih dahulu. Buka Pengaturan HP untuk menambahkan autentikasi biometrik.',
     'allowBtn': 'Izinkan',
     'openSettingsBtn': 'Buka Pengaturan',
-    'deleteAccountPermanent': 'Hapus Akun Permanen',
-    'deleteAccountTitle': 'Hapus Akun',
-    'deleteAccountDesc':
-        'Akun dan semua data Anda akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.',
-    'deleteBtn': 'Hapus',
     'phoneNotFound': 'Nomor telepon tidak ditemukan',
     'sessionExpiredUsePIN': 'Sesi habis. Silakan login dengan PIN Anda.',
     'appLockedTitle': 'Aplikasi Terkunci',
@@ -1654,7 +1643,6 @@ Device information, application activity logs, and usage data for security and s
     'enterPinToContinue': 'Masukkan PIN Anda untuk melanjutkan',
     'verifyBtn': 'Verifikasi',
     'wrongPinShort': 'PIN salah',
-    'deleteAccountFailed': 'Gagal menghapus akun. Silakan coba lagi.',
     'faqIntro': 'Temukan jawaban untuk pertanyaan umum tentang Kedota.',
     'faqQuestion1': 'Apakah NIK saya aman jika saya masukkan ke aplikasi?',
     'faqAnswer1':
