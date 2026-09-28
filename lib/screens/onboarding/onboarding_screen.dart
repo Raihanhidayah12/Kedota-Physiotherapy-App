@@ -150,17 +150,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
             // ===== SWIPEABLE PAGE VIEW CONTENT =====
             Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: pages.length,
-                onPageChanged: (index) {
-                  setState(() => _currentPage = index);
-                },
-                itemBuilder: (context, index) {
-                  final page = pages[index];
+              child: Stack(
+                children: [
+                  PageView.builder(
+                    controller: _pageController,
+                    itemCount: pages.length,
+                    onPageChanged: (index) {
+                      setState(() => _currentPage = index);
+                    },
+                    itemBuilder: (context, index) {
+                      final page = pages[index];
 
-                  return Column(
-                    children: [
+                      return Column(
+                        children: [
                       // HERO GRAPHIC / IMAGE AREA
                       Expanded(
                         flex: 6,
@@ -221,37 +223,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               ),
 
                               const Spacer(),
-
-                              // DOT INDICATORS (Placed directly above bottom button)
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(pages.length, (i) {
-                                  final isActive = _currentPage == i;
-                                  return AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 3,
-                                    ),
-                                    width: isActive ? 24 : 8,
-                                    height: 7,
-                                    decoration: BoxDecoration(
-                                      color: isActive
-                                          ? const Color(0xFF00A79D)
-                                          : const Color(0xFFE2E8F0),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  );
-                                }),
-                              ),
-
-                              const SizedBox(height: 24),
                             ],
                           ),
                         ),
                       ),
-                    ],
-                  );
-                },
+                        ],
+                      );
+                    },
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 24,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(pages.length, (index) {
+                        final isActive = _currentPage == index;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: isActive ? 24 : 8,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? const Color(0xFF00A79D)
+                                : const Color(0xFFE2E8F0),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
               ),
             ),
 

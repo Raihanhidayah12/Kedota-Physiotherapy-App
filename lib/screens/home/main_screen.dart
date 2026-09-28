@@ -60,7 +60,21 @@ class _MainScreenState extends State<MainScreen> {
     _isCheckingProfile = true;
     try {
       final service = SupabaseAuthService();
-      if (service.client.auth.currentUser == null) return;
+      final user = service.client.auth.currentUser;
+      if (user == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      final dismissedKey = 'profile_notice_dismissed_${user.id}';
+      if (prefs.getBool(dismissedKey) ?? false) return;
+
+      // Once a user has made an appointment, the onboarding reminder is no
+      // longer relevant, including on later logins.
+      final appointments = await service.client
+          .from('appointments')
+          .select('id')
+          .eq('booker_id', user.id)
+          .limit(1);
+      if ((appointments as List).isNotEmpty) return;
+
       final profile = await service.checkUserProfileExists();
       final nik = profile?['nik']?.toString().trim() ?? '';
       final address = profile?['address']?.toString().trim() ?? '';
@@ -186,8 +200,12 @@ class _MainScreenState extends State<MainScreen> {
           body: expiredBody,
         );
       }
-    } catch (error) {
+    } catch (error, stackTrace) {
       debugPrint('Startup appointment reminder sync failed: $error');
+      debugPrintStack(
+        label: 'Appointment reminder sync stack trace',
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -253,6 +271,16 @@ class _MainScreenState extends State<MainScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: IconButton(
+                      tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                      onPressed: _dismissProfileNotice,
+                      icon: const Icon(Icons.close_rounded),
+                      color: const Color(0xFF607D80),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
                   Container(
                     width: 64,
                     height: 64,
@@ -339,6 +367,15 @@ class _MainScreenState extends State<MainScreen> {
       ),
     ),
   );
+
+  Future<void> _dismissProfileNotice() async {
+    final user = SupabaseAuthService().client.auth.currentUser;
+    if (user != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('profile_notice_dismissed_${user.id}', true);
+    }
+    if (mounted) setState(() => _showProfileNotice = false);
+  }
 
   Widget _buildCurrentTab() {
     final child = switch (_currentIndex) {

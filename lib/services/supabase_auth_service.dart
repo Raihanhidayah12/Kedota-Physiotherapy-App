@@ -1115,7 +1115,14 @@ class SupabaseAuthService {
     required DateTime birthDate,
   }) async {
     try {
-      final row = await _findProfileByPhone(phone);
+      final variants = _getPhoneFilterVariants(phone);
+      if (variants.isEmpty) return false;
+      final rows = await client
+          .from('profiles')
+          .select('birth_date')
+          .inFilter('phone', variants)
+          .limit(1);
+      final row = rows.isEmpty ? null : rows.first;
 
       debugPrint('verifyBirthDate phone: $phone');
       debugPrint('verifyBirthDate row found: ${row != null}');
@@ -1158,7 +1165,7 @@ class SupabaseAuthService {
           storedDay == birthDate.day;
     } catch (e) {
       debugPrint('Error verifying birth date: $e');
-      return true;
+      rethrow;
     }
   }
 

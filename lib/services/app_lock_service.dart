@@ -29,6 +29,14 @@ class AppLockService {
     return prefs.getBool('biometric_pin_enabled_$phone') ?? false;
   }
 
+  /// Matikan biometric aplikasi untuk akun ini saat pengguna logout.
+  static Future<void> disableBiometricForPhone(String phone) async {
+    if (phone.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('biometric_pin_enabled_$phone');
+    await prefs.remove('biometric_pin_$phone');
+  }
+
   /// Simpan phone number user yang sedang login
   static Future<void> setUserPhone(String phone) async {
     final prefs = await SharedPreferences.getInstance();

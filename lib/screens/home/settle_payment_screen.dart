@@ -41,36 +41,35 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
   late final Animation<double> _successScale;
   late final Animation<double> _successFade;
 
-  List<({String value, String label, IconData icon})> _paymentMethods(
-    BuildContext context,
-  ) => [
-    (
-      value: 'qris',
-      label: t(context, 'reservationPaymentQris'),
-      icon: Icons.qr_code_2_rounded,
-    ),
-    (value: 'ovo', label: 'OVO', icon: Icons.account_balance_wallet_rounded),
-    (
-      value: 'gopay',
-      label: 'GoPay',
-      icon: Icons.account_balance_wallet_rounded,
-    ),
-    (value: 'shopeepay', label: 'ShopeePay', icon: Icons.shopping_bag_outlined),
-    (value: 'bca', label: 'BCA', icon: Icons.account_balance_rounded),
-    (value: 'bni', label: 'BNI', icon: Icons.account_balance_rounded),
-    (value: 'bri', label: 'BRI', icon: Icons.account_balance_rounded),
-    (value: 'permata', label: 'Permata', icon: Icons.account_balance_rounded),
-    (value: 'mandiri', label: 'Mandiri', icon: Icons.account_balance_rounded),
-    (
-      value: 'card',
-      label: t(context, 'reservationPaymentCardDebit'),
-      icon: Icons.credit_card_rounded,
-    ),
-    (
-      value: 'cash',
-      label: t(context, 'cashPayment'),
-      icon: Icons.payments_outlined,
-    ),
+  // ── Card form controllers ─────────────────────────────────────────────────
+  final _cardNameController = TextEditingController();
+  final _cardNumberController = TextEditingController();
+  final _cardExpiryController = TextEditingController();
+  final _cardCvvController = TextEditingController();
+
+  // ── Payment method groups ─────────────────────────────────────────────────
+  static const _qrisEwalletValues = ['qris', 'ovo', 'gopay', 'shopeepay'];
+  static const _bankValues = ['bca', 'bni', 'bri', 'permata', 'mandiri'];
+
+  // Logo aset per metode
+  static const _logos = <String, String>{
+    'qris': 'assets/payment/qris.png',
+    'ovo': 'assets/payment/ovo.png',
+    'gopay': 'assets/payment/gopay.png',
+    'shopeepay': 'assets/payment/Spay.png',
+    'bca': 'assets/payment/bca.png',
+    'bni': 'assets/payment/bni.png',
+    'bri': 'assets/payment/bri.png',
+    'permata': 'assets/payment/permata.png',
+    'mandiri': 'assets/payment/mandiri.png',
+  };
+
+  // Logo kartu untuk tile Kartu Kredit/Debit
+  static const _cardLogos = [
+    'assets/payment/visa logo.png',
+    'assets/payment/mastercard logo.png',
+    'assets/payment/jcb logo.png',
+    'assets/payment/American_Express_Logo logo.png',
   ];
 
   @override
@@ -173,6 +172,10 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
   void dispose() {
     _successTimer?.cancel();
     _successAnimationController.dispose();
+    _cardNameController.dispose();
+    _cardNumberController.dispose();
+    _cardExpiryController.dispose();
+    _cardCvvController.dispose();
     super.dispose();
   }
 
@@ -212,10 +215,29 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
                   ),
                 ),
                 const SizedBox(height: 12),
-                for (final method in _paymentMethods(context)) ...[
-                  _methodTile(method.value, method.label, method.icon),
-                  const SizedBox(height: 10),
+                // ── QRIS & E-Wallet ─────────────────────────────────────
+                _sectionHeader(t(context, 'paymentGroupQrisEwallet')),
+                const SizedBox(height: 8),
+                for (final v in _qrisEwalletValues) ...[
+                  _methodTileLogo(v, _methodLabel(context, v)),
+                  const SizedBox(height: 8),
                 ],
+                const SizedBox(height: 8),
+                // ── Transfer Bank ────────────────────────────────────────
+                _sectionHeader(t(context, 'paymentGroupBank')),
+                const SizedBox(height: 8),
+                for (final v in _bankValues) ...[
+                  _methodTileLogo(v, _methodLabel(context, v)),
+                  const SizedBox(height: 8),
+                ],
+                const SizedBox(height: 8),
+                // ── Kartu Kredit / Debit ─────────────────────────────────
+                _sectionHeader(t(context, 'paymentGroupCard')),
+                const SizedBox(height: 8),
+                _methodTileCard(),
+                const SizedBox(height: 8),
+                // ── Tunai ────────────────────────────────────────────────
+                _methodTileLogo('cash', t(context, 'cashPayment')),
                 if (_showInstructions) ...[
                   const SizedBox(height: 10),
                   _paymentInstructions(),
@@ -388,13 +410,52 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
           style: const TextStyle(color: _muted, fontSize: 12),
         ),
         const SizedBox(height: 6),
-        Text(
-          _formatRupiah(widget.appointment.amountDue),
-          style: const TextStyle(
-            color: _tealDark,
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Text(
+                _formatRupiah(widget.appointment.amountDue),
+                style: const TextStyle(
+                  color: _tealDark,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Material(
+              color: const Color(0xFFF5F8F8),
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                onTap: () => _copyValue(
+                  widget.appointment.amountDue.toString(),
+                  successMessageKey: 'reservationAmountCopied',
+                ),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        t(context, 'reservationCopyShort'),
+                        style: const TextStyle(
+                          color: _teal,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      const Icon(Icons.copy_rounded, size: 16, color: _teal),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
         Text(
@@ -405,43 +466,169 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
     ),
   );
 
-  Widget _methodTile(String value, String label, IconData icon) {
+  String _methodLabel(BuildContext context, String value) => switch (value) {
+    'qris' => t(context, 'reservationPaymentQris'),
+    'ovo' => 'OVO',
+    'gopay' => 'GoPay',
+    'shopeepay' => 'ShopeePay',
+    'bca' => 'BCA',
+    'bni' => 'BNI',
+    'bri' => 'BRI',
+    'permata' => 'Permata',
+    'mandiri' => 'Mandiri',
+    'cash' => t(context, 'cashPayment'),
+    _ => value.toUpperCase(),
+  };
+
+  Widget _sectionHeader(String label) => Padding(
+    padding: const EdgeInsets.only(bottom: 2),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: _muted,
+        letterSpacing: 0.3,
+      ),
+    ),
+  );
+
+  Widget _methodTileLogo(String value, String label) {
     final selected = _method == value;
+    final logoPath = _logos[value];
     return InkWell(
       onTap: () => setState(() {
         _method = value;
         _showInstructions = false;
       }),
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         decoration: BoxDecoration(
           color: selected ? const Color(0xFFDDF5F2) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected ? _teal : const Color(0xFFE1E9E8),
+            color: selected ? _teal : const Color(0xFFE8EEEE),
             width: selected ? 1.5 : 1,
           ),
         ),
         child: Row(
           children: [
-            Icon(icon, color: selected ? _tealDark : _muted),
-            const SizedBox(width: 12),
+            // Logo
+            SizedBox(
+              width: 48,
+              height: 28,
+              child: logoPath != null
+                  ? Image.asset(
+                      logoPath,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, err, _) => Icon(
+                        Icons.payments_outlined,
+                        color: selected ? _tealDark : _muted,
+                        size: 24,
+                      ),
+                    )
+                  : Icon(
+                      Icons.payments_outlined,
+                      color: selected ? _tealDark : _muted,
+                      size: 24,
+                    ),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
-                  color: _ink,
+                style: TextStyle(
+                  color: selected ? _tealDark : _ink,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
+            // Amount
+            Text(
+              _formatRupiah(widget.appointment.amountDue),
+              style: TextStyle(
+                color: selected ? _tealDark : _ink,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 10),
             Icon(
               selected
                   ? Icons.radio_button_checked_rounded
                   : Icons.radio_button_unchecked_rounded,
-              color: selected ? _teal : _muted,
+              color: selected ? _teal : const Color(0xFFBFCFCF),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _methodTileCard() {
+    final selected = _method == 'card';
+    return InkWell(
+      onTap: () => setState(() {
+        _method = 'card';
+        _showInstructions = false;
+      }),
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFDDF5F2) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? _teal : const Color(0xFFE8EEEE),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Logo kartu berjajar
+            Row(
+              children: _cardLogos.map((logo) => Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Image.asset(
+                  logo,
+                  width: 32,
+                  height: 22,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, err, _) => const SizedBox(width: 32),
+                ),
+              )).toList(),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                t(context, 'reservationPaymentCardDebit'),
+                style: TextStyle(
+                  color: selected ? _tealDark : _ink,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              _formatRupiah(widget.appointment.amountDue),
+              style: TextStyle(
+                color: selected ? _tealDark : _ink,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: selected ? _teal : const Color(0xFFBFCFCF),
+              size: 20,
             ),
           ],
         ),
@@ -467,22 +654,62 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
     );
   }
 
-  Widget _instructionHeader(String title) => Row(
-    children: [
-      const Icon(Icons.info_outline_rounded, color: _teal),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          title,
+  /// Header dengan logo asli metode yang dipilih
+  Widget _selectedMethodHeader() {
+    final logoPath = _logos[_method];
+    final label = switch (_method) {
+      'qris' => t(context, 'reservationPaymentQris'),
+      'ovo' => 'OVO',
+      'gopay' => 'GoPay',
+      'shopeepay' => 'ShopeePay',
+      'bca' => 'BCA',
+      'bni' => 'BNI',
+      'bri' => 'BRI',
+      'permata' => 'Permata',
+      'mandiri' => 'Mandiri',
+      _ => _method.toUpperCase(),
+    };
+    return Row(
+      children: [
+        if (logoPath != null)
+          Image.asset(
+            logoPath,
+            width: 52,
+            height: 30,
+            fit: BoxFit.contain,
+            errorBuilder: (ctx, err, _) => const Icon(
+              Icons.payments_outlined,
+              color: _teal,
+              size: 26,
+            ),
+          )
+        else if (_method == 'card')
+          Row(
+            children: _cardLogos.take(3).map((logo) => Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Image.asset(
+                logo,
+                width: 28,
+                height: 20,
+                fit: BoxFit.contain,
+                errorBuilder: (ctx, err, _) => const SizedBox(width: 28),
+              ),
+            )).toList(),
+          )
+        else
+          const Icon(Icons.payments_outlined, color: _teal, size: 26),
+        const SizedBox(width: 10),
+        Text(
+          label,
           style: const TextStyle(
-            color: _ink,
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: FontWeight.w800,
+            color: _ink,
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 
   Widget _instructionSteps(List<String> steps) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,8 +727,8 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
   Widget _qrisInstructions() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _instructionHeader(t(context, 'reservationPaymentInstructionQris')),
-      const SizedBox(height: 12),
+      _selectedMethodHeader(),
+      const SizedBox(height: 14),
       Center(
         child: Container(
           width: 170,
@@ -532,10 +759,8 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
   Widget _bankInstructions() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _instructionHeader(
-        '${t(context, 'reservationPaymentInstructionBank')} (${_method.toUpperCase()})',
-      ),
-      const SizedBox(height: 12),
+      _selectedMethodHeader(),
+      const SizedBox(height: 14),
       Text(
         t(context, 'reservationVirtualAccount'),
         style: const TextStyle(color: _muted, fontSize: 11),
@@ -571,10 +796,8 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
   Widget _walletInstructions() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _instructionHeader(
-        '${t(context, 'reservationPaymentInstructionWallet')} (${_method.toUpperCase()})',
-      ),
-      const SizedBox(height: 12),
+      _selectedMethodHeader(),
+      const SizedBox(height: 14),
       Text(
         '${t(context, 'reservationTotal')}: ${_formatRupiah(widget.appointment.amountDue)}',
         style: const TextStyle(color: _tealDark, fontWeight: FontWeight.w800),
@@ -591,28 +814,186 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
   Widget _cardInstructions() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _instructionHeader(t(context, 'reservationPaymentInstructionCard')),
-      const SizedBox(height: 12),
+      _selectedMethodHeader(),
+      const SizedBox(height: 14),
       Text(
         '${t(context, 'reservationTotal')}: ${_formatRupiah(widget.appointment.amountDue)}',
-        style: const TextStyle(color: _tealDark, fontWeight: FontWeight.w800),
+        style: const TextStyle(
+          color: _tealDark,
+          fontWeight: FontWeight.w800,
+          fontSize: 15,
+        ),
       ),
-      const SizedBox(height: 12),
-      _instructionSteps([
-        t(context, 'reservationCardStep1'),
-        t(context, 'reservationCardStep2'),
-        t(context, 'reservationCardStep3'),
-      ]),
+      const SizedBox(height: 16),
+      // Nama pemilik kartu
+      _cardField(
+        controller: _cardNameController,
+        label: t(context, 'reservationCardholder'),
+        hint: 'NAMA SESUAI KARTU',
+        icon: Icons.person_outline_rounded,
+        keyboardType: TextInputType.name,
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+        ],
+      ),
+      const SizedBox(height: 10),
+      // Nomor kartu
+      _cardField(
+        controller: _cardNumberController,
+        label: t(context, 'reservationCardNumber'),
+        hint: '1234  5678  9012  3456',
+        icon: Icons.credit_card_rounded,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(16),
+          _CardNumberFormatter(),
+        ],
+      ),
+      const SizedBox(height: 10),
+      // Expiry + CVV side by side
+      Row(
+        children: [
+          Expanded(
+            child: _cardField(
+              controller: _cardExpiryController,
+              label: t(context, 'reservationCardExpiry'),
+              hint: 'MM/YY',
+              icon: Icons.calendar_today_outlined,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(4),
+                _ExpiryFormatter(),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _cardField(
+              controller: _cardCvvController,
+              label: t(context, 'reservationCardCvv'),
+              hint: '•••',
+              icon: Icons.lock_outline_rounded,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(4),
+              ],
+            ),
+          ),
+        ],
+      ),
     ],
   );
 
-  Future<void> _copyValue(String value) async {
+  Widget _cardField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    List<TextInputFormatter>? inputFormatters,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: _muted,
+        ),
+      ),
+      const SizedBox(height: 5),
+      TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+        inputFormatters: inputFormatters,
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: _muted, fontSize: 13),
+          prefixIcon: Icon(icon, size: 18, color: _muted),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFDDE4E3)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFDDE4E3)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _teal, width: 1.4),
+          ),
+        ),
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+    ],
+  );
+
+  Future<void> _copyValue(
+    String value, {
+    String successMessageKey = 'reservationAccountCopied',
+  }) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!mounted) return;
     showAppSnackBar(
       context,
-      t(context, 'reservationAccountCopied'),
+      t(context, successMessageKey),
       type: AppSnackBarType.success,
+    );
+  }
+}
+
+/// Format nomor kartu: 1234 5678 9012 3456
+class _CardNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(' ', '');
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && i % 4 == 0) buffer.write('  ');
+      buffer.write(digits[i]);
+    }
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+/// Format expiry: MM/YY
+class _ExpiryFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll('/', '');
+    if (digits.length <= 2) {
+      return newValue.copyWith(
+        text: digits,
+        selection: TextSelection.collapsed(offset: digits.length),
+      );
+    }
+    final formatted = '${digits.substring(0, 2)}/${digits.substring(2)}';
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

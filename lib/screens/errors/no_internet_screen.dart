@@ -1,66 +1,38 @@
 import 'package:flutter/material.dart';
-import '../../widgets/custom_error_screen.dart';
+
 import '../../l10n/app_language.dart';
+import '../../widgets/error_state_screen.dart';
 
 class NoInternetScreen extends StatefulWidget {
-  const NoInternetScreen({super.key});
+  const NoInternetScreen({super.key, required this.onRetry});
+
+  final Future<bool> Function() onRetry;
 
   @override
   State<NoInternetScreen> createState() => _NoInternetScreenState();
 }
 
 class _NoInternetScreenState extends State<NoInternetScreen> {
-  bool _isLoading = true;
+  bool _isChecking = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _checkNetwork();
-  }
-
-  void _checkNetwork() {
-    setState(() {
-      _isLoading = true;
-    });
-    
-    // Simulating network check for 2 seconds
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    });
+  Future<void> _checkNetwork() async {
+    if (_isChecking) return;
+    setState(() => _isChecking = true);
+    await widget.onRetry();
+    if (mounted) setState(() => _isChecking = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF00A79D),
-          ),
-        ),
-      );
-    }
-
-    return CustomErrorScreen(
+    return ErrorStateScreen(
       imagePath: 'assets/image/Poor Network Connection.png',
       title: t(context, 'noInternetTitle'),
       subtitle: t(context, 'noInternetSubtitle'),
       isError: false,
-      customAction: IconButton(
-        onPressed: _checkNetwork,
-        icon: const Icon(Icons.refresh_rounded),
-        color: const Color(0xFF00A79D),
-        iconSize: 32,
-        style: IconButton.styleFrom(
-          backgroundColor: const Color(0xFF00A79D).withValues(alpha: 0.1),
-          padding: const EdgeInsets.all(12),
-        ),
-      ),
+      imageHeight: 180,
+      buttonText: t(context, 'retry'),
+      onPressed: _checkNetwork,
+      isLoading: _isChecking,
     );
   }
 }

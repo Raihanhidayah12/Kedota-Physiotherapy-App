@@ -10,6 +10,22 @@ class MainActivity : FlutterFragmentActivity() {
 
     private val CHANNEL = "com.example.kedotaapp/screen_security"
 
+    override fun onPause() {
+        // Secure the task snapshot before Android captures it for Recents.
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Screen-specific sensitive pages can re-enable this through the
+        // existing Flutter channel after the app becomes active.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 

@@ -9,6 +9,7 @@ import '../../services/supabase_auth_service.dart';
 import '../../utils/phone_validator.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
+import '../errors/verification_rate_limit_screen.dart';
 import 'sign_in_screen.dart';
 
 class StepIndicator extends StatelessWidget {
@@ -833,6 +834,7 @@ class _BirthDateVerificationScreenState
   bool _isLoading = false;
   bool _isDobError = false;
   int _cooldownSeconds = 0;
+  int _failedVerificationAttempts = 0;
   Timer? _cooldownTimer;
 
   @override
@@ -877,8 +879,8 @@ class _BirthDateVerificationScreenState
     );
   }
 
-  void _startCooldownTimer() {
-    setState(() => _cooldownSeconds = 3);
+  void _startCooldownTimer({int seconds = 3}) {
+    setState(() => _cooldownSeconds = seconds);
     _cooldownTimer?.cancel();
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
@@ -945,11 +947,21 @@ class _BirthDateVerificationScreenState
         );
       } else {
         setState(() => _isDobError = true);
-        _showNotificationSheet(
-          t(context, 'birthDateMismatchError'),
-          isError: true,
-        );
-        _startCooldownTimer();
+        _failedVerificationAttempts++;
+        if (_failedVerificationAttempts >= 3) {
+          _startCooldownTimer(seconds: 30);
+          await Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => const VerificationRateLimitScreen(),
+            ),
+          );
+        } else {
+          _showNotificationSheet(
+            t(context, 'birthDateMismatchError'),
+            isError: true,
+          );
+          _startCooldownTimer();
+        }
       }
     } catch (e) {
       if (!mounted) return;

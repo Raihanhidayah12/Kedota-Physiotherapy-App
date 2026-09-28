@@ -1,4 +1,10 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:file_saver/file_saver.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
 import 'dart:async';
@@ -35,15 +41,55 @@ const _sessionPackagePrices = <int, int>{
 const _homeCareTravelFee = 25000;
 const _depositPercent = 30;
 
+class _CardNumberInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 19) digits = digits.substring(0, 19);
+    final groups = <String>[];
+    for (var start = 0; start < digits.length; start += 4) {
+      groups.add(digits.substring(start, min(start + 4, digits.length)));
+    }
+    final text = groups.join('  ');
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
+class _CardExpiryInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 4) digits = digits.substring(0, 4);
+    final text = digits.length > 2
+        ? '${digits.substring(0, 2)}/${digits.substring(2)}'
+        : digits;
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
 class _ServiceLocation {
   final String name;
   final String address;
   final String mapUrl;
+  final LatLng point;
 
   const _ServiceLocation({
     required this.name,
     required this.address,
     required this.mapUrl,
+    required this.point,
   });
 }
 
@@ -52,7 +98,10 @@ const _clinicLocation = _ServiceLocation(
   address:
       'Blok Kelapa No.29, Tunggulwulung, Kec. Lowokwaru, Kota Malang, Jawa Timur 65143',
   mapUrl: 'https://maps.app.goo.gl/6RoeDr21WjTfMjo86',
+  point: LatLng(-7.92952, 112.61989),
 );
+
+const _openStreetMapTiles = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 // Kota yang tersedia untuk dipilih di step 3
 const _availableCities = [
@@ -92,7 +141,7 @@ class ReservationFlowScreen extends StatefulWidget {
 }
 
 class _ReservationFlowScreenState extends State<ReservationFlowScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _service = SupabaseAuthService();
   final _formKey = GlobalKey<FormState>();
   final _nikController = TextEditingController();
@@ -106,13 +155,17 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   final _cardExpiryController = TextEditingController();
   final _cardCvvController = TextEditingController();
   final _mapController = MapController();
+  final _qrBoundaryKey = GlobalKey();
 
   int _step = 0;
   bool _forSelf = true;
   bool _loading = true;
   bool _saving = false;
+  bool _downloadingQr = false;
   DateTime? _birthDate;
   DateTime? _appointmentDate;
+  DateTime? _paymentDeadlineUtc;
+  Timer? _paymentDeadlineTimer;
   TimeOfDay? _appointmentTime;
   String _gender = 'male';
   final String _therapistGender = 'any';
@@ -121,7 +174,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   String _selectedCity = ''; // Kota yang dipilih di step 3
   String _paymentMethod = 'qris';
   String _paymentPlan = 'full';
-  int _sessionCount = 1;
+  int? _sessionCount;
   bool _therapistAvailability = false;
   bool _clinicPromoEligible = false;
   String? _expandedPaymentTutorial;
@@ -129,6 +182,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   Timer? _geocodeDebounce;
   int _successCountdown = 3;
   late final AnimationController _successAnimationController;
+  late final AnimationController _stageEntranceController;
   late final Animation<double> _successScale;
   late final Animation<double> _successFade;
   Set<String> _bookedAppointmentTimes = {};
@@ -137,6 +191,12 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   final _mapPointNotifier = ValueNotifier<LatLng>(const LatLng(-7.9839, 112.6214));
 
   bool get _isReschedule => widget.initialDate != null;
+  bool get _isClinicService => _serviceType == _clinicService;
+  bool get _isPaymentDeadlineExpired =>
+      _paymentDeadlineUtc != null &&
+      !DateTime.now().toUtc().isBefore(_paymentDeadlineUtc!);
+  LatLng get _displayMapCenter =>
+      _isClinicService ? _clinicLocation.point : _mapCenter;
 
   @override
   void initState() {
@@ -145,6 +205,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       vsync: this,
       duration: const Duration(milliseconds: 850),
     );
+    _stageEntranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 760),
+    )..forward();
     _successScale = CurvedAnimation(
       parent: _successAnimationController,
       curve: Curves.elasticOut,
@@ -161,13 +225,15 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     // Rebuild supaya floating label ikut update
     if (mounted) setState(() {});
     _geocodeDebounce?.cancel();
+    if (_isClinicService) return;
     _geocodeDebounce = Timer(const Duration(milliseconds: 900), () {
       final text = _addressController.text.trim();
-      if (text.length >= 10) _geocodeAddress(text);
+      if (!_isClinicService && text.length >= 10) _geocodeAddress(text);
     });
   }
 
   Future<void> _geocodeAddress(String address) async {
+    if (_isClinicService) return;
     try {
       final dio = Dio();
       final response = await dio
@@ -183,7 +249,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           )
           .timeout(const Duration(seconds: 10));
 
-      if (!mounted) return;
+      if (!mounted || _isClinicService) return;
       final features = (response.data?['features'] as List?) ?? [];
       if (features.isNotEmpty) {
         final coords =
@@ -220,7 +286,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
             },
           )
           .timeout(const Duration(seconds: 10));
-      if (!mounted) return;
+      if (!mounted || _isClinicService) return;
       final data = response.data;
       if (data != null && data.isNotEmpty) {
         final first = data.first as Map<String, dynamic>;
@@ -278,10 +344,17 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       if (birthDate != null && birthDate.length >= 10) {
         _birthDate = DateTime.tryParse(birthDate.substring(0, 10));
       }
+      final profileGender = profile?['gender']?.toString().toLowerCase();
+      if (profileGender == 'male' || profileGender == 'female') {
+        _gender = profileGender!;
+      }
     } catch (error) {
       debugPrint('Reservation profile load failed: $error');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _stageEntranceController.forward(from: 0);
+      }
     }
   }
 
@@ -304,6 +377,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     }
     if (_selectedCity.isEmpty && _serviceType == _clinicService) {
       _selectedCity = 'Malang';
+    }
+    if (_serviceType == _clinicService) {
+      _mapCenter = _clinicLocation.point;
+      _mapPointNotifier.value = _clinicLocation.point;
     }
     if (widget.initialAddress?.isNotEmpty == true) {
       _addressController.text = widget.initialAddress!;
@@ -362,9 +439,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   void dispose() {
     _successTimer?.cancel();
     _geocodeDebounce?.cancel();
+    _paymentDeadlineTimer?.cancel();
     _mapPointNotifier.dispose();
     _addressController.removeListener(_onAddressChanged);
     _successAnimationController.dispose();
+    _stageEntranceController.dispose();
     for (final controller in [
       _nikController,
       _medicalCodeController,
@@ -411,6 +490,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       _showMessage(t(context, 'reservationAvailabilityRequired'));
       return;
     }
+    if (_step == 3 && _sessionCount == null) {
+      _showMessage(t(context, 'reservationChooseSession'));
+      return;
+    }
     if (_step == 2) {
       final slotAvailable = await _isAppointmentTimeAvailable(
         _appointmentDate!,
@@ -424,14 +507,22 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       }
     }
     if (_step == 4) {
+      if (_paymentDeadlineUtc == null) _startPaymentDeadline();
       setState(() => _step++);
+      _stageEntranceController.forward(from: 0);
       return;
     }
     if (_step == 5) {
+      if (_isPaymentDeadlineExpired) return;
+      if (_paymentMethod == 'card' &&
+          !(_formKey.currentState?.validate() ?? false)) {
+        return;
+      }
       _saveReservation();
       return;
     }
     setState(() => _step++);
+    _stageEntranceController.forward(from: 0);
   }
 
   void _back() {
@@ -440,9 +531,31 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       return;
     }
     setState(() => _step--);
+    _stageEntranceController.forward(from: 0);
+  }
+
+  void _startPaymentDeadline() {
+    _paymentDeadlineTimer?.cancel();
+    _paymentDeadlineUtc = DateTime.now().toUtc().add(
+      const Duration(minutes: 10),
+    );
+    final remaining = _paymentDeadlineUtc!.difference(DateTime.now().toUtc());
+    _paymentDeadlineTimer = Timer(remaining, () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _returnToPaymentMethods() {
+    _paymentDeadlineTimer?.cancel();
+    setState(() {
+      _paymentDeadlineUtc = null;
+      _step = 4;
+    });
+    _stageEntranceController.forward(from: 0);
   }
 
   Future<void> _saveReservation() async {
+    _paymentDeadlineTimer?.cancel();
     final user = _service.client.auth.currentUser;
     if (user == null) return;
     final appointmentDate = _appointmentDate!;
@@ -580,6 +693,12 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
               .replaceFirst('{time}', _formatTime(_appointmentTime!)),
           payload: appointmentId == null ? null : 'appointment:$appointmentId',
         );
+        if (_paymentMethod == 'card') {
+          _cardNameController.clear();
+          _cardNumberController.clear();
+          _cardExpiryController.clear();
+          _cardCvvController.clear();
+        }
         setState(() => _step = 6);
         _startSuccessRedirect();
       }
@@ -683,7 +802,8 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
 
   int _packagePrice(int count) => _sessionPackagePrices[count] ?? 225000;
 
-  int get _basePrice => _packagePrice(_sessionCount);
+  int get _basePrice =>
+      _sessionCount == null ? 0 : _packagePrice(_sessionCount!);
 
   int get _travelFee =>
       _serviceType == _homeCareService ? _homeCareTravelFee : 0;
@@ -1035,6 +1155,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   }
 
   Future<void> _setMapLocation(LatLng point) async {
+    if (_isClinicService) return;
     setState(() => _mapCenter = point);
     _mapPointNotifier.value = point;
     // Pindahkan kamera langsung — tidak perlu postFrameCallback
@@ -1162,12 +1283,16 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   }
 
   Future<void> _openExpandedMap() async {
+    final clinicMap = _isClinicService;
     final expandedController = MapController();
-    LatLng selectedPoint = _mapCenter;
-    String selectedAddress = _addressController.text.trim();
+    LatLng selectedPoint = _displayMapCenter;
+    String selectedAddress = clinicMap
+        ? _clinicLocation.address
+        : _addressController.text.trim();
 
     // Listen perubahan dari forward geocoding (ketik di field)
     void onPointChanged() {
+      if (clinicMap) return;
       final newPoint = _mapPointNotifier.value;
       selectedPoint = newPoint;
       expandedController.move(newPoint, 16);
@@ -1197,7 +1322,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                     options: MapOptions(
                       initialCenter: selectedPoint,
                       initialZoom: 15,
-                      onTap: _isReschedule
+                      onTap: _isReschedule || clinicMap
                           ? null
                           : (_, point) async {
                               setDialogState(() {
@@ -1240,7 +1365,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                     children: [
                       TileLayer(
                         urlTemplate:
-                            'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
+                            clinicMap
+                                ? _openStreetMapTiles
+                                : 'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
                         userAgentPackageName: 'com.kedota.physiotherapy',
                       ),
                       MarkerLayer(
@@ -1323,7 +1450,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                   child: GestureDetector(
                     onTap: () {
                       Navigator.of(dialogContext).pop();
-                      if (!_isReschedule) {
+                      if (!_isReschedule && !clinicMap) {
                         // Langsung set koordinat dan address — tidak perlu geocode ulang
                         // karena selectedAddress sudah didapat saat tap di popup
                         setState(() {
@@ -1372,7 +1499,15 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                   child: Container(
                     color: Colors.white,
                     padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-                    child: TextField(
+                    child: clinicMap
+                        ? Text(
+                            _clinicLocation.address,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: _ink,
+                            ),
+                          )
+                        : TextField(
                       controller: _addressController,
                       readOnly: _isReschedule,
                       decoration: InputDecoration(
@@ -1467,10 +1602,38 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 children: [
                   _buildProgress(),
                   Expanded(
-                    child: SingleChildScrollView(
-                      key: ValueKey(_step),
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-                      child: _buildStep(),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 320),
+                      reverseDuration: const Duration(milliseconds: 240),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      layoutBuilder: (currentChild, previousChildren) =>
+                          Stack(
+                            alignment: Alignment.topCenter,
+                            fit: StackFit.expand,
+                            children: [
+                              ...previousChildren,
+                              if (currentChild != null) currentChild,
+                            ],
+                          ),
+                      transitionBuilder: (child, animation) {
+                        final slide = Tween<Offset>(
+                          begin: const Offset(0, 0.035),
+                          end: Offset.zero,
+                        ).animate(animation);
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
+                            position: slide,
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: SingleChildScrollView(
+                        key: ValueKey<int>(_step),
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                        child: _animateStageTree(_buildStep()),
+                      ),
                     ),
                   ),
                   _buildBottomAction(),
@@ -1486,41 +1649,16 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              t(context, 'stepOf')
-                  .replaceFirst('{current}', (_step + 1).clamp(1, 6).toString().padLeft(2, '0'))
-                  .replaceFirst('{total}', '06'),
-              style: const TextStyle(
-                color: _teal,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                _stepTitle,
-                style: const TextStyle(
-                  color: _ink,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 9),
-        Row(
-          children: List.generate(6, (index) {
+          children: List.generate(5, (index) {
             return Expanded(
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 height: 4,
-                margin: EdgeInsets.only(right: index == 5 ? 0 : 6),
+                margin: EdgeInsets.only(right: index == 4 ? 0 : 6),
                 decoration: BoxDecoration(
-                  color: index <= _step ? _teal : const Color(0xFFE1E9E8),
+                  color: index <= _step.clamp(0, 4)
+                      ? _teal
+                      : const Color(0xFFE1E9E8),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -1561,6 +1699,64 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     }
   }
 
+  Widget _animateStageTree(Widget child, [int depth = 0]) {
+    if (child is! Column || depth >= 5) return child;
+
+    final count = child.children.length;
+    return Column(
+      key: child.key,
+      mainAxisAlignment: child.mainAxisAlignment,
+      mainAxisSize: child.mainAxisSize,
+      crossAxisAlignment: child.crossAxisAlignment,
+      textDirection: child.textDirection,
+      verticalDirection: child.verticalDirection,
+      textBaseline: child.textBaseline,
+      children: [
+        for (var index = 0; index < count; index++)
+          _stageEntranceItem(
+            _animateStageTree(child.children[index], depth + 1),
+            index,
+            count,
+          ),
+      ],
+    );
+  }
+
+  Widget _stageEntranceItem(Widget child, int index, int count) {
+    final start = count <= 1
+        ? 0.0
+        : (index * 0.075).clamp(0.0, 0.55).toDouble();
+    final end = (start + 0.45).clamp(start + 0.01, 1.0).toDouble();
+    final animation = CurvedAnimation(
+      parent: _stageEntranceController,
+      curve: Interval(start, end, curve: Curves.easeOutCubic),
+    );
+    if (child is Flexible) {
+      return Flexible(
+        flex: child.flex,
+        fit: child.fit,
+        child: _stageEntranceVisual(
+          _animateStageTree(child.child),
+          animation,
+        ),
+      );
+    }
+    return _stageEntranceVisual(child, animation);
+  }
+
+  Widget _stageEntranceVisual(Widget child, Animation<double> animation) {
+    return FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.025),
+          end: Offset.zero,
+        ).animate(animation),
+        child: child,
+      ),
+    );
+  }
+
   Widget _buildModeStep() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1585,10 +1781,13 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   );
 
   Widget _choiceButton(String label, bool self) => InkWell(
-    onTap: () => setState(() {
-      _forSelf = self;
-      _step = 1;
-    }),
+    onTap: () {
+      setState(() {
+        _forSelf = self;
+        _step = 1;
+      });
+      _stageEntranceController.forward(from: 0);
+    },
     borderRadius: BorderRadius.circular(10),
     child: Container(
       width: double.infinity,
@@ -1621,7 +1820,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         _field(
           _nikController,
           t(context, 'reservationNik'),
-          readOnly: _forSelf,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           maxLength: 16,
@@ -1646,10 +1844,12 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           _birthDate,
           _pickBirthDate,
           icon: Icons.calendar_today_outlined,
+          enabled: !_forSelf,
         ),
         _field(
           _phoneController,
           t(context, 'reservationPhone'),
+          readOnly: _forSelf,
           keyboardType: TextInputType.phone,
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[+0-9]')),
@@ -1770,6 +1970,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                         _clinic = _serviceType == _clinicService
                             ? _clinicLocation.name
                             : t(context, 'homeCareCity').replaceFirst('{city}', 'Malang');
+                        if (_serviceType == _clinicService) {
+                          _mapCenter = _clinicLocation.point;
+                          _mapPointNotifier.value = _clinicLocation.point;
+                        }
                         _appointmentDate = null;
                         _appointmentTime = null;
                         _bookedAppointmentTimes = {};
@@ -1777,6 +1981,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                           _addressController.clear();
                         }
                       });
+                      if (_isClinicService) {
+                        try {
+                          _mapController.move(_clinicLocation.point, 15);
+                        } catch (_) {}
+                      }
                     },
             ),
           const SizedBox(height: 14),
@@ -1966,22 +2175,23 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
               child: FlutterMap(
                 mapController: controller ?? _mapController,
                 options: MapOptions(
-                  initialCenter: _mapCenter,
+                  initialCenter: _displayMapCenter,
                   initialZoom: 14,
-                  onTap: _isReschedule
+                  onTap: _isReschedule || _isClinicService
                       ? null
                       : (_, point) => _setMapLocation(point),
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate:
-                        'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
+                    urlTemplate: _isClinicService
+                        ? _openStreetMapTiles
+                        : 'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
                     userAgentPackageName: 'com.kedota.physiotherapy',
                   ),
                   MarkerLayer(
                     markers: [
                       Marker(
-                        point: _mapCenter,
+                        point: _displayMapCenter,
                         width: 42,
                         height: 42,
                         child: const Icon(
@@ -2027,6 +2237,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         hint: t(context, 'reservationHomeCareAddressHint'),
         icon: Icons.location_on_outlined,
         readOnly: _isReschedule,
+        showLabel: false,
       ),
       const SizedBox(height: 10),
 
@@ -2194,10 +2405,8 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         const SizedBox(height: 12),
         _sessionChoice(),
         const SizedBox(height: 18),
-        Text(
-          t(context, 'reservationPaymentPlan'),
-          style: const TextStyle(color: _muted, fontSize: 12),
-        ),
+        _fieldLabel(t(context, 'reservationPaymentPlan')),
+        const SizedBox(height: 6),
         Row(
           children: [
             Expanded(
@@ -2206,6 +2415,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 _paymentPlan == 'full',
                 () => setState(() => _paymentPlan = 'full'),
                 compact: true,
+                prominent: true,
               ),
             ),
             Expanded(
@@ -2214,18 +2424,19 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 _paymentPlan == 'deposit',
                 () => setState(() => _paymentPlan = 'deposit'),
                 compact: true,
+                prominent: true,
               ),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        _buildOrderSummary(),
+        _buildCompactOrderSummary(),
         const SizedBox(height: 12),
         Text(
           t(context, 'reservationPaymentDeadline'),
           style: const TextStyle(
             color: Color(0xFFC65353),
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -2233,32 +2444,241 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     ),
   );
 
-  Widget _sessionChoice() => Padding(
-    padding: const EdgeInsets.only(top: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          t(context, 'reservationChooseSession'),
-          style: const TextStyle(
-            color: _muted,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+  Widget _sessionChoice() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _fieldLabel(t(context, 'reservationChooseSession')),
+      const SizedBox(height: 6),
+      Container(
+        height: 50,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x12000000),
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<int>(
+            value: _sessionCount,
+            isExpanded: true,
+            itemHeight: 58,
+            menuMaxHeight: 250,
+            borderRadius: BorderRadius.circular(14),
+            dropdownColor: Colors.white,
+            hint: Text(
+              '-- ${t(context, 'reservationChooseSession')} --',
+              style: const TextStyle(color: _muted, fontSize: 12),
+            ),
+            icon: const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: _teal,
+            ),
+            items: [1, 3, 6, 9]
+                .map(
+                  (count) => DropdownMenuItem<int>(
+                    value: count,
+                    child: Row(
+                      children: [
+                        Text(
+                          '${count}x ${t(context, 'reservationSessionUnit')}',
+                          style: const TextStyle(color: _ink, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        Text(
+                          _formatRupiah(_packagePrice(count)),
+                          style: const TextStyle(color: _ink, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+            selectedItemBuilder: (context) => [1, 3, 6, 9]
+                .map(
+                  (count) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${count}x ${t(context, 'reservationSessionUnit')}',
+                      style: const TextStyle(color: _ink, fontSize: 13),
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (count) => setState(() => _sessionCount = count),
           ),
         ),
-        const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 2.25,
-          children: [1, 3, 6, 9].map((count) => _sessionCard(count)).toList(),
+      ),
+    ],
+  );
+
+  Widget _buildCompactOrderSummary() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        t(context, 'reservationOrderSummary'),
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 8),
+      _compactOrderInfo(
+        t(context, 'reservationOrderPatient'),
+        _nameController.text,
+      ),
+      _compactOrderInfo(
+        t(context, 'reservationOrderService'),
+        _serviceType == _homeCareService
+            ? t(context, 'homeCare')
+            : t(context, 'klinik'),
+      ),
+      _compactOrderInfo(
+        t(context, 'reservationOrderSessionCount'),
+        _sessionCount == null
+            ? '---'
+            : '${_sessionCount}x ${t(context, 'reservationSessionUnit')}'
+                  '${_appointmentDate == null || _appointmentTime == null ? '' : ' (${_appointmentScheduleSummary()})'}',
+      ),
+      const SizedBox(height: 16),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              t(context, 'reservationPaymentSummary'),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Text(
+            t(context, 'reservationOrderPrice'),
+            style: const TextStyle(fontSize: 13, color: _ink),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      _compactSummaryLine(t(context, 'reservationBasePrice'), _formatRupiah(_basePrice)),
+      _compactSummaryLine(t(context, 'reservationTravelFee'), _formatRupiah(_travelFee)),
+      _compactPaymentPlanLine(
+        t(context, 'reservationPaymentPlan'),
+        _paymentPlan == 'full'
+            ? t(context, 'reservationPaymentPlanFull')
+            : t(context, 'reservationPaymentPlanDeposit'),
+        _formatRupiah(_amountDue),
+      ),
+      _compactSummaryLine(
+        t(context, 'reservationOrderDiscount'),
+        _discountAmount == 0 ? '--' : '- ${_formatRupiah(_discountAmount)}',
+        valuePrice: _formatRupiah(0),
+      ),
+      _compactSummaryLine(
+        t(context, 'reservationAmountDue'),
+        _formatRupiah(_amountDue),
+        bold: true,
+      ),
+      const SizedBox(height: 6),
+      Text(
+        t(context, 'reservationTaxAdminDisclaimer'),
+        style: const TextStyle(fontSize: 12, color: _muted),
+      ),
+    ],
+  );
+
+  Widget _compactOrderInfo(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: _muted)),
+        const SizedBox(width: 6),
+        const Text(':', style: TextStyle(fontSize: 12, color: _muted)),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            value.isEmpty ? '-' : value,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: _ink),
+          ),
         ),
       ],
     ),
   );
+
+  Widget _compactSummaryLine(
+    String label,
+    String value, {
+    String? valuePrice,
+    bool bold = false,
+  }) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        if (valuePrice != null) ...[
+          Expanded(
+            child: Row(
+              children: [
+                Text(label, style: const TextStyle(fontSize: 12, color: _muted)),
+                const SizedBox(width: 6),
+                Text(value, style: const TextStyle(fontSize: 12, color: _muted)),
+              ],
+            ),
+          ),
+          Text(valuePrice, style: const TextStyle(fontSize: 12, color: _ink)),
+        ] else ...[
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: _muted),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              color: _ink,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
+  Widget _compactPaymentPlanLine(String label, String plan, String price) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12, color: _muted)),
+            const SizedBox(width: 6),
+            Text(': $plan', style: const TextStyle(fontSize: 12, color: _ink)),
+            const Spacer(),
+            Text(price, style: const TextStyle(fontSize: 12, color: _ink)),
+          ],
+        ),
+      );
+
+  String _appointmentScheduleSummary() {
+    final date = _appointmentDate!;
+    final time = _appointmentTime!;
+    final isIndonesian = AppLanguageScope.current(context) == AppLanguage.id;
+    const englishMonths = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    const indonesianMonths = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    ];
+    final months = isIndonesian ? indonesianMonths : englishMonths;
+    final start = DateTime(2020, 1, 1, time.hour, time.minute);
+    final end = start.add(const Duration(hours: 1));
+    String clock(DateTime value) =>
+        '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+    return '${date.day}, ${months[date.month - 1]} ${date.year} '
+        '${clock(start)} - ${clock(end)} WIB';
+  }
 
   Widget _sessionCard(int count) {
     final selected = _sessionCount == count;
@@ -2434,6 +2854,27 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     ),
   );
 
+  // ── Logo aset per metode ───────────────────────────────────────────────────
+  static const _paymentLogos = <String, String>{
+    'qris': 'assets/payment/qris.png',
+    'ovo': 'assets/payment/ovo.png',
+    'gopay': 'assets/payment/gopay.png',
+    'shopeepay': 'assets/payment/Spay.png',
+    'bca': 'assets/payment/bca.png',
+    'bni': 'assets/payment/bni.png',
+    'bri': 'assets/payment/bri.png',
+    'permata': 'assets/payment/permata.png',
+    'mandiri': 'assets/payment/mandiri.png',
+  };
+
+  static const _cardPaymentLogos = [
+    'assets/payment/visa logo.png',
+    'assets/payment/mastercard logo.png',
+    'assets/payment/jcb logo.png',
+    'assets/payment/gpn.png',
+    'assets/payment/American_Express_Logo logo.png',
+  ];
+
   Widget _buildPaymentStep() => _flatSection(
     t(context, 'reservationChoosePayment'),
     Column(
@@ -2444,43 +2885,194 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           style: const TextStyle(color: _muted, fontSize: 12),
         ),
         const SizedBox(height: 18),
-        _paymentGroup(t(context, 'reservationPaymentQrisWallet'), [
-          _paymentOption(
-            'qris',
-            t(context, 'reservationPaymentQris'),
-            Icons.qr_code_2_rounded,
-          ),
-          _paymentOption('ovo', 'OVO', Icons.account_balance_wallet_rounded),
-          _paymentOption(
-            'gopay',
-            'Gopay',
-            Icons.account_balance_wallet_rounded,
-          ),
-          _paymentOption(
-            'shopeepay',
-            'Shopee Pay',
-            Icons.shopping_bag_outlined,
-          ),
-        ]),
-        const SizedBox(height: 18),
-        _paymentGroup(t(context, 'reservationPaymentBankTransfer'), [
-          _paymentOption('bca', 'BCA', Icons.account_balance_rounded),
-          _paymentOption('bni', 'BNI', Icons.account_balance_rounded),
-          _paymentOption('bri', 'BRI', Icons.account_balance_rounded),
-          _paymentOption('permata', 'PERMATA', Icons.account_balance_rounded),
-          _paymentOption('mandiri', 'Mandiri', Icons.account_balance_rounded),
-        ]),
-        const SizedBox(height: 18),
-        _paymentGroup(t(context, 'reservationPaymentCardDebit'), [
-          _paymentOption(
-            'card',
-            'VISA   Mastercard   JCB   GPN',
-            Icons.credit_card_rounded,
-          ),
-        ]),
+        // ── QRIS & E-Wallet ─────────────────────────────────────────────
+        _paymentSectionLabel(t(context, 'paymentGroupQrisEwallet')),
+        const SizedBox(height: 8),
+        _paymentOption('qris', t(context, 'reservationPaymentQris')),
+        _paymentOption('ovo', 'OVO'),
+        _paymentOption('gopay', 'GoPay'),
+        _paymentOption('shopeepay', 'ShopeePay'),
+        const SizedBox(height: 10),
+        // ── Transfer Bank ────────────────────────────────────────────────
+        _paymentSectionLabel(t(context, 'paymentGroupBank')),
+        const SizedBox(height: 8),
+        _paymentOption('bca', 'BCA'),
+        _paymentOption('bni', 'BNI'),
+        _paymentOption('bri', 'BRI'),
+        _paymentOption('permata', 'Permata'),
+        _paymentOption('mandiri', 'Mandiri'),
+        const SizedBox(height: 10),
+        // ── Kartu Kredit / Debit ─────────────────────────────────────────
+        _paymentSectionLabel(t(context, 'paymentGroupCard')),
+        const SizedBox(height: 8),
+        _paymentOptionCard(),
       ],
     ),
   );
+
+  Widget _paymentSectionLabel(String label) => Padding(
+    padding: const EdgeInsets.only(bottom: 2),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: _muted,
+        letterSpacing: 0.3,
+      ),
+    ),
+  );
+
+  Widget _paymentOption(String value, String label) {
+    final selected = _paymentMethod == value;
+    final logoPath = _paymentLogos[value];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () {
+          setState(() => _paymentMethod = value);
+          if (_paymentDeadlineUtc == null || _isPaymentDeadlineExpired) {
+            _startPaymentDeadline();
+          }
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFDDF5F2) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? _teal : const Color(0xFFE6ECEB),
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 48,
+                height: 26,
+                child: logoPath != null
+                    ? Image.asset(
+                        logoPath,
+                        fit: BoxFit.contain,
+                        errorBuilder: (ctx, err, _) => Icon(
+                          Icons.payments_outlined,
+                          color: selected ? _tealDark : _muted,
+                          size: 22,
+                        ),
+                      )
+                    : Icon(
+                        Icons.payments_outlined,
+                        color: selected ? _tealDark : _muted,
+                        size: 22,
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: selected ? _tealDark : _ink,
+                  ),
+                ),
+              ),
+              Text(
+                _formatRupiah(_amountDue),
+                style: TextStyle(
+                  color: selected ? _tealDark : _ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                selected
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: selected ? _teal : const Color(0xFFBFCFCF),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _paymentOptionCard() {
+    final selected = _paymentMethod == 'card';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () {
+          setState(() => _paymentMethod = 'card');
+          if (_paymentDeadlineUtc == null || _isPaymentDeadlineExpired) {
+            _startPaymentDeadline();
+          }
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFDDF5F2) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? _teal : const Color(0xFFE6ECEB),
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Logo kartu berjajar
+              Row(
+                children: _cardPaymentLogos.map((logo) => Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Image.asset(
+                    logo,
+                    width: 28,
+                    height: 20,
+                    fit: BoxFit.contain,
+                    errorBuilder: (ctx, err, _) => const SizedBox(width: 28),
+                  ),
+                )).toList(),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  t(context, 'reservationPaymentCardDebit'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: selected ? _tealDark : _ink,
+                  ),
+                ),
+              ),
+              Text(
+                _formatRupiah(_amountDue),
+                style: TextStyle(
+                  color: selected ? _tealDark : _ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                selected
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: selected ? _teal : const Color(0xFFBFCFCF),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildPaymentDetailStep() {
     final titleKey = switch (_paymentMethod) {
@@ -2507,7 +3099,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       Text(
         title,
         style: const TextStyle(
-          fontSize: 16,
+          fontSize: 20,
           fontWeight: FontWeight.w800,
           color: _ink,
         ),
@@ -2536,56 +3128,114 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     ],
   );
 
+  Widget _buildPaymentMethodHeader() {
+    final logoPath = _paymentLogos[_paymentMethod];
+    return Row(
+      children: [
+        if (logoPath != null)
+          Image.asset(
+            logoPath,
+            width: 24,
+            height: 24,
+            fit: BoxFit.contain,
+            errorBuilder: (ctx, err, _) => const Icon(
+              Icons.payments_outlined,
+              color: _teal,
+              size: 28,
+            ),
+          )
+        else
+          const Icon(Icons.payments_outlined, color: _teal, size: 28),
+        const SizedBox(width: 8),
+        Text(
+          switch (_paymentMethod) {
+            'qris' => 'QRIS',
+            'ovo' => 'OVO',
+            'gopay' => 'GoPay',
+            'shopeepay' => 'ShopeePay',
+            'bca' => 'BANK BCA',
+            'bni' => 'BANK BNI',
+            'bri' => 'BANK BRI',
+            'permata' => 'BANK PERMATA',
+            'mandiri' => 'BANK MANDIRI',
+            _ => _paymentMethod.toUpperCase(),
+          },
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: _ink,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildQrisDetail() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(
-        t(context, 'reservationPaymentHowTo'),
-        style: const TextStyle(color: _muted, fontSize: 10),
+        t(context, 'reservationQrisDescription'),
+        style: const TextStyle(color: _muted, fontSize: 12, height: 1.4),
+      ),
+      const SizedBox(height: 16),
+      const Center(
+        child: Text(
+          'Kedota Physiotherapy',
+          style: TextStyle(
+            color: _ink,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
       const SizedBox(height: 4),
-      _paymentTotal(),
-      const SizedBox(height: 14),
-      Center(
-        child: Container(
-          width: 190,
-          height: 190,
-          color: Colors.white,
-          padding: const EdgeInsets.all(12),
-          child: const Center(
-            child: Icon(
-              Icons.qr_code_2_rounded,
-              size: 160,
-              color: Colors.black,
+      SizedBox(
+        width: double.infinity,
+        child: _paymentAmountBlock(centered: true, compact: true),
+      ),
+      if (_isPaymentDeadlineExpired) ...[
+        const SizedBox(height: 20),
+        _paymentDeadlineMessage(),
+      ] else ...[
+        const SizedBox(height: 16),
+        Center(
+          child: RepaintBoundary(
+            key: _qrBoundaryKey,
+            child: _buildQrVisual(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _paymentDeadlineMessage(showSuccessNote: false),
+        const SizedBox(height: 8),
+        Center(
+          child: SizedBox(
+            width: 230,
+            height: 54,
+            child: OutlinedButton.icon(
+              onPressed: _downloadingQr ? null : _downloadQr,
+              icon: _downloadingQr
+                  ? const SizedBox.square(
+                      dimension: 17,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.download_rounded, size: 17),
+              label: Text(t(context, 'downloadQr')),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _teal,
+                backgroundColor: Colors.white,
+                side: BorderSide.none,
+                elevation: 2,
+                shadowColor: const Color(0x18000000),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
             ),
           ),
         ),
-      ),
-      const SizedBox(height: 14),
-      _paymentTutorial(
-        id: 'qris',
-        title: t(context, 'reservationPaymentHowTo'),
-        steps: [
-          t(context, 'reservationQrisStep1'),
-          t(context, 'reservationQrisStep2'),
-          t(context, 'reservationQrisStep3'),
-        ],
-      ),
-      const SizedBox(height: 8),
-      Center(
-        child: OutlinedButton.icon(
-          onPressed: () {},
-          icon: const Icon(Icons.download_rounded, size: 16),
-          label: Text(t(context, 'downloadQr')),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _teal,
-            side: const BorderSide(color: Color(0xFFE0EAEA)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        ),
-      ),
+        const SizedBox(height: 8),
+        _paymentSuccessNote(),
+      ],
     ],
   );
 
@@ -2594,136 +3244,615 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     children: [
       Row(
         children: [
-          const Icon(Icons.account_balance_wallet_rounded, color: _teal),
-          const SizedBox(width: 8),
+          Image.asset(
+            _paymentLogos[_paymentMethod]!,
+            width: 36,
+            height: 36,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.account_balance_wallet_outlined, size: 30),
+          ),
+          const SizedBox(width: 6),
           Text(
-            _paymentMethod.toUpperCase(),
-            style: const TextStyle(fontWeight: FontWeight.w800),
+            _paymentMethod == 'ovo'
+                ? 'OVO'
+                : _paymentMethod == 'gopay'
+                ? 'GoPay'
+                : 'ShopeePay',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: _ink,
+            ),
           ),
         ],
       ),
-      const SizedBox(height: 12),
-      _paymentTotal(),
-      const SizedBox(height: 10),
+      const SizedBox(height: 4),
+      SizedBox(width: double.infinity, child: _paymentAmountBlock()),
+      const SizedBox(height: 8),
+      _paymentDeadlineMessage(),
+    ],
+  );
+
+  Widget _paymentAmountBlock({bool centered = false, bool compact = false}) =>
+      Column(
+    crossAxisAlignment:
+        centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+    children: [
       Text(
-        t(context, 'paymentDeadlineReminder'),
-        style: const TextStyle(color: _muted, fontSize: 11),
+        t(context, 'reservationPaymentAmount'),
+        style: TextStyle(color: _muted, fontSize: compact ? 11 : 14),
       ),
-      const SizedBox(height: 14),
-      _paymentTutorial(
-        id: 'wallet',
-        title: t(context, 'reservationPaymentHowTo'),
-        steps: [
-          t(context, 'reservationWalletStep1'),
-          t(context, 'reservationWalletStep2'),
-          t(context, 'reservationWalletStep3'),
-        ],
+      const SizedBox(height: 2),
+      Text(
+        _formatRupiah(_amountDue),
+        style: TextStyle(
+          color: _teal,
+          fontSize: compact ? 22 : 32,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     ],
   );
 
+  Widget _paymentDeadlineMessage({bool showSuccessNote = true}) {
+    if (_isPaymentDeadlineExpired) {
+      return Column(
+        children: [
+          Text(
+            t(context, 'paymentDeadlineExpired'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFFC65353),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            t(context, 'paymentDeadlineRetry'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _muted, fontSize: 10),
+          ),
+        ],
+      );
+    }
+
+    final deadline = _paymentDeadlineUtc;
+    if (deadline == null) return const SizedBox.shrink();
+    return Column(
+      children: [
+        Text.rich(
+          TextSpan(
+            style: const TextStyle(color: _muted, fontSize: 12),
+            children: [
+              TextSpan(text: '${t(context, 'paymentDeadlineBefore')} '),
+              TextSpan(
+                text: _formatPaymentDeadlineWib(deadline),
+                style: const TextStyle(
+                  color: _teal,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+        ),
+        if (showSuccessNote) ...[
+          const SizedBox(height: 4),
+          _paymentSuccessNote(),
+        ],
+      ],
+    );
+  }
+
+  Widget _paymentSuccessNote() => Text(
+    t(context, 'paymentSuccessAutoUpdate'),
+    textAlign: TextAlign.center,
+    style: const TextStyle(color: _muted, fontSize: 10),
+  );
+
+  Widget _buildQrVisual() => Container(
+    width: 260,
+    height: 260,
+    color: Colors.white,
+    padding: const EdgeInsets.all(14),
+    child: const CustomPaint(painter: _QrisPatternPainter()),
+  );
+
+  Future<void> _downloadQr() async {
+    if (_isPaymentDeadlineExpired || _downloadingQr) return;
+    setState(() => _downloadingQr = true);
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      final renderObject =
+          _qrBoundaryKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderRepaintBoundary) {
+        throw StateError('QR image is not ready');
+      }
+      final image = await renderObject.toImage(pixelRatio: 3);
+      try {
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData == null) throw StateError('Could not encode QR image');
+        final bytes = byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        );
+        final saver = FileSaver.instance;
+        final filename =
+            'kedota_qris_${DateTime.now().millisecondsSinceEpoch}';
+        // file_saver's saveAs is unimplemented on web; use its browser
+        // download path there and the native file picker on mobile.
+        final path = kIsWeb
+            ? await saver.saveFile(
+                name: filename,
+                bytes: bytes,
+                fileExtension: 'png',
+                mimeType: MimeType.png,
+              )
+            : await saver.saveAs(
+                name: filename,
+                bytes: bytes,
+                fileExtension: 'png',
+                mimeType: MimeType.png,
+              );
+        if (!mounted) return;
+        if (path != null) {
+          showAppSnackBar(
+            context,
+            t(context, 'qrisDownloadSuccess'),
+            type: AppSnackBarType.success,
+          );
+        }
+      } finally {
+        image.dispose();
+      }
+    } catch (_) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          t(context, 'qrisDownloadFailed'),
+          type: AppSnackBarType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _downloadingQr = false);
+    }
+  }
+
+  String _formatPaymentDeadlineWib(DateTime deadlineUtc) {
+    final deadline = deadlineUtc.toUtc().add(const Duration(hours: 7));
+    final isIndonesian = AppLanguageScope.current(context) == AppLanguage.id;
+    const englishMonths = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const indonesianMonths = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+    ];
+    final months = isIndonesian ? indonesianMonths : englishMonths;
+    final hour = deadline.hour.toString().padLeft(2, '0');
+    final minute = deadline.minute.toString().padLeft(2, '0');
+    return '${deadline.day} ${months[deadline.month - 1]}, $hour:$minute WIB';
+  }
+
   Widget _buildBankDetail() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      _buildPaymentMethodHeader(),
+      const SizedBox(height: 8),
       Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          const Icon(Icons.account_balance_rounded, color: _teal),
-          const SizedBox(width: 8),
-          Text(
-            _paymentMethod.toUpperCase(),
-            style: const TextStyle(fontWeight: FontWeight.w800),
+          Expanded(child: _paymentAmountBlock(compact: true)),
+          _copyPaymentButton(
+            _amountDue.toString(),
+            successMessageKey: 'reservationAmountCopied',
           ),
         ],
       ),
-      const SizedBox(height: 12),
-      _paymentTotal(),
-      const SizedBox(height: 16),
-      _detailValue(
-        t(context, 'reservationVirtualAccount'),
-        '8808 1234 5678 9012',
-        onCopy: () => _copyPaymentValue('8808123456789012'),
+      const SizedBox(height: 10),
+      Text(
+        t(context, 'reservationVirtualAccountShort'),
+        style: const TextStyle(color: _muted, fontSize: 11),
       ),
-      const SizedBox(height: 16),
-      _paymentTutorial(
-        id: 'mbca',
-        title: t(context, 'reservationBankMbca'),
-        steps: [
-          t(context, 'reservationBankStep1'),
-          t(context, 'reservationBankStep2'),
-          t(context, 'reservationBankStep3'),
+      const SizedBox(height: 2),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              _bankAccountDisplay,
+              style: const TextStyle(
+                color: _teal,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: .2,
+              ),
+            ),
+          ),
+          _copyPaymentButton(
+            _bankAccountDisplay.replaceAll(' ', ''),
+            successMessageKey: 'reservationAccountCopied',
+          ),
         ],
       ),
       const SizedBox(height: 8),
-      _paymentTutorial(
-        id: 'ibanking',
-        title: t(context, 'reservationBankIbanking'),
-        steps: [
-          t(context, 'reservationBankStep1'),
-          t(context, 'reservationBankStep2'),
-          t(context, 'reservationBankStep3'),
-        ],
-      ),
-      const SizedBox(height: 8),
-      _paymentTutorial(
-        id: 'atm',
-        title: t(context, 'reservationBankAtm'),
-        steps: [
-          t(context, 'reservationBankStep1'),
-          t(context, 'reservationBankStep2'),
-          t(context, 'reservationBankStep3'),
-        ],
+      _paymentDeadlineMessage(),
+      const SizedBox(height: 14),
+      Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x10000000),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            _paymentTutorial(
+              id: 'mbca',
+              title: _bankAppInstructionTitle,
+              steps: _bankPaymentSteps,
+              bankStyle: true,
+            ),
+            _paymentTutorial(
+              id: 'ibanking',
+              title: t(context, 'reservationBankIbanking'),
+              steps: _bankPaymentSteps,
+              bankStyle: true,
+            ),
+            _paymentTutorial(
+              id: 'atm',
+              title: t(context, 'reservationBankAtm'),
+              steps: _bankPaymentSteps,
+              bankStyle: true,
+            ),
+          ],
+        ),
       ),
     ],
+  );
+
+  List<String> get _bankPaymentSteps => [
+    t(context, 'reservationBankStep1'),
+    t(context, 'reservationBankStep2'),
+    t(context, 'reservationBankStep3'),
+  ];
+
+  String get _bankAccountDisplay => switch (_paymentMethod) {
+    'bca' => '1234 5678 9012 3456',
+    'bni' => '9876 5432 1098 7654',
+    'bri' => '4567 8901 2345 6789',
+    'mandiri' => '6543 2109 8765 4321',
+    'permata' => '3210 9876 5432 1098',
+    _ => '8808 1234 5678 9012',
+  };
+
+  String get _bankAppInstructionTitle => switch (_paymentMethod) {
+    'bca' => t(context, 'reservationBankMbca'),
+    'bni' => t(context, 'reservationBankBniApp'),
+    'bri' => t(context, 'reservationBankBriApp'),
+    'mandiri' => t(context, 'reservationBankMandiriApp'),
+    'permata' => t(context, 'reservationBankPermataApp'),
+    _ => t(context, 'reservationBankMbca'),
+  };
+
+  Widget _copyPaymentButton(
+    String value, {
+    required String successMessageKey,
+  }) => Padding(
+    padding: const EdgeInsets.only(left: 8, bottom: 2),
+    child: Material(
+      color: Colors.white,
+      elevation: 2,
+      shadowColor: const Color(0x16000000),
+      borderRadius: BorderRadius.circular(5),
+      child: InkWell(
+        onTap: () => _copyPaymentValue(
+          value,
+          successMessageKey: successMessageKey,
+        ),
+        borderRadius: BorderRadius.circular(5),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                t(context, 'reservationCopyShort'),
+                style: const TextStyle(
+                  color: _teal,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 5),
+              const Icon(Icons.copy_rounded, size: 15, color: _teal),
+            ],
+          ),
+        ),
+      ),
+    ),
   );
 
   Widget _buildCardDetail() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _paymentTotal(),
+      _paymentAmountBlock(compact: true),
       const SizedBox(height: 12),
-      _field(_cardNameController, t(context, 'reservationCardholder')),
-      _field(
+      Text(
+        t(context, 'reservationCardForm'),
+        style: const TextStyle(color: _muted, fontSize: 11),
+      ),
+      const SizedBox(height: 5),
+      Row(
+        children: _cardPaymentLogos.map((logo) => Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Image.asset(
+            logo,
+            width: 36,
+            height: 24,
+            fit: BoxFit.contain,
+            errorBuilder: (ctx, err, _) => const SizedBox(width: 36),
+          ),
+        )).toList(),
+      ),
+      _cardInputField(
+        _cardNameController,
+        t(context, 'reservationCardholder'),
+        hint: t(context, 'reservationCardholderHint'),
+        icon: Icons.person_outline_rounded,
+        textCapitalization: TextCapitalization.words,
+        validator: (value) => value == null || value.trim().isEmpty
+            ? t(context, 'reservationFieldRequired')
+            : null,
+      ),
+      _cardInputField(
         _cardNumberController,
         t(context, 'reservationCardNumber'),
+        hint: '1234  5678  9012  3456',
         keyboardType: TextInputType.number,
+        inputFormatters: [_CardNumberInputFormatter()],
+        validator: _validateCardNumber,
+        icon: Icons.credit_card_rounded,
       ),
       Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: _field(
+            child: _cardInputField(
               _cardExpiryController,
               t(context, 'reservationCardExpiry'),
+              hint: 'MM/YY',
+              keyboardType: TextInputType.number,
+              inputFormatters: [_CardExpiryInputFormatter()],
+              validator: _validateCardExpiry,
+              icon: Icons.calendar_today_outlined,
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: _field(
+            child: _cardInputField(
               _cardCvvController,
               t(context, 'reservationCardCvv'),
+              hint: '***',
               keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(4),
+              ],
+              validator: _validateCardCvv,
+              obscureText: true,
+              icon: Icons.lock_outline_rounded,
             ),
           ),
         ],
       ),
-      const SizedBox(height: 12),
-      _paymentTutorial(
-        id: 'card',
-        title: t(context, 'reservationPaymentHowTo'),
-        steps: [
-          t(context, 'reservationCardStep1'),
-          t(context, 'reservationCardStep2'),
-          t(context, 'reservationCardStep3'),
-        ],
+      const SizedBox(height: 13),
+      Text(
+        t(context, 'reservationCardInstructions'),
+        style: const TextStyle(
+          color: _ink,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
       ),
+      const SizedBox(height: 8),
+      for (final (index, key) in [
+        'reservationCardStep1',
+        'reservationCardStep2',
+        'reservationCardStep3',
+        'reservationCardStep4',
+      ].indexed)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 3),
+          child: Text(
+            '${index + 1}. ${t(context, key)}',
+            style: const TextStyle(color: _muted, fontSize: 11, height: 1.45),
+          ),
+        ),
     ],
   );
 
-  Future<void> _copyPaymentValue(String value) async {
+  Widget _cardInputField(
+    TextEditingController controller,
+    String label, {
+    required String? Function(String?) validator,
+    String? hint,
+    IconData? icon,
+    List<TextInputFormatter>? inputFormatters,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+  }) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: _muted,
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        FormField<String>(
+          initialValue: controller.text,
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          builder: (fieldState) {
+            final hasError = fieldState.hasError;
+            final borderColor = hasError
+                ? const Color(0xFFFF4D4F)
+                : const Color(0xFFE1E9E8);
+            final outline = OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: borderColor, width: hasError ? 1.4 : 1),
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (fieldState.errorText != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2, bottom: 4),
+                    child: Text(
+                      fieldState.errorText!,
+                      style: const TextStyle(
+                        color: Color(0xFFE14D4D),
+                        fontSize: 9,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                ],
+                TextField(
+                  controller: controller,
+                  keyboardType: keyboardType,
+                  textCapitalization: textCapitalization,
+                  obscureText: obscureText,
+                  inputFormatters: inputFormatters,
+                  onChanged: fieldState.didChange,
+                  decoration: _decoration(label, hint, icon: icon).copyWith(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 11,
+                    ),
+                    border: outline,
+                    enabledBorder: outline,
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: hasError ? const Color(0xFFFF4D4F) : _teal,
+                        width: 1.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+
+  String? _validateCardNumber(String? value) {
+    final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return t(context, 'reservationFieldRequired');
+    if (!_hasValidNetworkLength(digits) || !_passesLuhn(digits)) {
+      return t(context, 'reservationCardNumberInvalid');
+    }
+    return null;
+  }
+
+  bool _hasValidNetworkLength(String digits) {
+    if (digits.startsWith('4')) {
+      return const {13, 16, 19}.contains(digits.length);
+    }
+    if (RegExp(r'^3[47]').hasMatch(digits)) return digits.length == 15;
+
+    final firstTwo = int.tryParse(digits.substring(0, min(2, digits.length)));
+    final firstFour =
+        digits.length >= 4 ? int.tryParse(digits.substring(0, 4)) : null;
+    final isMastercard =
+        (firstTwo != null && firstTwo >= 51 && firstTwo <= 55) ||
+        (firstFour != null && firstFour >= 2221 && firstFour <= 2720);
+    if (isMastercard) return digits.length == 16;
+
+    final jcbPrefix = digits.length >= 4 ? int.tryParse(digits.substring(0, 4)) : null;
+    if (jcbPrefix != null && jcbPrefix >= 3528 && jcbPrefix <= 3589) {
+      return digits.length >= 16 && digits.length <= 19;
+    }
+
+    // GPN and other domestic debit cards commonly use 16 digit PANs.
+    return digits.length == 16;
+  }
+
+  bool _passesLuhn(String digits) {
+    var sum = 0;
+    var doubleDigit = false;
+    for (var index = digits.length - 1; index >= 0; index--) {
+      var digit = int.parse(digits[index]);
+      if (doubleDigit) {
+        digit *= 2;
+        if (digit > 9) digit -= 9;
+      }
+      sum += digit;
+      doubleDigit = !doubleDigit;
+    }
+    return sum % 10 == 0;
+  }
+
+  String? _validateCardExpiry(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return t(context, 'reservationFieldRequired');
+    }
+    final parts = value.split('/');
+    if (parts.length != 2 || parts[0].length != 2 || parts[1].length != 2) {
+      return t(context, 'reservationCardExpiryInvalid');
+    }
+    final month = int.tryParse(parts[0]);
+    final shortYear = int.tryParse(parts[1]);
+    if (month == null || shortYear == null || month < 1 || month > 12) {
+      return t(context, 'reservationCardExpiryInvalid');
+    }
+    final now = DateTime.now();
+    final year = 2000 + shortYear;
+    if (year < now.year || (year == now.year && month < now.month)) {
+      return t(context, 'reservationCardExpired');
+    }
+    return null;
+  }
+
+  String? _validateCardCvv(String? value) {
+    final digits = value ?? '';
+    if (digits.isEmpty) return t(context, 'reservationFieldRequired');
+    final cardDigits = _cardNumberController.text.replaceAll(RegExp(r'\D'), '');
+    final isAmex = RegExp(r'^3[47]').hasMatch(cardDigits);
+    if (!RegExp(isAmex ? r'^\d{4}$' : r'^\d{3}$').hasMatch(digits)) {
+      return t(context, 'reservationCardCvvInvalid');
+    }
+    return null;
+  }
+
+  Future<void> _copyPaymentValue(
+    String value, {
+    String successMessageKey = 'reservationAccountCopied',
+  }) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!mounted) return;
     showAppSnackBar(
       context,
-      t(context, 'reservationAccountCopied'),
+      t(context, successMessageKey),
       type: AppSnackBarType.success,
       duration: const Duration(seconds: 2),
     );
@@ -2762,34 +3891,41 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     required String id,
     required String title,
     required List<String> steps,
+    bool bankStyle = false,
   }) {
     final expanded = _expandedPaymentTutorial == id;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F8F8),
-        borderRadius: BorderRadius.circular(10),
+        color: bankStyle ? Colors.transparent : const Color(0xFFF5F8F8),
+        borderRadius: BorderRadius.circular(bankStyle ? 0 : 10),
       ),
       child: Column(
         children: [
           InkWell(
             onTap: () =>
                 setState(() => _expandedPaymentTutorial = expanded ? null : id),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(bankStyle ? 14 : 10),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              padding: EdgeInsets.symmetric(
+                horizontal: bankStyle ? 12 : 12,
+                vertical: bankStyle ? 13 : 14,
+              ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    size: 18,
-                    color: _teal,
-                  ),
-                  const SizedBox(width: 8),
+                  if (!bankStyle) ...[
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 18,
+                      color: _teal,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
+                        color: bankStyle ? const Color(0xFF5F6A6B) : _ink,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -2806,9 +3942,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
               ),
             ),
           ),
+          if (bankStyle && id != 'atm')
+            const Divider(height: 1, thickness: 1, color: Color(0xFFE6EAEA)),
           if (expanded)
             Padding(
-              padding: const EdgeInsets.fromLTRB(38, 0, 14, 14),
+              padding: EdgeInsets.fromLTRB(bankStyle ? 12 : 38, 0, 14, 14),
               child: Column(
                 children: [
                   for (var index = 0; index < steps.length; index++)
@@ -2847,15 +3985,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     );
   }
 
-  Widget _paymentGroup(String title, List<Widget> options) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(title, style: const TextStyle(color: _muted, fontSize: 12)),
-      const SizedBox(height: 8),
-      ...options,
-    ],
-  );
-
   Widget _flatSection(String title, Widget child) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -2872,81 +4001,33 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     ],
   );
 
-  Widget _paymentOption(String value, String label, IconData icon) {
-    final selected = _paymentMethod == value;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        onTap: () => setState(() => _paymentMethod = value),
-        borderRadius: BorderRadius.circular(14),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 11),
-          decoration: BoxDecoration(
-            color: selected ? const Color(0xFFDDF5F2) : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected ? _teal : const Color(0xFFE6ECEB),
-              width: selected ? 1.4 : 1,
-            ),
-            boxShadow: selected
-                ? null
-                : const [
-                    BoxShadow(
-                      color: Color(0x0D172B2D),
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-          ),
-          child: Row(
-            children: [
-              Icon(icon, size: 17, color: selected ? _tealDark : _muted),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                    color: _ink,
-                  ),
-                ),
-              ),
-              Text(
-                _formatRupiah(_amountDue),
-                style: TextStyle(
-                  color: selected ? _tealDark : _muted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _optionTile(
     String label,
     bool selected,
-    VoidCallback onTap, {
+    VoidCallback? onTap, {
     bool compact = false,
+    bool prominent = false,
   }) {
     final child = compact
         ? Container(
-            height: 46,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            height: prominent ? 58 : 46,
+            padding: EdgeInsets.symmetric(horizontal: prominent ? 14 : 10),
             decoration: BoxDecoration(
               color: selected ? const Color(0xFFDDF5F2) : Colors.white,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(prominent ? 14 : 10),
               border: Border.all(
                 color: selected ? _teal : const Color(0xFFE6ECEB),
                 width: selected ? 1.5 : 1,
               ),
+            boxShadow: prominent
+                ? const [
+                    BoxShadow(
+                      color: Color(0x12000000),
+                      blurRadius: 9,
+                      offset: Offset(0, 4),
+                    ),
+                  ]
+                : null,
             ),
             child: Row(
               children: [
@@ -2964,7 +4045,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                     label,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: prominent ? 14 : 11,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                       color: selected ? _tealDark : _muted,
                     ),
@@ -2991,11 +4072,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(prominent ? 14 : 10),
       child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: compact ? 2 : 4,
-          vertical: compact ? 4 : 8,
+          vertical: prominent ? 0 : compact ? 4 : 8,
         ),
         child: child,
       ),
@@ -3013,16 +4094,32 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     List<TextInputFormatter>? inputFormatters,
     int? maxLength,
     String? Function(String?)? validator,
+    bool showLabel = true,
+    bool compact = false,
+    bool obscureText = false,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    Widget? suffixIcon,
   }) => Padding(
-    padding: const EdgeInsets.only(top: 12),
+    padding: EdgeInsets.only(top: showLabel ? (compact ? 8 : 12) : 0),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _fieldLabel(label),
-        const SizedBox(height: 5),
+        if (showLabel) ...[
+          Text(
+            label,
+            style: TextStyle(
+              color: _muted,
+              fontSize: compact ? 9 : 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: compact ? 4 : 5),
+        ],
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
+          textCapitalization: textCapitalization,
+          obscureText: obscureText,
           maxLines: maxLines,
           readOnly: readOnly,
           inputFormatters: inputFormatters,
@@ -3033,13 +4130,19 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           decoration: _decoration(label, hint, icon: icon).copyWith(
             filled: true,
             fillColor: readOnly ? const Color(0xFFE7ECEC) : Colors.white,
-            suffixIcon: readOnly
+            isDense: compact,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: compact ? 12 : 14,
+              vertical: compact ? 11 : 15,
+            ),
+            counterText: compact ? '' : null,
+            suffixIcon: suffixIcon ?? (readOnly
                 ? const Icon(
                     Icons.lock_outline_rounded,
                     size: 17,
                     color: _muted,
                   )
-                : null,
+                : null),
           ),
         ),
       ],
@@ -3086,6 +4189,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     VoidCallback onTap, {
     IconData? icon,
     bool showLabel = true,
+    bool enabled = true,
   }) => Padding(
     padding: EdgeInsets.only(top: showLabel ? 12 : 0),
     child: Column(
@@ -3096,9 +4200,19 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           const SizedBox(height: 5),
         ],
         InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           child: InputDecorator(
-            decoration: _decoration(label, null, icon: icon),
+            decoration: _decoration(label, null, icon: icon).copyWith(
+              filled: true,
+              fillColor: enabled ? Colors.white : const Color(0xFFE7ECEC),
+              suffixIcon: enabled
+                  ? null
+                  : const Icon(
+                      Icons.lock_outline_rounded,
+                      size: 17,
+                      color: _muted,
+                    ),
+            ),
             child: Text(
               value == null ? '--/--/----' : _formatDate(value),
               style: TextStyle(color: value == null ? _muted : _ink),
@@ -3142,6 +4256,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     List<(String, String)> values,
     String selected,
     ValueChanged<String> onChanged,
+    {bool enabled = true}
   ) => Padding(
     padding: const EdgeInsets.only(top: 16),
     child: Column(
@@ -3155,7 +4270,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                   child: _optionTile(
                     value.$2,
                     selected == value.$1,
-                    () => onChanged(value.$1),
+                    enabled ? () => onChanged(value.$1) : null,
                     compact: true,
                   ),
                 ),
@@ -3166,7 +4281,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     ),
   );
 
-  Widget _buildBottomAction() => _step == 0
+  Widget _buildBottomAction() => _step == 0 ||
+          (_step == 5 &&
+              _paymentMethod == 'qris' &&
+              !_isPaymentDeadlineExpired)
       ? const SizedBox.shrink()
       : SafeArea(
           child: Padding(
@@ -3174,7 +4292,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _saving ? null : _next,
+                onPressed: _saving
+                    ? null
+                    : _step == 5 && _isPaymentDeadlineExpired
+                    ? _returnToPaymentMethods
+                    : _next,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _teal,
                   foregroundColor: Colors.white,
@@ -3201,13 +4323,17 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                             t(
                               context,
                               _step == 5
-                                  ? 'reservationPayNow'
+                                  ? _isPaymentDeadlineExpired
+                                        ? 'paymentDeadlineRetryButton'
+                                        : 'reservationPayNow'
                                   : 'reservationNext',
                             ),
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward_rounded, size: 18),
+                          if (_step != 5) ...[
+                            const SizedBox(width: 8),
+                            const Icon(Icons.arrow_forward_rounded, size: 18),
+                          ],
                         ],
                       ),
               ),
@@ -3319,4 +4445,68 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
 
   String _formatDate(DateTime date) =>
       '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+}
+
+class _QrisPatternPainter extends CustomPainter {
+  // Visual placeholder until a payment provider supplies a real QRIS payload.
+  const _QrisPatternPainter();
+
+  static const int _moduleCount = 29;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final module = size.width / _moduleCount;
+    final paint = Paint()..color = Colors.black;
+
+    bool finderModule(int x, int y, int originX, int originY) {
+      final dx = x - originX;
+      final dy = y - originY;
+      if (dx < 0 || dx > 6 || dy < 0 || dy > 6) return false;
+      return dx == 0 || dx == 6 || dy == 0 || dy == 6 ||
+          (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4);
+    }
+
+    for (var y = 0; y < _moduleCount; y++) {
+      for (var x = 0; x < _moduleCount; x++) {
+        final inFinderArea =
+            (x <= 7 && y <= 7) ||
+            (x >= 21 && y <= 7) ||
+            (x <= 7 && y >= 21);
+        final inAlignmentArea = x >= 20 && x <= 24 && y >= 20 && y <= 24;
+        var isBlack = false;
+
+        if (inFinderArea) {
+          isBlack =
+              finderModule(x, y, 0, 0) ||
+              finderModule(x, y, 22, 0) ||
+              finderModule(x, y, 0, 22);
+        } else if (inAlignmentArea) {
+          final dx = x - 20;
+          final dy = y - 20;
+          isBlack = dx == 0 || dx == 4 || dy == 0 || dy == 4 ||
+              (dx == 2 && dy == 2);
+        } else if (x == 6 || y == 6) {
+          isBlack = (x + y).isEven;
+        } else {
+          final pattern = (x * 17 + y * 31 + x * y * 7 + x * x * 3) % 11;
+          isBlack = pattern < 5;
+        }
+
+        if (isBlack) {
+          canvas.drawRect(
+            Rect.fromLTWH(
+              x * module,
+              y * module,
+              module * 0.94,
+              module * 0.94,
+            ),
+            paint,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _QrisPatternPainter oldDelegate) => false;
 }

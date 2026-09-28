@@ -37,13 +37,15 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 🕒 Urutan & Waktu Notifikasi | 🟢 Selesai | Notifikasi terbaru tampil paling atas dengan waktu relatif |
 | ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan Lengkap + Hapus Akun Permanen (Verifikasi PIN 6-digit) |
 | 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → cooldown 30 detik |
+| 📴 Deteksi Internet & Error Screen | 🟢 Selesai | Status koneksi device dan akses internet diverifikasi; screen offline dan limit memakai hitung mundur |
+| 🕶️ Privasi App Switcher | 🟢 Selesai | Konten aplikasi ditutup saat masuk app switcher pada Android dan iOS |
 | 💤 Dormant Account | 🟢 Selesai | Deteksi akun >60 hari tidak aktif → verifikasi via email |
 | 🎨 UI & Layout Stability | 🟢 Selesai | Responsive 0 overflow di mobile/web |
 | ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (`update-pin` Deno runtime) |
 | 📊 HTTP 5xx Error Logging | 🟢 Selesai | Deteksi & log metadata error HTTP 5xx ke Edge Function `client-error-log` |
 | 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion |
 | 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
-| 📅 Reservasi Step-by-Step | 🟢 Selesai | Step 3 baru: Pilih Kota → Pilih Layanan → Jadwal → Jam → Alamat (berurutan, wajib diisi) |
+| 📅 Reservasi Step-by-Step | 🟢 Selesai | 6 tahap dari data pasien hingga instruksi pembayaran, termasuk pilihan lokasi dan jadwal |
 | 🗺️ Peta Interaktif (Home Care) | 🟢 Selesai | `flutter_map` + Geoapify tile + reverse geocoding akurat; tap peta, gunakan lokasi terkini, ketik alamat → peta sync |
 | 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, validasi slot, dan reminder baru |
 | 💳 DP & Pelunasan | 🟢 Selesai (Demo Gateway) | Card appointment tampilkan 2 tombol (Lihat Detail + Lunaskan) saat DP belum lunas |
@@ -59,6 +61,7 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 
 ### 1. 🚀 Onboarding
 - 3 slide interaktif dengan animasi page transition.
+- Indikator halaman tetap berada di tempat saat slide berpindah dan memiliki jarak dari tombol bawah.
 - Hanya muncul sekali saat pertama kali membuka aplikasi.
 - Status disimpan secara lokal menggunakan `SharedPreferences`.
 
@@ -117,6 +120,14 @@ Sign In → Continue with Google → PIN Verification → Home Screen
 - **Ganti PIN**: Verifikasi lama → PIN baru → Konfirmasi.
 - **Preferensi Notifikasi**: Push, reminder jadwal, promo, berita email.
 - **Hapus Akun Permanen**: Konfirmasi + verifikasi PIN 6-digit.
+- **Logout dan biometric**: Preferensi biometric dan PIN lokal akun yang logout dihapus dari device. Penguncian ketika aplikasi masuk background tidak menghapus preferensi.
+
+### 4a. 🏠 Beranda & Pengingat Kelengkapan Profil
+
+- Pengingat melengkapi profil muncul untuk akun yang belum memiliki NIK dan alamat lengkap.
+- Tombol silang menyimpan status dismiss per akun di device, sehingga pengingat tidak muncul lagi setelah ditutup.
+- Pengingat juga tidak ditampilkan lagi jika akun sudah memiliki janji temu.
+- Navigasi utama menyediakan tab Beranda, Progress, Janji Temu, dan Profil.
 
 ---
 
@@ -141,25 +152,50 @@ Sign In → Continue with Google → PIN Verification → Home Screen
 
 ---
 
-### 6. 📅 Reservasi Jadwal & Layanan (Step 3 — Baru)
+### 6. 📅 Reservasi Jadwal, Layanan & Pembayaran
 
-Flow step 3 menggunakan urutan berurutan yang **wajib diisi secara berurutan** sebelum lanjut:
+- Konten tiap tahap masuk dengan animasi fade dan geser ringan; bagian di dalam tahap muncul bertahap.
+- Posisi konten tahap tetap dimulai dari atas saat berpindah tahap, termasuk ketika isi tahap pendek.
+- Indikator progres tetap di luar area transisi konten sehingga tidak ikut bergeser saat tahap berubah.
+
+Flow reservasi terdiri dari enam tahap:
 
 ```
-1. Pilih Kota         → dropdown (Malang, Surabaya, Sidoarjo, Surakarta, Yogyakarta)
-2. Pilih Layanan      → Malang: Klinik atau Home Care | Kota lain: Home Care saja
-3. Pilih Jadwal       → terbuka setelah layanan dipilih
-4. Pilih Jam          → terbuka setelah tanggal dipilih
-5. Alamat / Lokasi    → Home Care: field + peta interaktif | Klinik: info lokasi + peta
+1. Pilih jenis reservasi (diri sendiri atau orang lain)
+2. Data pasien (NIK, kode medis, nama, tanggal lahir, nomor telepon, gender, keluhan)
+3. Kota, layanan, jadwal, jam, alamat/lokasi
+4. Jumlah sesi dan jenis pembayaran (lunas atau DP)
+5. Metode pembayaran
+6. Instruksi pembayaran atau formulir kartu
 ```
 
-Field yang belum bisa diisi ditampilkan abu-abu dengan ikon 🔒 dan teks keterangan.
+Tahap pasien memvalidasi NIK 16 digit, nomor HP, serta keluhan wajib. Data identitas yang dikunci ditampilkan dengan gaya abu-abu dan ikon kunci. Tahap jadwal mengunci pilihan yang belum tersedia sampai pilihan sebelumnya diisi.
 
 **Khusus Malang:** tersedia pilihan Klinik **dan** Home Care. Kota lain hanya Home Care.
 
+Untuk Klinik, peta hanya menunjukkan titik tetap Klinik Kedota dan tidak menggunakan geocoding Geoapify. Home Care menggunakan peta yang dapat dipilih, pencarian alamat, dan lokasi terkini.
+
+Tahap pembayaran mendukung QRIS, OVO, GoPay, ShopeePay, transfer BCA/BNI/BRI/Permata/Mandiri, dan kartu kredit/debit. Harga dan nomor rekening dapat disalin; QRIS dapat diunduh. Formulir kartu memvalidasi nomor kartu berdasarkan panjang jaringan dan checksum Luhn, masa berlaku yang belum lewat, serta CVV 3 atau 4 digit sesuai jaringan. Kolom wajib ditandai saat validasi gagal.
+
+Batas pembayaran berlaku 10 menit sejak metode dipilih atau pengguna masuk ke instruksi pembayaran. Setelah kedaluwarsa, instruksi lama dinonaktifkan dan pengguna dapat kembali memilih metode. Integrasi gateway dan konfirmasi transaksi eksternal masih demo; QRIS pada mode demo bukan QR pembayaran gateway.
+
+### 7. 📴 Koneksi Internet & Screen Error
+
+- `NetworkStatusGuard` aktif di seluruh aplikasi. Pemeriksaan memakai status konektivitas device dan probe endpoint health Supabase, bukan data database saja.
+- Koneksi diperiksa ketika status jaringan berubah, saat aplikasi kembali aktif, dan berkala setiap 5 detik. Tombol coba lagi menjalankan pemeriksaan ulang.
+- Ketika tidak ada akses internet, screen Poor Network Connection menutupi layar aktif sampai koneksi pulih.
+- Screen limit OTP, PIN, dan verifikasi tanggal lahir memakai ilustrasi error bersama dan hitung mundur 30 detik. Tombol kembali dan navigasi keluar terkunci sampai waktu habis.
+- Error screen bersama dirender melalui `ErrorStateScreen`; teks screen tersedia dalam Bahasa Indonesia dan English.
+
+### 8. 🕶️ Privasi di App Switcher
+
+- Android memasang `FLAG_SECURE` ketika aplikasi masuk background agar snapshot di Recent Apps tidak menampilkan konten aplikasi, lalu melepasnya saat aplikasi aktif kembali.
+- iOS memasang privacy cover native pada `sceneWillResignActive` dan menghapusnya saat scene aktif kembali. Cover ini mencegah konten Flutter terlihat di app switcher.
+- Perilaku ini hanya menyamarkan tampilan preview; tidak mengubah status login atau preferensi biometric.
+
 ---
 
-### 7. 🗺️ Peta Interaktif (Home Care)
+### 9. 🗺️ Peta Interaktif (Home Care)
 
 - Tile peta: **Geoapify** (`osm-bright` style) — lebih detail dari OpenStreetMap standar.
 - **Geocoding akurat** menggunakan Geoapify API (3000 req/hari gratis) dengan fallback otomatis ke Nominatim lalu `geocoding` package.
@@ -179,7 +215,7 @@ geocoding package (butuh Google Play Services)
 
 ---
 
-### 8. 💳 Pembayaran DP & Pelunasan
+### 10. 💳 Pembayaran DP & Pelunasan
 
 - Card appointment menampilkan **2 tombol** saat DP belum lunas: "Lihat Detail" (outline) + "Lunaskan Pembayaran" (solid).
 - Saat DP lunas atau hangus: hanya tombol "Lihat Detail".
@@ -190,7 +226,7 @@ geocoding package (butuh Google Play Services)
 
 ---
 
-### 9. 📋 Detail Riwayat — Status Done
+### 11. 📋 Detail Riwayat — Status Done
 
 Appointment yang sudah selesai (`completed`) menampilkan data klinis nyata dari DB:
 
@@ -209,18 +245,18 @@ Kolom-kolom di atas perlu ditambahkan ke tabel `appointments` di Supabase. Selam
 
 ---
 
-### 10. 🔔 Notifikasi In-App
+### 12. 🔔 Notifikasi In-App
 
 - Terbaru tampil paling atas berdasarkan `created_at`.
 - Waktu relatif: `Baru saja`, `2 menit yang lalu`, `3 jam yang lalu`, `Kemarin`.
 - Label tersedia dalam ID & EN.
 
-### 11. 📑 Syarat, Ketentuan & Kebijakan Privasi
+### 13. 📑 Syarat, Ketentuan & Kebijakan Privasi
 
 - UI accordion — setiap section buka/tutup.
 - Tanggal `Terakhir diperbarui` mengikuti tanggal perangkat.
 
-### 12. 📊 Logging Error HTTP 5xx
+### 14. 📊 Logging Error HTTP 5xx
 
 - Global error handler aktif sejak app dibuka.
 - Mendeteksi response `500-599` dari semua jalur: Dio, Supabase Auth, DB, Storage, RPC.
@@ -228,7 +264,7 @@ Kolom-kolom di atas perlu ditambahkan ke tabel `appointments` di Supabase. Selam
 - Data tersimpan permanen di tabel `error_logs`.
 - Dokumentasi: [`docs/5xx-error-logging.md`](docs/5xx-error-logging.md)
 
-### 13. 🔓 Lupa PIN Flow
+### 15. 🔓 Lupa PIN Flow
 
 ```
 PIN Verification → Lupa PIN
@@ -240,15 +276,17 @@ PIN Verification → Lupa PIN
 
 ---
 
-### 14. 🛡️ Keamanan & Stabilitas
+### 16. 🛡️ Keamanan & Stabilitas
 
 | Mekanisme | Detail |
 |---|---|
 | PIN Hashing | SHA-256 (kolom `pin_hash`) |
+| Batas Verifikasi | OTP/PIN/tanggal lahir memakai screen limit dengan hitung mundur 30 detik |
 | PIN Rate Limit | Salah 3x → kunci 5 menit |
 | OTP Rate Limit | Salah 3x → cooldown 30 detik |
 | Layout Stability | `SingleChildScrollView` + `ConstrainedBox` mencegah overflow |
 | Google Account Picker | `signOut()` sebelum `signIn()` — dialog selalu muncul |
+| Biometric saat logout | Biometric aplikasi dan PIN lokal akun dinonaktifkan saat logout eksplisit; penguncian saat aplikasi berpindah/background tidak menghapus preferensi |
 | Service-Role Key | Hanya di Edge Function, tidak pernah di client |
 
 ---
@@ -281,7 +319,7 @@ App dibuka
 | Lupa PIN | Header teal (logo KEDOTA) + white card bawah |
 | Edit Profil | White card layout + avatar gradient + dialogs |
 | Settings | Header gradient teal + profile card + menu list |
-| Reservasi Step 3 | Flat tanpa card — field berurutan + peta interaktif |
+| Reservasi | 6 tahap dengan transisi dan animasi isi, form pasien, jadwal/lokasi, sesi, pilihan pembayaran, dan instruksi pembayaran |
 | Detail Riwayat Done | Card data klinis + grid progres 2×2 + banner rekomendasi |
 
 ---
@@ -370,7 +408,9 @@ supabase functions deploy client-error-log
 | HTTP Client | Dio + Retrofit (generated) |
 | Peta | `flutter_map` v8 + Geoapify tile & geocoding |
 | Lokasi | `geolocator` + `geocoding` (fallback) |
+| Koneksi | `connectivity_plus` + probe HTTP Supabase untuk deteksi internet |
 | Local Storage | `shared_preferences` |
+| Simpan QR | `file_saver` + pemilih file native pada platform yang mendukung |
 | Security | SHA-256 PIN Hashing + Phone Masking |
 | Server Functions | Supabase Edge Functions (Deno Runtime) |
 | Multi-Language | `AppLanguageScope` (Indonesia default + English) |
@@ -441,6 +481,8 @@ lib/
 ```
 
 ---
+
+Modul lintas fitur: `network_status_service.dart` memeriksa koneksi, `network_status_guard.dart` menampilkan screen offline, `error_state_screen.dart` menyediakan layout error umum, dan `rate_limit_screen.dart` menangani hitung mundur limit.
 
 ## 🧪 Testing
 

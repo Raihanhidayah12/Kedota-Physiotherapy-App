@@ -524,8 +524,15 @@ class _SettingsBodyState extends State<SettingsBody>
 
   Future<void> _doLogout() async {
     try {
-      // Clear phone number agar tidak ada binding dengan user lain
       final prefs = await SharedPreferences.getInstance();
+      // Hapus biometric hanya saat logout eksplisit, untuk akun yang sedang keluar.
+      final boundPhone = await AppLockService.getBoundPhone();
+      final logoutPhone = boundPhone?.trim().isNotEmpty == true
+          ? boundPhone!.trim()
+          : (_phone == '-' ? '' : _phone.trim());
+      await AppLockService.disableBiometricForPhone(logoutPhone);
+
+      // Clear phone number agar tidak ada binding dengan user lain.
       await prefs.remove('user_phone');
       await AppLockService.clearUserPhone();
       await AppLockService.unlock(); // Unlock saat logout agar tidak stuck

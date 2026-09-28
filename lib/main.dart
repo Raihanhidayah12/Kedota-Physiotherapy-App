@@ -11,6 +11,7 @@ import 'services/client_error_log_service.dart';
 import 'services/notification_service.dart';
 import 'screens/splash/splash_screen.dart';
 import 'widgets/app_lock_overlay.dart';
+import 'widgets/network_status_guard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -121,6 +122,9 @@ class KedotaApp extends StatelessWidget {
               textStyle: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
+        ),
+        builder: (context, child) => NetworkStatusGuard(
+          child: child ?? const SizedBox.shrink(),
         ),
         home: AppLockWrapper(
           child: const SplashScreen(),
