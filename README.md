@@ -8,11 +8,11 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 
 - Framework: Flutter dengan Dart SDK `^3.12.2`
 - Backend: Supabase Auth, PostgreSQL, Storage, REST API, RPC, dan Edge Functions
-- Bahasa UI: Bahasa Indonesia (default) dan English — seluruh string UI terlokalisasi penuh, tidak ada hardcoded text
+- Bahasa UI: Bahasa Indonesia (default) dan English melalui kamus terpusat di `lib/l10n/app_language.dart`
 - Peta & Geocoding: `flutter_map` (OpenStreetMap tile) + Geoapify API (geocoding akurat) dengan fallback Nominatim
 - Pembayaran: alur UI dan RPC pelunasan tersedia; payment gateway masih demo
 - Environment: URL dan publishable/anon key Supabase dibaca dari file `.env`
-- Test otomatis: 27 unit/widget test lulus; OAuth production dan integration flow memerlukan device, backend, serta credential nyata
+- Pengujian: unit/widget dan integration test tersedia; jalankan pada checkout terkini dengan credential dan device yang sesuai untuk memeriksa hasilnya
 
 ---
 
@@ -20,14 +20,14 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 
 | Fitur / Modul | Status | Keterangan |
 | :--- | :---: | :--- |
-| 🌐 Multi-Language (ID / EN) | 🟢 Selesai | Paritas 100% ID & EN di seluruh aplikasi — tidak ada hardcoded string di UI |
-| 🧪 Auth Flow Tests | 🟢 Selesai | Test widget untuk Onboarding, Sign In, Forgot PIN/OTP, sign-up phone, Google profile, dan pembuatan PIN |
+| 🌐 Multi-Language (ID / EN) | 🟢 Tersedia | Bahasa Indonesia dan English tersedia melalui kamus terpusat; cakupan perlu dijaga saat menambah UI |
+| 🧪 Auth Flow Tests | 🟢 Tersedia | Test auth, onboarding, sign-up, PIN, validasi nomor, dan booking code; hasil tergantung versi kode saat dijalankan |
 | 🚀 Onboarding Screen | 🟢 Selesai | Tampil sekali saat pertama buka, 3 slide interaktif (`SharedPreferences`) |
 | 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home Screen |
 | 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil → Buat PIN → Account Created Screen |
 | 🌐 Google Sign-In | 🟢 Selesai | OAuth Google → Picker Akun → Lengkapi Profil / Direct PIN → Home |
-| 🍎 Apple Sign-In | 🟢 Selesai | OAuth Apple terintegrasi (`signInWithOAuth`) |
-| 📩 OTP Verifikasi | 🟢 Selesai | Dummy codes: `123456`, `555555`, `000000`, `999999` |
+| 🍎 Apple Sign-In | 🟡 Perlu konfigurasi provider | OAuth melalui Supabase; perlu credential dan konfigurasi Apple Developer untuk production |
+| 📩 OTP Verifikasi | 🟡 Mode demo | OTP lokal 4 digit: `1234`, `5555`, `0000`, `9999`; belum memakai penyedia SMS production |
 | 📡 OTP Production (Plan) | 🔵 Siap Migrasi | Endpoint `/auth/otp` & `/auth/verify` disiapkan di Swagger |
 | 🔓 Lupa PIN | 🟢 Selesai | OTP → Verifikasi Tanggal Lahir → PIN Baru → PIN Reset Success |
 | 🔑 Ganti PIN (Settings) | 🟢 Selesai | Verifikasi PIN Lama → Input PIN Baru → Konfirmasi PIN Baru (Rate limit 3x) |
@@ -40,9 +40,9 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 📴 Deteksi Internet & Error Screen | 🟢 Selesai | Status koneksi device dan akses internet diverifikasi; screen offline dan limit memakai hitung mundur |
 | 🕶️ Privasi App Switcher | 🟢 Selesai | Konten aplikasi ditutup saat masuk app switcher pada Android dan iOS |
 | 💤 Dormant Account | 🟢 Selesai | Deteksi akun >60 hari tidak aktif → verifikasi via email |
-| 🎨 UI & Layout Stability | 🟢 Selesai | Responsive 0 overflow di mobile/web |
+| 🎨 UI & Layout Stability | 🟢 Diimplementasikan | Layout responsif; tetap verifikasi pada ukuran layar dan platform target |
 | ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (`update-pin` Deno runtime) |
-| 📊 HTTP 5xx Error Logging | 🟡 Kode tersedia | Perlu apply migration dan deploy Edge Function untuk menyimpan log di Supabase |
+| 📊 HTTP 5xx Error Logging | 🟢 Teruji | Log uji 5xx berhasil masuk ke tabel `error_logs` pada Supabase |
 | 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion |
 | 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
 | 📅 Reservasi Step-by-Step | 🟢 Selesai | 6 tahap dari data pasien hingga instruksi pembayaran, termasuk pilihan lokasi dan jadwal |
@@ -72,7 +72,7 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 **Alur nomor sudah terdaftar:**
 ```
 Sign In → Input Nomor HP
-  → OTP Verification (123456 / 555555 / 000000 / 999999)
+  → OTP Verification (1234 / 5555 / 0000 / 9999 — mode demo lokal)
   → PIN Verification (6-digit)
   → Home Screen
 ```
@@ -179,6 +179,12 @@ Tahap pembayaran mendukung QRIS, OVO, GoPay, ShopeePay, transfer BCA/BNI/BRI/Per
 
 Batas pembayaran berlaku 10 menit sejak metode dipilih atau pengguna masuk ke instruksi pembayaran. Setelah kedaluwarsa, instruksi lama dinonaktifkan dan pengguna dapat kembali memilih metode. Integrasi gateway dan konfirmasi transaksi eksternal masih demo; QRIS pada mode demo bukan QR pembayaran gateway.
 
+#### Catatan mode pembayaran
+
+- Rincian biaya dan instruksi transfer/wallet/QRIS adalah bagian dari alur aplikasi; membuka instruksi atau mengunduh QR tidak membuktikan pembayaran berhasil.
+- Form kartu kredit/debit hanya memvalidasi input (nomor kartu memakai panjang jaringan dan checksum Luhn, masa berlaku, CVV). Ini bukan pemroses kartu bersertifikasi atau koneksi acquiring bank; jangan masukkan data kartu asli.
+- Pelunasan memakai RPC `settle_appointment_payment`, tetapi verifikasi pembayaran eksternal memerlukan gateway dan webhook production.
+
 ### 7. 📴 Koneksi Internet & Screen Error
 
 - `NetworkStatusGuard` aktif di seluruh aplikasi. Pemeriksaan memakai status konektivitas device dan probe endpoint health Supabase, bukan data database saja.
@@ -269,9 +275,10 @@ Kolom-kolom di atas perlu ditambahkan ke tabel `appointments` di Supabase. Selam
 - Global error handler aktif sejak app dibuka.
 - Mendeteksi response `500-599` dari semua jalur: Dio, Supabase Auth, DB, Storage, RPC.
 - Metadata error dikirim ke Edge Function `client-error-log` secara background.
-- Migration tabel `error_logs` dan kode Edge Function tersedia di repository. Keduanya harus diterapkan ke project Supabase sebelum log tersimpan.
+- Migration tabel `error_logs` dan Edge Function `client-error-log` sudah diterapkan ke project Supabase.
 - Setelah aktif, cek data di **Supabase Dashboard → Table Editor → `error_logs`**. Log runtime Edge Function bisa dilihat di **Logs → Edge Functions → `client-error-log`**.
-- Jika penyimpanan database gagal atau konfigurasi server belum ada, Edge Function mengembalikan error; respons diterima saja tidak dianggap bukti data tersimpan.
+- Pengujian dashboard berhasil menyimpan log uji (`GET /test/error-log`, status `500`) ke tabel. Hapus baris tersebut jika tabel ingin berisi log kejadian nyata saja.
+- Edge Function mengembalikan error jika penyimpanan database gagal atau konfigurasi server belum ada.
 - Dokumentasi: [`docs/5xx-error-logging.md`](docs/5xx-error-logging.md)
 
 ### 15. 🔓 Lupa PIN Flow
@@ -355,9 +362,13 @@ supabase functions deploy update-pin
 supabase functions deploy client-error-log
 ```
 
+`client-error-log` menerima metadata error HTTP 5xx dan menyimpannya ke `public.error_logs` memakai service-role key di sisi server. Pengujian dashboard berhasil memasukkan satu baris uji (`/test/error-log`, status 500); hapus baris tersebut jika tabel hanya akan berisi kejadian operasional. Cek data melalui **Dashboard → Table Editor → `error_logs`**, dan runtime logs melalui **Edge Functions → `client-error-log` → Logs**.
+
 ---
 
 ## 🗃️ Schema Supabase Database
+
+Kolom berikut merangkum kolom yang dipakai aplikasi, bukan dump lengkap dari database live. Project Supabase saat ini memiliki tabel `error_logs` yang sudah diuji. Folder `supabase/migrations` belum berisi migration lengkap untuk schema `profiles`, `appointments`, Storage, RPC, dan policies. Karena itu database live belum dapat direkonstruksi hanya dengan `supabase db push`; simpan perubahan yang dibuat di Dashboard sebagai migration SQL sebelum menyiapkan project baru.
 
 ### Tabel `appointments`
 
@@ -428,6 +439,77 @@ supabase functions deploy client-error-log
 | API Spec | OpenAPI 3.0 — `swagger_supabase_api_spec.txt` |
 
 `file_saver` 0.6.0 memakai `meta ^1.19.0`. Flutter 3.44.6 mematok `meta 1.18.0` lewat `flutter_test`, sehingga `pubspec.yaml` memakai `dependency_overrides` untuk menyelesaikan dependensi. Setelah Flutter SDK diperbarui ke versi dengan pin `meta` yang sesuai, override ini dapat dievaluasi kembali.
+
+---
+
+## Konfigurasi dan Menjalankan Proyek
+
+### Persyaratan
+
+- Flutter SDK dengan Dart yang memenuhi batas `^3.12.2` di `pubspec.yaml`.
+- Supabase project, URL, dan publishable/anon key.
+- Untuk iOS: macOS, Xcode, CocoaPods, dan signing team Apple.
+- Untuk OAuth production: provider dan callback/redirect URL dikonfigurasi di Supabase serta Google/Apple Developer Console.
+
+### Environment
+
+Salin `.env.example` menjadi `.env`, lalu isi:
+
+```dotenv
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=<publishable-or-anon-key>
+```
+
+`.env` disertakan sebagai asset Flutter sehingga nilainya dapat dibaca dari aplikasi client. Gunakan hanya publishable/anon key di sini. Jangan masukkan service-role key atau secret provider ke client; Edge Functions menggunakan konfigurasi server Supabase.
+
+### Menjalankan
+
+```bash
+flutter pub get
+flutter run
+```
+
+Gunakan `flutter devices` untuk melihat device dan `flutter run -d <device-id>` untuk memilihnya. iOS build memerlukan macOS/Xcode. Web dapat dicoba dengan `flutter run -d chrome`, tetapi plugin dan fitur native harus diverifikasi per browser.
+
+### OAuth callback
+
+- Aktifkan provider yang dipakai di Supabase Auth dan daftarkan URL redirect/callback setiap platform.
+- Android callback scheme tercantum di `android/app/src/main/AndroidManifest.xml`: `io.supabase.flutter://login-callback`.
+- Cocokkan package/bundle identifier, client ID, URL scheme, dan callback URL dengan konfigurasi provider.
+- Apple Sign-In memerlukan capability dan credential Apple Developer; credential tersebut tidak disediakan repository.
+
+### Build dan kesiapan rilis
+
+```bash
+flutter build apk --release
+flutter build appbundle --release
+flutter build ios --release
+```
+
+Build iOS hanya dapat dibuat di macOS/Xcode. Android release saat ini menggunakan debug signing; atur signing key sendiri sebelum distribusi. Verifikasi OAuth, notifikasi, izin kamera/lokasi, penyimpanan QR, dan privacy cover di device tiap platform sebelum rilis.
+
+---
+
+## Peta Kode
+
+| Lokasi | Tanggung jawab |
+|---|---|
+| `lib/main.dart` | Bootstrap, dotenv, Supabase, global error handler, tema, dan lock wrapper |
+| `lib/screens/onboarding/` | Slide onboarding |
+| `lib/screens/auth/` | Sign-in, OTP demo, PIN, pendaftaran, dan pemulihan PIN |
+| `lib/screens/errors/` | Offline dan rate limit OTP/PIN/verifikasi |
+| `lib/screens/home/` | Home, reservasi, janji, riwayat, profil, settings, pembayaran, dan notifikasi |
+| `lib/services/supabase_auth_service.dart` | Auth, operasi Supabase, REST client, booking/profile logic |
+| `lib/services/network_status_service.dart` | Status jaringan device dan probe koneksi Supabase |
+| `lib/services/client_error_log_service.dart` | Deteksi dan pengiriman metadata HTTP 5xx |
+| `lib/services/notification_service.dart` | Notifikasi lokal dan jadwal/payload appointment |
+| `lib/services/app_lock_service.dart` | Preferensi app lock dan autentikasi biometrik lokal |
+| `lib/services/screen_security_service.dart` | Perlindungan preview aplikasi Android/iOS |
+| `lib/l10n/app_language.dart` | Kamus Bahasa Indonesia dan English |
+| `lib/widgets/` | Komponen reusable, network guard, error state, dan bottom sheet |
+| `lib/utils/` | Snackbar, validasi nomor telepon, dan kode booking |
+| `supabase/functions/` | Edge Functions `update-pin` dan `client-error-log` |
+| `test/`, `integration_test/` | Unit/widget test dan integration test |
 
 ---
 
@@ -510,8 +592,10 @@ Test widget dan unit tersedia untuk:
 - Google sign-up: profile completion dan create PIN
 
 ```bash
-flutter test   # 27 test lulus
+flutter test
 ```
+
+Jalankan test pada checkout terkini; README ini tidak menganggap hasil test sebelumnya sebagai hasil untuk perubahan terbaru.
 
 Integration test di `integration_test/app_test.dart` membutuhkan device Android/iOS, `.env`, dan koneksi Supabase.
 
@@ -540,10 +624,11 @@ flutter test
 # 6. Deploy Edge Functions
 supabase login
 supabase link --project-ref wwmctqhbqpsbkyxkeaqv
-supabase db push
 supabase functions deploy client-error-log
 supabase functions deploy update-pin
 ```
+
+Jangan menjalankan `supabase db push` untuk membuat environment baru sebelum migration schema lengkap ditambahkan dan direview; database live saat ini tidak seluruhnya direpresentasikan di `supabase/migrations`.
 
 > Jangan commit `.env`. Service-role key hanya boleh digunakan oleh Edge Function.
 
