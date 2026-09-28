@@ -42,7 +42,7 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 💤 Dormant Account | 🟢 Selesai | Deteksi akun >60 hari tidak aktif → verifikasi via email |
 | 🎨 UI & Layout Stability | 🟢 Selesai | Responsive 0 overflow di mobile/web |
 | ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (`update-pin` Deno runtime) |
-| 📊 HTTP 5xx Error Logging | 🟢 Selesai | Deteksi & log metadata error HTTP 5xx ke Edge Function `client-error-log` |
+| 📊 HTTP 5xx Error Logging | 🟡 Kode tersedia | Perlu apply migration dan deploy Edge Function untuk menyimpan log di Supabase |
 | 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion |
 | 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
 | 📅 Reservasi Step-by-Step | 🟢 Selesai | 6 tahap dari data pasien hingga instruksi pembayaran, termasuk pilihan lokasi dan jadwal |
@@ -268,8 +268,10 @@ Kolom-kolom di atas perlu ditambahkan ke tabel `appointments` di Supabase. Selam
 
 - Global error handler aktif sejak app dibuka.
 - Mendeteksi response `500-599` dari semua jalur: Dio, Supabase Auth, DB, Storage, RPC.
-- Metadata aman dikirim ke Edge Function `client-error-log` secara background.
-- Data tersimpan permanen di tabel `error_logs`.
+- Metadata error dikirim ke Edge Function `client-error-log` secara background.
+- Migration tabel `error_logs` dan kode Edge Function tersedia di repository. Keduanya harus diterapkan ke project Supabase sebelum log tersimpan.
+- Setelah aktif, cek data di **Supabase Dashboard → Table Editor → `error_logs`**. Log runtime Edge Function bisa dilihat di **Logs → Edge Functions → `client-error-log`**.
+- Jika penyimpanan database gagal atau konfigurasi server belum ada, Edge Function mengembalikan error; respons diterima saja tidak dianggap bukti data tersimpan.
 - Dokumentasi: [`docs/5xx-error-logging.md`](docs/5xx-error-logging.md)
 
 ### 15. 🔓 Lupa PIN Flow
@@ -538,9 +540,9 @@ flutter test
 # 6. Deploy Edge Functions
 supabase login
 supabase link --project-ref wwmctqhbqpsbkyxkeaqv
-supabase functions deploy update-pin
-supabase functions deploy client-error-log
 supabase db push
+supabase functions deploy client-error-log
+supabase functions deploy update-pin
 ```
 
 > Jangan commit `.env`. Service-role key hanya boleh digunakan oleh Edge Function.

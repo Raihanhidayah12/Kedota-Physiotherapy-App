@@ -72,8 +72,8 @@ Tim bisa lihat di Supabase Dashboard kapan saja
 
 | Bagian | Status |
 |--------|--------|
-| Edge Function `client-error-log` | ✅ Aktif |
-| Tabel `error_logs` di database | ✅ Sudah di-apply |
+| Edge Function `client-error-log` | Kode tersedia; perlu di-deploy ke project Supabase |
+| Tabel `error_logs` di database | Migration tersedia; perlu di-apply ke project Supabase |
 | Validasi payload (anti-abuse) | ✅ Ada |
 | Keamanan data sensitif | ✅ Tidak ada password/token yang dikirim |
 
@@ -90,7 +90,7 @@ platform    → android / ios
 received_at → 2026-09-22T10:23:00Z
 ```
 
-Tidak ada data sensitif. Hanya metadata error.
+Payload tidak menyertakan password atau token. `message` berasal dari respons/error server dan tetap perlu ditinjau sebelum dibagikan ke pihak lain.
 
 ---
 
@@ -126,8 +126,15 @@ ORDER BY received_at DESC;
 | `lib/services/client_error_log_service.dart` | Service pengirim log error |
 | `lib/services/supabase_auth_service.dart` | Logging ditambahkan di semua call ke Supabase |
 | `supabase/functions/client-error-log/index.ts` | Edge Function penerima log, simpan ke DB |
-| `supabase/migrations/20260922000000_create_error_logs.sql` | Tabel `error_logs` (sudah di-apply) |
+| `supabase/migrations/20260922000000_create_error_logs.sql` | Migration tabel `error_logs` (apply ke project Supabase sebelum dipakai) |
 
----
+## Aktivasi pada project Supabase
 
-Status: **✅ Selesai dan aktif.**
+Jalankan migration dan deploy function menggunakan project Supabase yang benar:
+
+```sh
+supabase db push
+supabase functions deploy client-error-log
+```
+
+Pastikan project menyediakan `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` untuk Edge Function. Function akan mengembalikan error jika penyimpanan database gagal, bukan mengaku log sudah tersimpan.

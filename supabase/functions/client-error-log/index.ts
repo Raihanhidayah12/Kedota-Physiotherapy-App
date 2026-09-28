@@ -73,14 +73,20 @@ Deno.serve(async (req) => {
         });
 
       if (insertError) {
-        // Log the insert failure but still return 202 — the console.error above
-        // already captured the event, so we don't want to surface this to the client.
         console.error("error_logs insert failed:", insertError.message);
+        return new Response(JSON.stringify({ error: "Could not persist error log" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     } else {
       console.warn(
         "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; skipping DB insert",
       );
+      return new Response(JSON.stringify({ error: "Error log storage is not configured" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(JSON.stringify({ accepted: true }), {
