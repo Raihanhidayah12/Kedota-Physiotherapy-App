@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'dart:math';
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
@@ -29,7 +30,7 @@ const _tealDark = Color(0xFF007F78);
 const _background = Color(0xFFF5F8F8);
 const _ink = Color(0xFF172B2D);
 const _muted = Color(0xFF7C8C8E);
-const _geoapifyKey = 'f4a383aa058449cb994d543567a6145b';
+
 const _homeCareService = 'home_care';
 const _clinicService = 'clinic';
 const _sessionPackagePrices = <int, int>{
@@ -101,7 +102,15 @@ const _clinicLocation = _ServiceLocation(
   point: LatLng(-7.92952, 112.61989),
 );
 
-const _openStreetMapTiles = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+
+// Google Maps tile URL with API key from .env
+String get _googleMapsTiles => 
+    'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${dotenv.env['GOOGLE_MAPS_API_KEY'] ?? ''}';
+
+// Google Geocoding API URL
+String get _googleGeocodingUrl => 
+    'https://maps.googleapis.com/maps/api/geocode/json?key=${dotenv.env['GOOGLE_MAPS_API_KEY'] ?? ''}';
 
 // Kota yang tersedia untuk dipilih di step 3
 const _availableCities = [
@@ -236,29 +245,23 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     if (_isClinicService) return;
     try {
       final dio = Dio();
+      final encodedAddress = Uri.encodeComponent(address);
       final response = await dio
           .get<Map<String, dynamic>>(
-            'https://api.geoapify.com/v1/geocode/search',
-            queryParameters: {
-              'text': address,
-              'apiKey': _geoapifyKey,
-              'limit': 1,
-              'filter': 'countrycode:id',
-              'lang': 'id',
-            },
+            '$_googleGeocodingUrl&address=$encodedAddress&region=ID&language=id',
           )
           .timeout(const Duration(seconds: 10));
 
       if (!mounted || _isClinicService) return;
-      final features = (response.data?['features'] as List?) ?? [];
-      if (features.isNotEmpty) {
-        final coords =
-            (features.first as Map<String, dynamic>)['geometry']?['coordinates']
-                as List?;
-        if (coords != null && coords.length >= 2) {
-          final lon = (coords[0] as num).toDouble();
-          final lat = (coords[1] as num).toDouble();
-          final point = LatLng(lat, lon);
+      final results = (response.data?['results'] as List?) ?? [];
+      if (results.isNotEmpty) {
+        final firstResult = results.first as Map<String, dynamic>;
+        final geometry = firstResult['geometry'] as Map<String, dynamic>?;
+        final location = geometry?['location'] as Map<String, dynamic>?;
+        if (location != null) {
+          final lat = (location['lat'] as num).toDouble();
+          final lng = (location['lng'] as num).toDouble();
+          final point = LatLng(lat, lng);
           setState(() => _mapCenter = point);
           _mapPointNotifier.value = point;
           try {
@@ -267,7 +270,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         }
       }
     } catch (error) {
-      debugPrint('Geoapify forward geocoding failed: $error');
+      debugPrint('Google forward geocoding failed: $error');
     }
 
     // Fallback: Nominatim (gratis unlimited, tapi lebih lambat)
@@ -1098,61 +1101,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     }
   }
 
-  /// Bangun alamat lengkap dari response Geoapify reverse geocoding
-  String _buildAddressFromGeoapify(Map<String, dynamic> props) {
-    // Geoapify response: features[0].properties
-    // Fields: street, housenumber, suburb, district, city, county, state, postcode
-    final street = (props['street'] ?? '').toString().trim();
-    final houseNumber = (props['housenumber'] ?? '').toString().trim();
-    final road = street.isNotEmpty
-        ? (houseNumber.isNotEmpty ? '$street No. $houseNumber' : street)
-        : '';
 
-    final suburb = (props['suburb'] ??
-            props['quarter'] ??
-            props['neighbourhood'] ??
-            '')
-        .toString()
-        .trim();
-
-    final district = (props['district'] ??
-            props['city_district'] ??
-            props['subdistrict'] ??
-            '')
-        .toString()
-        .trim();
-
-    final city = (props['city'] ?? props['town'] ?? props['county'] ?? '')
-        .toString()
-        .trim();
-
-    final state = (props['state'] ?? '').toString().trim();
-    final postcode = (props['postcode'] ?? '').toString().trim();
-
-    final parts = <String>[
-      if (road.isNotEmpty) road,
-      if (suburb.isNotEmpty) suburb,
-      if (district.isNotEmpty && district != suburb) district,
-      if (city.isNotEmpty) city,
-      if (state.isNotEmpty) state,
-      if (postcode.isNotEmpty) postcode,
-    ];
-
-    if (parts.isNotEmpty) return parts.join(', ');
-
-    // Fallback: formatted address dari Geoapify
-    final formatted = (props['formatted'] ?? '').toString().trim();
-    if (formatted.isNotEmpty) {
-      // formatted biasanya: "Jl. X, Kelurahan, Kota, Provinsi, Indonesia"
-      final segments = formatted
-          .split(', ')
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty && s.toLowerCase() != 'indonesia')
-          .toList();
-      return segments.take(5).join(', ');
-    }
-    return '';
-  }
 
   Future<void> _setMapLocation(LatLng point) async {
     if (_isClinicService) return;
@@ -1166,39 +1115,24 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       // Controller belum ready (map belum render) — abaikan, initialCenter sudah benar
     }
 
-    // Geoapify reverse geocoding
+    // Google reverse geocoding
     try {
       final dio = Dio();
-
-      Future<String> fetchAddress() async {
-        final response = await dio
-            .get<Map<String, dynamic>>(
-              'https://api.geoapify.com/v1/geocode/reverse',
-              queryParameters: {
-                'lat': point.latitude,
-                'lon': point.longitude,
-                'apiKey': _geoapifyKey,
-                'lang': 'id',
-              },
-            )
-            .timeout(const Duration(seconds: 10));
-        final features = (response.data?['features'] as List?) ?? [];
-        if (features.isEmpty) return '';
-        final props =
-            (features.first as Map<String, dynamic>)['properties']
-                as Map<String, dynamic>? ??
-            {};
-        return _buildAddressFromGeoapify(props);
-      }
-
-      final address = await fetchAddress();
-      if (!mounted) return;
-      if (address.isNotEmpty) {
-        setState(() => _addressController.text = address);
-        return;
+      final response = await dio
+          .get<Map<String, dynamic>>(
+            '$_googleGeocodingUrl&latlng=${point.latitude},${point.longitude}&language=id',
+          )
+          .timeout(const Duration(seconds: 10));
+      final results = (response.data?['results'] as List?) ?? [];
+      if (results.isNotEmpty) {
+        final formattedAddress = results[0]['formatted_address'] as String?;
+        if (formattedAddress != null && formattedAddress.isNotEmpty) {
+          setState(() => _addressController.text = formattedAddress);
+          return;
+        }
       }
     } catch (error) {
-      debugPrint('Geoapify reverse geocoding failed: $error');
+      debugPrint('Google reverse geocoding failed: $error');
     }
 
     // Fallback 1: Nominatim (gratis unlimited)
@@ -1334,26 +1268,13 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                                 final dio = Dio();
                                 final resp = await dio
                                     .get<Map<String, dynamic>>(
-                                      'https://api.geoapify.com/v1/geocode/reverse',
-                                      queryParameters: {
-                                        'lat': point.latitude,
-                                        'lon': point.longitude,
-                                        'apiKey': _geoapifyKey,
-                                        'lang': 'id',
-                                      },
+                                      '$_googleGeocodingUrl&latlng=${point.latitude},${point.longitude}&language=id',
                                     )
                                     .timeout(const Duration(seconds: 10));
-                                final features =
-                                    (resp.data?['features'] as List?) ?? [];
-                                if (features.isNotEmpty) {
-                                  final props =
-                                      (features.first
-                                              as Map<String, dynamic>)['properties']
-                                          as Map<String, dynamic>? ??
-                                      {};
-                                  final address =
-                                      _buildAddressFromGeoapify(props);
-                                  if (address.isNotEmpty) {
+                                final results = (resp.data?['results'] as List?) ?? [];
+                                if (results.isNotEmpty) {
+                                  final address = results[0]['formatted_address'] as String?;
+                                  if (address != null && address.isNotEmpty) {
                                     setDialogState(
                                       () => selectedAddress = address,
                                     );
@@ -1364,10 +1285,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate:
-                            clinicMap
-                                ? _openStreetMapTiles
-                                : 'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
+                        urlTemplate: _googleMapsTiles,
                         userAgentPackageName: 'com.kedota.physiotherapy',
                       ),
                       MarkerLayer(
@@ -1386,7 +1304,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                       ),
                       RichAttributionWidget(
                         attributions: [
-                          TextSourceAttribution('OpenStreetMap contributors'),
+                          TextSourceAttribution('© Google Maps'),
                         ],
                       ),
                     ],
@@ -2183,9 +2101,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: _isClinicService
-                        ? _openStreetMapTiles
-                        : 'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
+                    urlTemplate: _googleMapsTiles,
                     userAgentPackageName: 'com.kedota.physiotherapy',
                   ),
                   MarkerLayer(
@@ -2259,8 +2175,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate:
-                        'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=$_geoapifyKey',
+                    urlTemplate: _googleMapsTiles,
                     userAgentPackageName: 'com.kedota.physiotherapy',
                   ),
                   MarkerLayer(
