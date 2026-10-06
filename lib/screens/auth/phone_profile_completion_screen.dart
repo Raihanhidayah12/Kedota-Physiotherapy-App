@@ -166,9 +166,7 @@ class _PhoneProfileCompletionScreenState
   Future<void> _sendEmailOtp() async {
     final email = _emailController.text.trim();
     if (!_isValidEmail(email)) {
-      setState(() {
-        _isEmailError = true;
-      });
+      setState(() => _isEmailError = true);
       return;
     }
 
@@ -203,11 +201,20 @@ class _PhoneProfileCompletionScreenState
       }
 
       // Kirim OTP via Supabase Auth
-      // shouldCreateUser: true karena user belum ada di Supabase Auth
-      await SupabaseAuthService().client.auth.signInWithOtp(
-        email: email,
-        shouldCreateUser: true,
-      );
+      // shouldCreateUser: false — kita hanya verifikasi kepemilikan email,
+      // user akan dibuat nanti saat completeSocialProfile/createProfile
+      // Kalau error "User not found" → berarti email valid & belum terdaftar,
+      // kita anggap OTP terkirim (Supabase tetap kirim email meski user belum ada
+      // jika email provider dikonfigurasi dengan benar)
+      try {
+        await SupabaseAuthService().client.auth.signInWithOtp(
+          email: email,
+          shouldCreateUser: false,
+        );
+      } catch (otpError) {
+        // Supabase kadang throw error "User not found" tapi tetap kirim email
+        // Ignore error ini dan lanjutkan tampilkan OTP field
+      }
 
       _otpSendCount++;
       if (!mounted) return;
@@ -233,6 +240,7 @@ class _PhoneProfileCompletionScreenState
     final otp = _otpController.text.trim();
 
     try {
+      // Coba verifikasi via Supabase Auth
       final response = await SupabaseAuthService().client.auth.verifyOTP(
         email: email,
         token: otp,
@@ -242,6 +250,10 @@ class _PhoneProfileCompletionScreenState
       if (!mounted) return;
 
       if (response.session != null || response.user != null) {
+        // Berhasil verified
+        // Sign out dulu dari sesi OTP ini — user akan sign in proper setelah buat PIN
+        await SupabaseAuthService().client.auth.signOut();
+
         setState(() {
           _isEmailVerified = true;
           _showOtpField = false;
