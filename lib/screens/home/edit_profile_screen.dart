@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,7 +9,6 @@ import '../../services/supabase_auth_service.dart';
 import '../../utils/app_snackbar.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
-import 'change_pin_screen.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _deletePhotoAction = 'delete-photo';
@@ -50,8 +48,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   bool _isDirty = false;
   bool _profileChanged = false;
   bool _hidePhone = true;
-  int _changePinCooldownSeconds = 0;
-  Timer? _changePinTimer;
 
   String get _displayPhone {
     final raw = _phone ?? '-';
@@ -96,7 +92,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   @override
   void dispose() {
-    _changePinTimer?.cancel();
     _enterCtrl.dispose();
     _nameCtr.dispose();
     _nikCtr.dispose();
@@ -134,7 +129,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         final rawUrl = profile['profile_photo_url']?.toString().trim() ?? '';
         _profileImageUrl = rawUrl.isNotEmpty ? rawUrl : null;
       });
-      _restoreChangePinCooldown(rawPhone);
     } catch (e) {
       debugPrint('EditProfile load error: $e');
     }
@@ -246,40 +240,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _restoreChangePinCooldown(String phone) async {
-    final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
-    if (digits.isEmpty) return;
-
-    final remaining = await SupabaseAuthService().newPinCooldownRemaining(
-      phone: digits,
-    );
-    if (!mounted) return;
-    if (remaining <= 0) {
-      _changePinTimer?.cancel();
-      if (_changePinCooldownSeconds != 0) {
-        setState(() => _changePinCooldownSeconds = 0);
-      }
-      return;
-    }
-
-    setState(() => _changePinCooldownSeconds = remaining);
-    var secondsRemaining = remaining;
-    _changePinTimer?.cancel();
-    _changePinTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (secondsRemaining > 1) {
-        secondsRemaining--;
-        setState(() => _changePinCooldownSeconds = secondsRemaining);
-      } else {
-        timer.cancel();
-        setState(() => _changePinCooldownSeconds = 0);
-      }
-    });
   }
 
   // ── save ──────────────────────────────────────────────────────────────────
@@ -736,16 +696,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                           ),
                           const SizedBox(height: 24),
 
-                          _sectionTitle(t(context, 'securitySection')),
-                          const SizedBox(height: 12),
-                          _buildCard(
-                            onTap: _changePinCooldownSeconds > 0
-                                ? null
-                                : _openChangePin,
-                            children: [_changePinButton()],
-                          ),
-                          const SizedBox(height: 40),
-
                           _saveButton(),
                           const SizedBox(height: 40),
                         ],
@@ -1153,91 +1103,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       ),
     ),
   );
-
-  void _openChangePin() {
-    final rawPhone = _phone ?? '';
-    final digits = rawPhone.replaceAll(RegExp(r'[^\d]'), '');
-
-    if (digits.isEmpty) {
-      showAppSnackBar(
-        context,
-        t(context, 'phoneNotFound'),
-        type: AppSnackBarType.error,
-      );
-      return;
-    }
-
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => ChangePinScreen(phoneNumber: digits),
-          ),
-        )
-        .then((_) {
-          if (mounted) _restoreChangePinCooldown(digits);
-        });
-  }
-
-  Widget _changePinButton() {
-    final isCooldown = _changePinCooldownSeconds > 0;
-
-    return GestureDetector(
-      onTap: isCooldown ? null : _openChangePin,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF7F2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                Icons.password_rounded,
-                size: 20,
-                color: isCooldown ? _ink3 : const Color(0xFFE87A3E),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    t(context, 'menuChangePin'),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: _ink,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    isCooldown
-                        ? t(context, 'changePinAvailableIn').replaceAll(
-                            '{seconds}',
-                            '$_changePinCooldownSeconds',
-                          )
-                        : t(context, 'menuChangePinSub'),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isCooldown ? const Color(0xFFD94F45) : _ink3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.keyboard_arrow_right_rounded,
-              size: 20,
-              color: isCooldown ? _ink3.withValues(alpha: 0.5) : _ink3,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _saveButton() => Container(
     width: double.infinity,

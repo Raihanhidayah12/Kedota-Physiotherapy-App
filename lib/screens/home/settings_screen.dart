@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -9,6 +10,7 @@ import '../../services/app_lock_service.dart';
 import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../utils/app_snackbar.dart';
+import 'change_pin_screen.dart';
 import 'edit_profile_screen.dart';
 import 'notification_preferences_screen.dart';
 import 'support_info_screens.dart';
@@ -70,6 +72,8 @@ class _SettingsBodyState extends State<SettingsBody>
   String _medicalCode = '-';
   bool _hidePhone = true;
   bool _biometricEnabled = false;
+  int _changePinCooldownSeconds = 0;
+  Timer? _changePinTimer;
 
   String get _displayPhone {
     if (_phone.isEmpty || _phone == '-') return '-';
@@ -111,6 +115,7 @@ class _SettingsBodyState extends State<SettingsBody>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _changePinTimer?.cancel();
     _fadeCtrl.dispose();
     super.dispose();
   }
@@ -159,6 +164,9 @@ class _SettingsBodyState extends State<SettingsBody>
         _medicalCode = profile?['medical_code']?.toString().trim() ?? '-';
       });
       _loadBiometricPreference();
+      final rawPhone =
+          profile?['phone']?.toString().trim() ?? user?.phone ?? '';
+      _restoreChangePinCooldown(rawPhone);
     } catch (e) {
       debugPrint('Settings profile load error: $e');
     }
@@ -590,6 +598,8 @@ class _SettingsBodyState extends State<SettingsBody>
                         if (refreshed == true && mounted) _loadProfile();
                       },
                     ),
+                    _buildDivider(),
+                    _buildChangePinItem(),
                   ]),
                   const SizedBox(height: 24),
 
@@ -825,6 +835,112 @@ class _SettingsBodyState extends State<SettingsBody>
       ),
     ),
   );
+
+  Widget _buildChangePinItem() {
+    final isCooldown = _changePinCooldownSeconds > 0;
+    return InkWell(
+      onTap: isCooldown ? null : _openChangePin,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(
+              Icons.password_rounded,
+              color: isCooldown ? _ink3 : const Color(0xFFE87A3E),
+              size: 22,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t(context, 'menuChangePin'),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: isCooldown ? _ink3 : _ink,
+                    ),
+                  ),
+                  if (isCooldown || true) // always show subtitle
+                    Text(
+                      isCooldown
+                          ? t(context, 'changePinAvailableIn').replaceAll(
+                              '{seconds}',
+                              '$_changePinCooldownSeconds',
+                            )
+                          : t(context, 'menuChangePinSub'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isCooldown
+                            ? const Color(0xFFD94F45)
+                            : _ink3,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: _ink3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _restoreChangePinCooldown(String phone) async {
+    final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.isEmpty) return;
+    final remaining = await SupabaseAuthService().newPinCooldownRemaining(
+      phone: digits,
+    );
+    if (!mounted) return;
+    if (remaining <= 0) {
+      _changePinTimer?.cancel();
+      if (_changePinCooldownSeconds != 0) {
+        setState(() => _changePinCooldownSeconds = 0);
+      }
+      return;
+    }
+    setState(() => _changePinCooldownSeconds = remaining);
+    var secondsRemaining = remaining;
+    _changePinTimer?.cancel();
+    _changePinTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (secondsRemaining > 1) {
+        secondsRemaining--;
+        setState(() => _changePinCooldownSeconds = secondsRemaining);
+      } else {
+        timer.cancel();
+        setState(() => _changePinCooldownSeconds = 0);
+      }
+    });
+  }
+
+  void _openChangePin() {
+    final rawPhone = _phone.trim();
+    final digits = rawPhone.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.isEmpty) {
+      showAppSnackBar(
+        context,
+        t(context, 'phoneNotFound'),
+        type: AppSnackBarType.error,
+      );
+      return;
+    }
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => ChangePinScreen(phoneNumber: digits),
+          ),
+        )
+        .then((_) {
+          if (mounted) _restoreChangePinCooldown(digits);
+        });
+  }
 
   Widget _buildBiometricItem() => ListTile(
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
