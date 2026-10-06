@@ -747,6 +747,7 @@ const _translations = {
     'notifEmailSubtitle': 'We will send health articles to your email.',
 
     // ── Edit profile ─────────────────────────────────────────────────────
+    'save': 'Save',
     'profileSavedSuccess': 'Profile saved successfully',
     'failedTitle': 'Failed',
     'camera': 'Camera',
@@ -1602,6 +1603,7 @@ Device information, application activity logs, and usage data for security and s
         'Kami akan mengirimkan artikel kesehatan ke email Anda.',
 
     // ── Edit profile ─────────────────────────────────────────────────────
+    'save': 'Simpan',
     'profileSavedSuccess': 'Profil berhasil disimpan',
     'failedTitle': 'Gagal',
     'camera': 'Kamera',
