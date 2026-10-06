@@ -99,15 +99,15 @@ const _clinicLocation = _ServiceLocation(
   address:
       'Blok Kelapa No.29, Tunggulwulung, Kec. Lowokwaru, Kota Malang, Jawa Timur 65143',
   mapUrl: 'https://maps.app.goo.gl/6RoeDr21WjTfMjo86',
-  point: LatLng(-7.92952, 112.61989),
+  point: LatLng(-7.92952, 112.61989), // Malang, Jawa Timur
 );
 
 
 
 // Map tile URLs with cascading fallback system
-// Primary: Google Maps tiles (requires API key)
+// Primary: Google Maps tiles (requires API key) - configured for Indonesia
 String get _googleMapsTiles => 
-    'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${dotenv.env['GOOGLE_MAPS_API_KEY'] ?? ''}';
+    'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${dotenv.env['GOOGLE_MAPS_API_KEY'] ?? ''}&region=ID&language=id';
 
 // Secondary: Geoapify tiles (requires API key) 
 String get _geoapifyTiles => 
@@ -207,7 +207,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   late final Animation<double> _successFade;
   Set<String> _bookedAppointmentTimes = {};
   bool _locating = false;
-  LatLng _mapCenter = const LatLng(-7.9839, 112.6214);
+  LatLng _mapCenter = const LatLng(-7.9839, 112.6214); // Malang, Jawa Timur
   final _mapPointNotifier = ValueNotifier<LatLng>(const LatLng(-7.9839, 112.6214));
   
   // Track current tile service for fallback system
@@ -285,10 +285,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     try {
       debugPrint('Attempting forward geocoding with Google Maps API');
       final dio = Dio();
-      final encodedAddress = Uri.encodeComponent(address);
+      final encodedAddress = Uri.encodeComponent('$address, Indonesia');
       final response = await dio
           .get<Map<String, dynamic>>(
-            '$_googleGeocodingUrl&address=$encodedAddress&region=ID&language=id',
+            '$_googleGeocodingUrl&address=$encodedAddress&region=ID&language=id&components=country:ID',
           )
           .timeout(const Duration(seconds: 10));
 
@@ -319,10 +319,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     try {
       debugPrint('Attempting forward geocoding with Geoapify API');
       final dio = Dio();
-      final encodedAddress = Uri.encodeComponent(address);
+      final encodedAddress = Uri.encodeComponent('$address, Indonesia');
       final response = await dio
           .get<Map<String, dynamic>>(
-            'https://api.geoapify.com/v1/geocode/search?text=$encodedAddress&apiKey=$_geoapifyKey&lang=id&limit=1',
+            'https://api.geoapify.com/v1/geocode/search?text=$encodedAddress&apiKey=$_geoapifyKey&lang=id&limit=1&filter=countrycode:id',
           )
           .timeout(const Duration(seconds: 10));
 
@@ -358,7 +358,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           .get<List<dynamic>>(
             'https://nominatim.openstreetmap.org/search',
             queryParameters: {
-              'q': address,
+              'q': '$address, Indonesia',
               'format': 'json',
               'limit': 1,
               'countrycodes': 'id',
