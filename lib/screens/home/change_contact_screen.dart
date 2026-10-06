@@ -57,10 +57,17 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   int _step = 0; // 0-4
   bool _isLoading = false;
   bool _isError = false;
+  String _errorMsg = '';
   int _otpCountdown = 59;
   Timer? _countdownTimer;
   int _successCountdown = 3;
   Timer? _successTimer;
+
+  // OTP attempt tracking (max 3 per day)
+  int _otpSendCount = 0;
+  int _otpVerifyCount = 0;
+  DateTime? _lastOtpSendDate;
+  DateTime? _lastOtpVerifyDate;
 
   // The value the user typed in step 0 (current) and step 2 (new)
   String _currentValue = '';
@@ -81,6 +88,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
           ? v.replaceFirst(RegExp(r'^\+?62'), '')
           : v;
     }
+    _loadOtpLimits();
     _otpCtr.addListener(_onOtpChanged);
     _inputFocus.addListener(() {
       if (mounted) setState(() {});
@@ -88,6 +96,43 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     _otpFocus.addListener(() {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _loadOtpLimits() async {
+    // Load from SharedPreferences or DB
+    // For now, reset daily (simplified)
+    final today = DateTime.now().toUtc();
+    _lastOtpSendDate = today;
+    _lastOtpVerifyDate = today;
+  }
+
+  bool _canSendOtp() {
+    final now = DateTime.now().toUtc();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastSend = _lastOtpSendDate != null
+        ? DateTime(_lastOtpSendDate!.year, _lastOtpSendDate!.month, _lastOtpSendDate!.day)
+        : null;
+
+    if (lastSend == null || lastSend.isBefore(today)) {
+      // New day — reset counter
+      _otpSendCount = 0;
+      _lastOtpSendDate = now;
+    }
+    return _otpSendCount < 3;
+  }
+
+  bool _canVerifyOtp() {
+    final now = DateTime.now().toUtc();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastVerify = _lastOtpVerifyDate != null
+        ? DateTime(_lastOtpVerifyDate!.year, _lastOtpVerifyDate!.month, _lastOtpVerifyDate!.day)
+        : null;
+
+    if (lastVerify == null || lastVerify.isBefore(today)) {
+      _otpVerifyCount = 0;
+      _lastOtpVerifyDate = now;
+    }
+    return _otpVerifyCount < 3;
   }
 
   @override
@@ -131,16 +176,37 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     if (_otpCtr.text.length == 6 && mounted) {
       _verifyOtp();
     }
-    if (mounted) setState(() => _isError = false);
+    if (mounted) {
+      setState(() {
+        _isError = false;
+        _errorMsg = '';
+      });
+    }
   }
 
   Future<void> _verifyOtp() async {
-    final otp = _otpCtr.text.trim();
-    if (!_validOtps.contains(otp)) {
-      setState(() => _isError = true);
+    // Check OTP verify limit first
+    if (!_canVerifyOtp()) {
+      setState(() {
+        _isError = true;
+        _errorMsg = t(context, 'otpVerifyLimitReached');
+      });
       _otpCtr.clear();
       return;
     }
+
+    final otp = _otpCtr.text.trim();
+    if (!_validOtps.contains(otp)) {
+      _otpVerifyCount++;
+      _lastOtpVerifyDate = DateTime.now().toUtc();
+      setState(() {
+        _isError = true;
+        _errorMsg = t(context, 'otpInvalid');
+      });
+      _otpCtr.clear();
+      return;
+    }
+
     // OTP valid — move to next step
     if (_step == 1) {
       // Verified current identity → go to input new value
@@ -157,6 +223,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     setState(() {
       _step = step;
       _isError = false;
+      _errorMsg = '';
       _inputCtr.clear();
       _otpCtr.clear();
       if (step == 1 || step == 3) _startCountdown();
@@ -176,32 +243,150 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     final val = _inputCtr.text.trim();
     if (val.isEmpty) return;
     if (_isPhone && !PhoneValidator.isValidIndonesianPhone(val)) {
-      setState(() => _isError = true);
+      setState(() {
+        _isError = true;
+        _errorMsg = t(context, 'validPhoneError');
+      });
       return;
     }
     if (!_isPhone && !_isValidEmail(val)) {
-      setState(() => _isError = true);
+      setState(() {
+        _isError = true;
+        _errorMsg = t(context, 'validEmailError');
+      });
       return;
     }
     _currentValue = _isPhone ? PhoneValidator.normalizePhoneNumber(val) : val;
-    // In production: send OTP to _currentValue
-    _goToStep(1);
+
+    // Verify that entered current value matches DB
+    setState(() => _isLoading = true);
+    try {
+      final svc = SupabaseAuthService();
+      final user = svc.client.auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+
+      final profile = await svc.client
+          .from('profiles')
+          .select(_isPhone ? 'phone' : 'email')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (profile == null) throw Exception('Profile not found');
+
+      final dbValue = _isPhone
+          ? profile['phone']?.toString().trim() ?? ''
+          : profile['email']?.toString().trim() ?? '';
+
+      if (dbValue != _currentValue) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _isError = true;
+          _errorMsg = _isPhone
+              ? t(context, 'phoneNotMatch')
+              : t(context, 'emailNotMatch');
+        });
+        return;
+      }
+
+      // Check OTP send limit
+      if (!_canSendOtp()) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _isError = true;
+          _errorMsg = t(context, 'otpLimitReached');
+        });
+        return;
+      }
+
+      // Send OTP (in production)
+      _otpSendCount++;
+      _lastOtpSendDate = DateTime.now().toUtc();
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _goToStep(1);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isError = true;
+        _errorMsg = e.toString();
+      });
+    }
   }
 
   Future<void> _onNextStep2() async {
     final val = _inputCtr.text.trim();
     if (val.isEmpty) return;
     if (_isPhone && !PhoneValidator.isValidIndonesianPhone(val)) {
-      setState(() => _isError = true);
+      setState(() {
+        _isError = true;
+        _errorMsg = t(context, 'validPhoneError');
+      });
       return;
     }
     if (!_isPhone && !_isValidEmail(val)) {
-      setState(() => _isError = true);
+      setState(() {
+        _isError = true;
+        _errorMsg = t(context, 'validEmailError');
+      });
       return;
     }
     _newValue = _isPhone ? PhoneValidator.normalizePhoneNumber(val) : val;
-    // In production: send OTP to _newValue
-    _goToStep(3);
+
+    // Check if new phone/email is already taken by another user
+    setState(() => _isLoading = true);
+    try {
+      final svc = SupabaseAuthService();
+      final user = svc.client.auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+
+      final existing = await svc.client
+          .from('profiles')
+          .select('id')
+          .eq(_isPhone ? 'phone' : 'email', _newValue)
+          .maybeSingle();
+
+      if (existing != null && existing['id'] != user.id) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _isError = true;
+          _errorMsg = _isPhone
+              ? t(context, 'phoneAlreadyUsed')
+              : t(context, 'emailAlreadyUsed');
+        });
+        return;
+      }
+
+      // Check OTP send limit
+      if (!_canSendOtp()) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _isError = true;
+          _errorMsg = t(context, 'otpLimitReached');
+        });
+        return;
+      }
+
+      // Send OTP to new value (in production)
+      _otpSendCount++;
+      _lastOtpSendDate = DateTime.now().toUtc();
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _goToStep(3);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isError = true;
+        _errorMsg = e.toString();
+      });
+    }
   }
 
   Future<void> _saveContact() async {
@@ -358,9 +543,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
             if (_isError) ...[
               const SizedBox(height: 8),
               Text(
-                _isPhone
-                    ? t(context, 'validPhoneError')
-                    : t(context, 'emailRequired'),
+                _errorMsg,
                 style: const TextStyle(
                   fontSize: 12,
                   color: Color(0xFFD94F45),
@@ -488,7 +671,10 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                 FilteringTextInputFormatter.digitsOnly,
                 LengthLimitingTextInputFormatter(13),
               ],
-              onChanged: (_) => setState(() => _isError = false),
+              onChanged: (_) => setState(() {
+                _isError = false;
+                _errorMsg = '';
+              }),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: t(context, 'phoneHint'),
@@ -530,7 +716,10 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
               controller: _inputCtr,
               focusNode: _inputFocus,
               keyboardType: TextInputType.emailAddress,
-              onChanged: (_) => setState(() => _isError = false),
+              onChanged: (_) => setState(() {
+                _isError = false;
+                _errorMsg = '';
+              }),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: 'nama@email.com',
@@ -590,7 +779,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
             if (_isError) ...[
               const SizedBox(height: 12),
               Text(
-                t(context, 'otpInvalid'),
+                _errorMsg,
                 style: const TextStyle(
                   fontSize: 12,
                   color: Color(0xFFD94F45),
@@ -610,8 +799,20 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                   )
                 : GestureDetector(
                     onTap: () {
+                      if (!_canSendOtp()) {
+                        setState(() {
+                          _isError = true;
+                          _errorMsg = t(context, 'otpLimitReached');
+                        });
+                        return;
+                      }
+                      _otpSendCount++;
+                      _lastOtpSendDate = DateTime.now().toUtc();
                       _otpCtr.clear();
-                      setState(() => _isError = false);
+                      setState(() {
+                        _isError = false;
+                        _errorMsg = '';
+                      });
                       _startCountdown();
                     },
                     child: Text(
