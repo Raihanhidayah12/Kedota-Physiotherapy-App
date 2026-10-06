@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
@@ -47,7 +46,6 @@ class _PhoneProfileCompletionScreenState
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _dobController = TextEditingController();
-  final _otpController = TextEditingController();
 
   DateTime? _selectedBirthDate;
   String? _gender;
@@ -57,16 +55,6 @@ class _PhoneProfileCompletionScreenState
   bool _isEmailError = false;
   bool _isDobError = false;
   bool _isGenderError = false;
-
-  // ── Email OTP state ───────────────────────────────────────────────────────
-  bool _isEmailVerified = false;
-  bool _showOtpField = false;
-  bool _isSendingOtp = false;
-  bool _isOtpError = false;
-  String _otpErrorMsg = '';
-  int _otpCountdown = 0;
-  int _otpSendCount = 0;
-  Timer? _countdownTimer;
 
   @override
   void initState() {
@@ -80,18 +68,6 @@ class _PhoneProfileCompletionScreenState
       if (_isEmailError && _emailController.text.isNotEmpty) {
         setState(() => _isEmailError = false);
       }
-      // Reset verified state saat email diubah
-      if (_isEmailVerified || _showOtpField) {
-        setState(() {
-          _isEmailVerified = false;
-          _showOtpField = false;
-          _otpController.clear();
-          _isOtpError = false;
-          _otpErrorMsg = '';
-          _countdownTimer?.cancel();
-          _otpCountdown = 0;
-        });
-      }
     });
     _dobController.addListener(() {
       if (_isDobError && _dobController.text.isNotEmpty) {
@@ -99,7 +75,6 @@ class _PhoneProfileCompletionScreenState
       }
       _parseTypedDate(_dobController.text);
     });
-    _otpController.addListener(_onOtpChanged);
   }
 
   void _parseTypedDate(String input) {
@@ -127,155 +102,11 @@ class _PhoneProfileCompletionScreenState
     _nameController.dispose();
     _emailController.dispose();
     _dobController.dispose();
-    _otpController.dispose();
-    _countdownTimer?.cancel();
     super.dispose();
   }
 
   bool _isValidEmail(String email) {
     return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
-  }
-
-  // ── OTP Methods ───────────────────────────────────────────────────────────
-
-  void _onOtpChanged() {
-    if (mounted) {
-      setState(() {
-        _isOtpError = false;
-        _otpErrorMsg = '';
-      });
-    }
-    if (_otpController.text.length == 6) {
-      _verifyEmailOtp();
-    }
-  }
-
-  void _startCountdown() {
-    _countdownTimer?.cancel();
-    setState(() => _otpCountdown = 59);
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
-      setState(() => _otpCountdown--);
-      if (_otpCountdown <= 0) t.cancel();
-    });
-  }
-
-  Future<void> _sendEmailOtp() async {
-    final email = _emailController.text.trim();
-    if (!_isValidEmail(email)) {
-      setState(() => _isEmailError = true);
-      return;
-    }
-
-    if (_otpSendCount >= 3) {
-      setState(() {
-        _isOtpError = true;
-        _otpErrorMsg = t(context, 'otpLimitReached');
-      });
-      return;
-    }
-
-    setState(() => _isSendingOtp = true);
-    try {
-      // Cek email sudah terdaftar tidak
-      final emailExists =
-          await SupabaseAuthService().checkEmailExists(email);
-      if (!mounted) return;
-      if (emailExists) {
-        setState(() {
-          _isSendingOtp = false;
-          _isEmailError = true;
-        });
-        CustomBottomSheet.show(
-          context,
-          type: BottomSheetType.error,
-          title: t(context, 'infoTitle'),
-          subtitle: t(context, 'emailAlreadyRegistered'),
-          singleButtonText: t(context, 'closeBtn'),
-          onSinglePressed: () => Navigator.of(context).pop(),
-        );
-        return;
-      }
-
-      // Kirim OTP via Supabase Auth
-      // shouldCreateUser: false — kita hanya verifikasi kepemilikan email,
-      // user akan dibuat nanti saat completeSocialProfile/createProfile
-      // Kalau error "User not found" → berarti email valid & belum terdaftar,
-      // kita anggap OTP terkirim (Supabase tetap kirim email meski user belum ada
-      // jika email provider dikonfigurasi dengan benar)
-      try {
-        await SupabaseAuthService().client.auth.signInWithOtp(
-          email: email,
-          shouldCreateUser: false,
-        );
-      } catch (otpError) {
-        // Supabase kadang throw error "User not found" tapi tetap kirim email
-        // Ignore error ini dan lanjutkan tampilkan OTP field
-      }
-
-      _otpSendCount++;
-      if (!mounted) return;
-      setState(() {
-        _isSendingOtp = false;
-        _showOtpField = true;
-        _isOtpError = false;
-        _otpErrorMsg = '';
-      });
-      _startCountdown();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isSendingOtp = false;
-        _isOtpError = true;
-        _otpErrorMsg = 'Gagal mengirim OTP: $e';
-      });
-    }
-  }
-
-  Future<void> _verifyEmailOtp() async {
-    final email = _emailController.text.trim();
-    final otp = _otpController.text.trim();
-
-    try {
-      // Coba verifikasi via Supabase Auth
-      final response = await SupabaseAuthService().client.auth.verifyOTP(
-        email: email,
-        token: otp,
-        type: OtpType.email,
-      );
-
-      if (!mounted) return;
-
-      if (response.session != null || response.user != null) {
-        // Berhasil verified
-        // Sign out dulu dari sesi OTP ini — user akan sign in proper setelah buat PIN
-        await SupabaseAuthService().client.auth.signOut();
-
-        setState(() {
-          _isEmailVerified = true;
-          _showOtpField = false;
-          _isOtpError = false;
-          _otpErrorMsg = '';
-          _countdownTimer?.cancel();
-        });
-      } else {
-        setState(() {
-          _isOtpError = true;
-          _otpErrorMsg = t(context, 'otpInvalid');
-        });
-        _otpController.clear();
-      }
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isOtpError = true;
-        _otpErrorMsg = t(context, 'otpInvalid');
-      });
-      _otpController.clear();
-    }
   }
 
   Future<void> _pickDate() async {
@@ -312,24 +143,29 @@ class _PhoneProfileCompletionScreenState
 
     if (_isNameError || _isEmailError || _isDobError || _isGenderError) return;
 
-    // Email harus sudah diverifikasi sebelum lanjut
-    if (!_isEmailVerified) {
-      if (!_showOtpField) {
-        // Belum kirim OTP sama sekali — kirim sekarang
-        await _sendEmailOtp();
-      } else {
-        // OTP sudah dikirim tapi belum diisi / salah
-        setState(() {
-          _isOtpError = true;
-          _otpErrorMsg = t(context, 'emailNotVerifiedYet');
-        });
-      }
-      return;
-    }
-
     setState(() => _isLoading = true);
 
     try {
+      final emailExists = await SupabaseAuthService().checkEmailExists(email);
+
+      if (!mounted) return;
+
+      if (emailExists) {
+        setState(() {
+          _isLoading = false;
+          _isEmailError = true;
+        });
+        CustomBottomSheet.show(
+          context,
+          type: BottomSheetType.error,
+          title: t(context, 'infoTitle'),
+          subtitle: t(context, 'emailAlreadyRegistered'),
+          singleButtonText: t(context, 'closeBtn'),
+          onSinglePressed: () => Navigator.of(context).pop(),
+        );
+        return;
+      }
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => PhoneCreatePinScreen(
@@ -565,148 +401,11 @@ class _PhoneProfileCompletionScreenState
                       required: false,
                     ),
                     const SizedBox(height: 6),
-                    // Email field + tombol kirim OTP
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: _signupTextInput(
-                            controller: _emailController,
-                            hint: 'email@gmail.com',
-                            hasError: _isEmailError,
-                            keyboardType: TextInputType.emailAddress,
-                            readOnly: _isEmailVerified,
-                            suffixIcon: _isEmailVerified
-                                ? const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: Color(0xFF00A79D),
-                                    size: 20,
-                                  )
-                                : null,
-                          ),
-                        ),
-                        if (!_isEmailVerified) ...[
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: _isSendingOtp ? null : _sendEmailOtp,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF008F86),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: _isSendingOtp
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : Text(
-                                      _showOtpField
-                                          ? t(context, 'resendOtp')
-                                          : t(context, 'sendOtp'),
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    // Inline OTP field — muncul setelah OTP dikirim
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: _showOtpField
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 12),
-                                Text(
-                                  t(context, 'otpSentToEmail').replaceFirst(
-                                    '{email}',
-                                    _emailController.text.trim(),
-                                  ),
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF667579),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                // 6-box OTP input
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: List.generate(
-                                    6,
-                                    (i) => _buildOtpBox(i),
-                                  ),
-                                ),
-                                if (_isOtpError) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    _otpErrorMsg,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFFEF4444),
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 8),
-                                // Countdown / Resend
-                                Row(
-                                  children: [
-                                    Text(
-                                      t(context, 'didntReceiveOtp'),
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Color(0xFF667579),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    _otpCountdown > 0
-                                        ? Text(
-                                            t(context, 'resendOtpIn')
-                                                .replaceFirst(
-                                                  '{time}',
-                                                  _otpCountdown
-                                                      .toString()
-                                                      .padLeft(2, '0'),
-                                                ),
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: Color(0xFF00A79D),
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          )
-                                        : GestureDetector(
-                                            onTap: _isSendingOtp
-                                                ? null
-                                                : _sendEmailOtp,
-                                            child: Text(
-                                              t(context, 'resendOtp'),
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: Color(0xFF00A79D),
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
+                    _signupTextInput(
+                      controller: _emailController,
+                      hint: 'email@gmail.com',
+                      hasError: _isEmailError,
+                      keyboardType: TextInputType.emailAddress,
                     ),
                   ],
                 ),
@@ -737,13 +436,9 @@ class _PhoneProfileCompletionScreenState
                                 color: Colors.white,
                               ),
                             )
-                          : Text(
-                              _isEmailVerified
-                                  ? t(context, 'continueBtn')
-                                  : _showOtpField
-                                      ? t(context, 'verifyAndContinue')
-                                      : t(context, 'continueBtn'),
-                              style: const TextStyle(
+                          : const Text(
+                              'Lanjut',
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -787,129 +482,39 @@ class _PhoneProfileCompletionScreenState
     required String hint,
     required bool hasError,
     TextInputType? keyboardType,
-    bool readOnly = false,
-    Widget? suffixIcon,
   }) => Container(
     height: 48,
     padding: const EdgeInsets.symmetric(horizontal: 12),
     decoration: BoxDecoration(
-      color: readOnly ? const Color(0xFFE5E9E8) : Colors.white,
+      color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: hasError
-            ? const Color(0xFFEF4444)
-            : readOnly
-                ? const Color(0xFF00A79D)
-                : Colors.transparent,
-        width: readOnly ? 1.5 : 1.0,
+        color: hasError ? const Color(0xFFEF4444) : Colors.transparent,
       ),
-      boxShadow: readOnly
-          ? null
-          : const [
-              BoxShadow(
-                color: Color(0x08000000),
-                blurRadius: 8,
-                offset: Offset(0, 3),
-              ),
-            ],
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            readOnly: readOnly,
-            style: TextStyle(
-              fontSize: 13,
-              color: readOnly
-                  ? const Color(0xFF5F6B6D)
-                  : const Color(0xFF334155),
-            ),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: const TextStyle(
-                color: Color(0xFFA0ACAE),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 13),
-            ),
-          ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x08000000),
+          blurRadius: 8,
+          offset: Offset(0, 3),
         ),
-        if (suffixIcon != null) ...[suffixIcon],
       ],
     ),
-  );
-
-  Widget _buildOtpBox(int index) {
-    final text = _otpController.text;
-    final char = text.length > index ? text[index] : '';
-    final isFilled = char.isNotEmpty;
-    final isActive = text.length == index;
-
-    return GestureDetector(
-      onTap: () {
-        // Focus the hidden TextField by requesting focus
-      },
-      child: Stack(
-        children: [
-          Container(
-            width: 44,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: _isOtpError
-                    ? const Color(0xFFEF4444)
-                    : isFilled || isActive
-                        ? const Color(0xFF00A79D)
-                        : const Color(0xFFE2E8E8),
-                width: (isFilled || isActive) ? 2 : 1,
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x08000000),
-                  blurRadius: 6,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              char,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF0E2C2F),
-              ),
-            ),
-          ),
-          // Hidden TextField untuk menangkap input
-          if (index == 0)
-            SizedBox(
-              width: 44,
-              height: 48,
-              child: Opacity(
-                opacity: 0,
-                child: TextField(
-                  controller: _otpController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    counterText: '',
-                    border: InputBorder.none,
-                  ),
-                ),
-              ),
-            ),
-        ],
+    child: TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(
+          color: Color(0xFFA0ACAE),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+        border: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(vertical: 13),
       ),
-    );
-  }
+    ),
+  );
 
   String get _formattedPhoneNumber {
     var digits = widget.phoneNumber.replaceAll(RegExp(r'\D'), '');
