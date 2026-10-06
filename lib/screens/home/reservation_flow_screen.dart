@@ -244,6 +244,25 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   LatLng get _displayMapCenter =>
       _isClinicService ? _clinicLocation.point : _mapCenter;
 
+  /// Format alamat untuk tampilan yang bersih seperti Google Maps
+  String _formatAddressForDisplay(String rawAddress) {
+    // Hapus bagian yang tidak perlu: Indonesia, country codes, dll
+    String formatted = rawAddress
+        .replaceAll(RegExp(r',\s*Indonesia\s*$', caseSensitive: false), '') // Hapus ", Indonesia" di akhir
+        .replaceAll(RegExp(r',\s*ID\s*$'), '') // Hapus ", ID" di akhir  
+        .replaceAll(RegExp(r',\s*JI\s*,\s*Indonesia\s*$'), '') // Hapus ", JI, Indonesia" 
+        .replaceAll(RegExp(r',\s*Jawa Timur\s*,\s*Indonesia\s*$'), ', Jawa Timur') // Jaga "Jawa Timur"
+        .replaceAll(RegExp(r',\s*East Java\s*,\s*Indonesia\s*$'), ', Jawa Timur') // Convert English
+        .trim();
+
+    // Hapus koma berlebih di akhir
+    if (formatted.endsWith(',')) {
+      formatted = formatted.substring(0, formatted.length - 1).trim();
+    }
+
+    return formatted;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1209,8 +1228,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       if (results.isNotEmpty) {
         final formattedAddress = results[0]['formatted_address'] as String?;
         if (formattedAddress != null && formattedAddress.isNotEmpty) {
-          setState(() => _addressController.text = formattedAddress);
-          debugPrint('Google reverse geocoding successful');
+          final cleanAddress = _formatAddressForDisplay(formattedAddress);
+          setState(() => _addressController.text = cleanAddress);
+          debugPrint('Google reverse geocoding successful: $cleanAddress');
           return; // Success, exit early
         }
       }
@@ -1235,8 +1255,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         final properties = firstFeature['properties'] as Map<String, dynamic>?;
         final formattedAddress = properties?['formatted'] as String?;
         if (formattedAddress != null && formattedAddress.isNotEmpty) {
-          setState(() => _addressController.text = formattedAddress);
-          debugPrint('Geoapify reverse geocoding successful');
+          final cleanAddress = _formatAddressForDisplay(formattedAddress);
+          setState(() => _addressController.text = cleanAddress);
+          debugPrint('Geoapify reverse geocoding successful: $cleanAddress');
           return; // Success, exit early
         }
       }
@@ -1288,8 +1309,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
             ? parts.join(', ')
             : data['display_name']?.toString().split(', ').take(5).join(', ') ?? '';
         if (address.isNotEmpty) {
-          setState(() => _addressController.text = address);
-          debugPrint('Nominatim reverse geocoding successful');
+          final cleanAddress = _formatAddressForDisplay(address);
+          setState(() => _addressController.text = cleanAddress);
+          debugPrint('Nominatim reverse geocoding successful: $cleanAddress');
           return; // Success, exit early
         }
       }
@@ -1320,8 +1342,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
             place.postalCode!.trim(),
         ];
         if (parts.isNotEmpty) {
-          setState(() => _addressController.text = parts.join(', '));
-          debugPrint('Geocoding package reverse geocoding successful');
+          final cleanAddress = _formatAddressForDisplay(parts.join(', '));
+          setState(() => _addressController.text = cleanAddress);
+          debugPrint('Geocoding package reverse geocoding successful: $cleanAddress');
           return; // Success, exit early
         }
       }
@@ -1394,8 +1417,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                                 if (results.isNotEmpty) {
                                   final address = results[0]['formatted_address'] as String?;
                                   if (address != null && address.isNotEmpty) {
+                                    final cleanAddress = _formatAddressForDisplay(address);
                                     setDialogState(
-                                      () => selectedAddress = address,
+                                      () => selectedAddress = cleanAddress,
                                     );
                                     return;
                                   }
@@ -1459,8 +1483,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                                       ? parts.join(', ')
                                       : data['display_name']?.toString().split(', ').take(3).join(', ') ?? '';
                                   if (address.isNotEmpty) {
+                                    final cleanAddress = _formatAddressForDisplay(address);
                                     setDialogState(
-                                      () => selectedAddress = address,
+                                      () => selectedAddress = cleanAddress,
                                     );
                                   }
                                 }
