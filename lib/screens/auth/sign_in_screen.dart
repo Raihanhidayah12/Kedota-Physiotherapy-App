@@ -237,29 +237,42 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  /// Check if email is verified, show OTP dialog if needed
+  /// Check if email needs verification for Google Sign-In
+  /// Only verify if:
+  /// 1. Email is new (tidak ada di DB sebelumnya)
+  /// 2. Email belum di-verify sebelumnya
+  /// Kalau email sudah ada di DB dan verified → skip, login langsung
   Future<bool> _checkAndVerifyEmailIfNeeded(String email) async {
     if (email.isEmpty) return true;
     
     try {
       final service = SupabaseAuthService();
-      final user = service.client.auth.currentUser;
       
-      if (user?.emailConfirmedAt != null) return true;
-
-      final profile = await service.client
+      // Cek apakah email sudah ada di DB (dari registrasi sebelumnya)
+      final existingProfile = await service.client
           .from('profiles')
-          .select('email_verified')
-          .eq('id', user!.id)
+          .select('id, email_verified')
+          .eq('email', email)
           .maybeSingle();
 
-      final isVerified = profile?['email_verified'] == true;
-      if (isVerified) return true;
+      // Kalau email sudah di DB dan sudah verified → skip, login langsung
+      if (existingProfile != null) {
+        final isVerified = existingProfile['email_verified'] == true;
+        if (isVerified) {
+          // Email sudah verified, langsung login
+          return true;
+        }
+        // Email ada tapi belum verified (edge case) → verifikasi
+      } else {
+        // Email baru, belum di DB → harus verifikasi
+        // (buat guard kalau user pakai email baru di Google)
+      }
 
+      // Show verification dialog untuk email baru atau belum verified
       if (!mounted) return false;
       return await _showEmailVerificationDialog(email) ?? false;
     } catch (e) {
-      // Silent fallback
+      // Silent fallback - allow login
       return true;
     }
   }

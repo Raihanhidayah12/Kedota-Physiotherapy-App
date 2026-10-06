@@ -131,7 +131,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
           await svc.client
               .from('profiles')
               .update({'email_verified': true})
-              .eq('id', user.id);
+              .eq('email', widget.email);
         }
 
         if (!mounted) return;
