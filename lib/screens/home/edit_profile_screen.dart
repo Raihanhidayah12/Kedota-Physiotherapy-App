@@ -9,6 +9,7 @@ import '../../services/supabase_auth_service.dart';
 import '../../utils/app_snackbar.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
+import 'change_contact_screen.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _deletePhotoAction = 'delete-photo';
@@ -895,12 +896,23 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                           ),
                           _divider(),
 
-                          // 6. Nomor Telepon — READ-ONLY, eye toggle
+                          // 6. Nomor Telepon — tappable → ubah nomor
                           _infoRow(
                             icon: Icons.phone_iphone_rounded,
                             label: t(context, 'phoneNumber'),
                             value: _displayPhone,
-                            showChevron: false,
+                            showChevron: true,
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChangeContactScreen(
+                                    mode: ChangeContactMode.phone,
+                                    currentValue: _phone,
+                                  ),
+                                ),
+                              );
+                              if (mounted) _loadProfile();
+                            },
                             trailing: IconButton(
                               icon: Icon(
                                 _hidePhone
@@ -917,12 +929,23 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                           ),
                           _divider(),
 
-                          // 7. Email — READ-ONLY, masked
+                          // 7. Email — tappable → ubah email
                           _infoRow(
                             icon: Icons.email_outlined,
                             label: t(context, 'email'),
                             value: _maskEmail(_email),
-                            showChevron: false,
+                            showChevron: true,
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChangeContactScreen(
+                                    mode: ChangeContactMode.email,
+                                    currentValue: _email,
+                                  ),
+                                ),
+                              );
+                              if (mounted) _loadProfile();
+                            },
                           ),
                           _divider(),
 
