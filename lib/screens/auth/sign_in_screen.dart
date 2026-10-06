@@ -10,6 +10,7 @@ import '../../services/supabase_auth_service.dart';
 import '../../utils/phone_validator.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/google_logo_icon.dart';
+import 'email_verification_dialog.dart';
 import 'google_profile_completion_screen.dart';
 import 'otp_verification_screen.dart';
 import 'pin_verification_screen.dart';
@@ -27,8 +28,8 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _isPhoneError = false;
   static const Color _accentGreen = Color(0xFF00A79D);
 
-  bool _isHandlingGoogleAuth = false;
   StreamSubscription<AuthState>? _authSubscription;
+  bool _isHandlingGoogleAuth = false;
 
   @override
   void initState() {
@@ -81,6 +82,14 @@ class _SignInScreenState extends State<SignInScreen> {
       await service.syncProfilePhotoFromAuth();
 
       final googleEmail = currentUser.email ?? '';
+
+      // Check and verify email if needed
+      final emailVerified = await _checkAndVerifyEmailIfNeeded(googleEmail);
+      if (!emailVerified) {
+        _isHandlingGoogleAuth = false;
+        await service.signOut();
+        return;
+      }
 
       Map<String, dynamic>? existingProfile;
       if (googleEmail.isNotEmpty) {
@@ -226,6 +235,45 @@ class _SignInScreenState extends State<SignInScreen> {
         onSinglePressed: () => Navigator.of(context).pop(),
       );
     }
+  }
+
+  /// Check if email is verified, show OTP dialog if needed
+  Future<bool> _checkAndVerifyEmailIfNeeded(String email) async {
+    if (email.isEmpty) return true;
+    
+    try {
+      final service = SupabaseAuthService();
+      final user = service.client.auth.currentUser;
+      
+      if (user?.emailConfirmedAt != null) return true;
+
+      final profile = await service.client
+          .from('profiles')
+          .select('email_verified')
+          .eq('id', user!.id)
+          .maybeSingle();
+
+      final isVerified = profile?['email_verified'] == true;
+      if (isVerified) return true;
+
+      if (!mounted) return false;
+      return await _showEmailVerificationDialog(email) ?? false;
+    } catch (e) {
+      // Silent fallback
+      return true;
+    }
+  }
+
+  Future<bool?> _showEmailVerificationDialog(String email) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => EmailVerificationDialog(
+        email: email,
+        onVerified: () => Navigator.pop(context, true),
+        onCancelled: () => Navigator.pop(context, false),
+      ),
+    );
   }
 
   Widget _buildIndonesianFlag() {
