@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
@@ -543,6 +544,7 @@ class SupabaseAuthService {
         'gender': gender,
         'signup_method': provider,
         'pin_hash': hashPin(pin),
+        'medical_code': await _generateUniqueMedicalCode(),
         'profile_photo_url': profilePhotoUrl,
         'is_profile_complete': true,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
@@ -844,6 +846,34 @@ class SupabaseAuthService {
     }
   }
 
+  /// Generates a unique KDT-XXXXXXXXXXXX medical code
+  String _generateMedicalCode() {
+    const alphabet = '0123456789ABCDEF';
+    final random = Random.secure();
+    final suffix = List.generate(
+      12,
+      (_) => alphabet[random.nextInt(alphabet.length)],
+    ).join();
+    return 'KDT-$suffix';
+  }
+
+  Future<String> _generateUniqueMedicalCode() async {
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final candidate = _generateMedicalCode();
+      try {
+        final existing = await client
+            .from('profiles')
+            .select('id')
+            .eq('medical_code', candidate)
+            .maybeSingle();
+        if (existing == null) return candidate;
+      } catch (_) {
+        return candidate;
+      }
+    }
+    return _generateMedicalCode();
+  }
+
   /// Upserts a phone-signup profile row. Used by [createPhoneProfile].
   Future<void> _upsertPhoneProfile({
     required String userId,
@@ -856,6 +886,7 @@ class SupabaseAuthService {
     required String pin,
   }) async {
     final now = DateTime.now().toUtc().toIso8601String();
+    final medicalCode = await _generateUniqueMedicalCode();
     try {
       await client.from('profiles').upsert({
         'id': userId,
@@ -867,6 +898,7 @@ class SupabaseAuthService {
         'gender': gender,
         'signup_method': 'phone',
         'pin_hash': hashPin(pin),
+        'medical_code': medicalCode,
         'is_profile_complete': true,
         'created_at': now,
         'updated_at': now,
@@ -890,6 +922,7 @@ class SupabaseAuthService {
           'gender': gender,
           'signup_method': 'phone',
           'pin_hash': hashPin(pin),
+          'medical_code': medicalCode,
           'is_profile_complete': true,
           'created_at': now,
           'updated_at': now,
@@ -935,6 +968,16 @@ class SupabaseAuthService {
           .maybeSingle();
 
       if (response != null) {
+        // Auto-generate medical_code if missing
+        final existingCode = (response['medical_code'] ?? '').toString().trim();
+        if (existingCode.isEmpty) {
+          final newCode = await _generateUniqueMedicalCode();
+          await client
+              .from('profiles')
+              .update({'medical_code': newCode})
+              .eq('id', user.id);
+          return {...response, 'medical_code': newCode};
+        }
         return response;
       }
 
@@ -1076,6 +1119,7 @@ class SupabaseAuthService {
       return AccountCheckResult(
         isRegistered: true,
         isDormant: isDormant,
+        hasPinHash: (row['pin_hash'] ?? '').toString().trim().isNotEmpty,
         email: email,
         phone: row['phone'] as String? ?? phone,
         status: status,
@@ -1483,6 +1527,7 @@ class AccountCheckResult {
   AccountCheckResult({
     required this.isRegistered,
     this.isDormant = false,
+    this.hasPinHash = false,
     this.email,
     this.phone,
     this.status,
@@ -1490,6 +1535,7 @@ class AccountCheckResult {
 
   final bool isRegistered;
   final bool isDormant;
+  final bool hasPinHash;
   final String? email;
   final String? phone;
   final String? status;

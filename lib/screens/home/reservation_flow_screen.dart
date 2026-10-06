@@ -104,13 +104,24 @@ const _clinicLocation = _ServiceLocation(
 
 
 
-// Google Maps tile URL with API key from .env
+// Map tile URLs with cascading fallback system
+// Primary: Google Maps tiles (requires API key)
 String get _googleMapsTiles => 
     'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${dotenv.env['GOOGLE_MAPS_API_KEY'] ?? ''}';
 
-// Google Geocoding API URL
+// Secondary: Geoapify tiles (requires API key) 
+String get _geoapifyTiles => 
+    'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${dotenv.env['GEOAPIFY_API_KEY'] ?? ''}';
+
+// Tertiary: OpenStreetMap tiles (free, no API key required)
+const String _openStreetMapTiles = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+// Google Geocoding API URL  
 String get _googleGeocodingUrl => 
     'https://maps.googleapis.com/maps/api/geocode/json?key=${dotenv.env['GOOGLE_MAPS_API_KEY'] ?? ''}';
+
+// Geoapify Geocoding API key
+String get _geoapifyKey => dotenv.env['GEOAPIFY_API_KEY'] ?? '';
 
 // Kota yang tersedia untuk dipilih di step 3
 const _availableCities = [
@@ -198,6 +209,32 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   bool _locating = false;
   LatLng _mapCenter = const LatLng(-7.9839, 112.6214);
   final _mapPointNotifier = ValueNotifier<LatLng>(const LatLng(-7.9839, 112.6214));
+  
+  // Track current tile service for fallback system
+  int _currentTileService = 0; // 0=Google, 1=Geoapify, 2=OpenStreetMap
+  
+  // Get current tile URL with fallback system
+  String get _currentTileUrl {
+    switch (_currentTileService) {
+      case 0:
+        return _googleMapsTiles;
+      case 1:
+        return _geoapifyTiles;
+      case 2:
+        return _openStreetMapTiles;
+      default:
+        return _openStreetMapTiles; // Ultimate fallback
+    }
+  }
+  
+  // Try next tile service when current one fails
+  void _fallbackToNextTileService() {
+    if (_currentTileService < 2) {
+      _currentTileService++;
+      debugPrint('Falling back to tile service $_currentTileService');
+      setState(() {}); // Rebuild to use new tile service
+    }
+  }
 
   bool get _isReschedule => widget.initialDate != null;
   bool get _isClinicService => _serviceType == _clinicService;
@@ -243,7 +280,10 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
 
   Future<void> _geocodeAddress(String address) async {
     if (_isClinicService) return;
+    
+    // Primary: Google Geocoding API
     try {
+      debugPrint('Attempting forward geocoding with Google Maps API');
       final dio = Dio();
       final encodedAddress = Uri.encodeComponent(address);
       final response = await dio
@@ -267,14 +307,51 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           try {
             _mapController.move(point, 16);
           } catch (_) {}
+          debugPrint('Google forward geocoding successful');
+          return; // Success, exit early
         }
       }
     } catch (error) {
       debugPrint('Google forward geocoding failed: $error');
     }
 
-    // Fallback: Nominatim (gratis unlimited, tapi lebih lambat)
+    // Secondary: Geoapify Geocoding API
     try {
+      debugPrint('Attempting forward geocoding with Geoapify API');
+      final dio = Dio();
+      final encodedAddress = Uri.encodeComponent(address);
+      final response = await dio
+          .get<Map<String, dynamic>>(
+            'https://api.geoapify.com/v1/geocode/search?text=$encodedAddress&apiKey=$_geoapifyKey&lang=id&limit=1',
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (!mounted || _isClinicService) return;
+      final features = (response.data?['features'] as List?) ?? [];
+      if (features.isNotEmpty) {
+        final firstFeature = features.first as Map<String, dynamic>;
+        final geometry = firstFeature['geometry'] as Map<String, dynamic>?;
+        final coordinates = geometry?['coordinates'] as List?;
+        if (coordinates != null && coordinates.length >= 2) {
+          final lng = (coordinates[0] as num).toDouble();
+          final lat = (coordinates[1] as num).toDouble();
+          final point = LatLng(lat, lng);
+          setState(() => _mapCenter = point);
+          _mapPointNotifier.value = point;
+          try {
+            _mapController.move(point, 16);
+          } catch (_) {}
+          debugPrint('Geoapify forward geocoding successful');
+          return; // Success, exit early
+        }
+      }
+    } catch (error) {
+      debugPrint('Geoapify forward geocoding failed: $error');
+    }
+
+    // Tertiary: Nominatim (OpenStreetMap) - free, unlimited
+    try {
+      debugPrint('Attempting forward geocoding with Nominatim API');
       final dio = Dio();
       dio.options.headers['User-Agent'] = 'KedotaApp/1.0';
       final response = await dio
@@ -302,11 +379,15 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           try {
             _mapController.move(point, 16);
           } catch (_) {}
+          debugPrint('Nominatim forward geocoding successful');
+          return; // Success, exit early
         }
       }
     } catch (error) {
       debugPrint('Nominatim forward geocoding fallback failed: $error');
     }
+    
+    debugPrint('All forward geocoding services failed');
   }
 
   Future<void> _loadProfile() async {
@@ -1115,8 +1196,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       // Controller belum ready (map belum render) — abaikan, initialCenter sudah benar
     }
 
-    // Google reverse geocoding
+    // Primary: Google reverse geocoding
     try {
+      debugPrint('Attempting reverse geocoding with Google Maps API');
       final dio = Dio();
       final response = await dio
           .get<Map<String, dynamic>>(
@@ -1128,15 +1210,43 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         final formattedAddress = results[0]['formatted_address'] as String?;
         if (formattedAddress != null && formattedAddress.isNotEmpty) {
           setState(() => _addressController.text = formattedAddress);
-          return;
+          debugPrint('Google reverse geocoding successful');
+          return; // Success, exit early
         }
       }
     } catch (error) {
       debugPrint('Google reverse geocoding failed: $error');
     }
 
-    // Fallback 1: Nominatim (gratis unlimited)
+    // Secondary: Geoapify reverse geocoding
     try {
+      debugPrint('Attempting reverse geocoding with Geoapify API');
+      final dio = Dio();
+      final response = await dio
+          .get<Map<String, dynamic>>(
+            'https://api.geoapify.com/v1/geocode/reverse?lat=${point.latitude}&lon=${point.longitude}&apiKey=$_geoapifyKey&lang=id',
+          )
+          .timeout(const Duration(seconds: 10));
+      
+      if (!mounted) return;
+      final features = (response.data?['features'] as List?) ?? [];
+      if (features.isNotEmpty) {
+        final firstFeature = features.first as Map<String, dynamic>;
+        final properties = firstFeature['properties'] as Map<String, dynamic>?;
+        final formattedAddress = properties?['formatted'] as String?;
+        if (formattedAddress != null && formattedAddress.isNotEmpty) {
+          setState(() => _addressController.text = formattedAddress);
+          debugPrint('Geoapify reverse geocoding successful');
+          return; // Success, exit early
+        }
+      }
+    } catch (error) {
+      debugPrint('Geoapify reverse geocoding failed: $error');
+    }
+
+    // Tertiary: Nominatim (OpenStreetMap) reverse geocoding
+    try {
+      debugPrint('Attempting reverse geocoding with Nominatim API');
       final dio = Dio();
       dio.options.headers['User-Agent'] = 'KedotaApp/1.0';
       final response = await dio
@@ -1179,15 +1289,17 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
             : data['display_name']?.toString().split(', ').take(5).join(', ') ?? '';
         if (address.isNotEmpty) {
           setState(() => _addressController.text = address);
-          return;
+          debugPrint('Nominatim reverse geocoding successful');
+          return; // Success, exit early
         }
       }
     } catch (error) {
       debugPrint('Nominatim reverse geocoding fallback failed: $error');
     }
 
-    // Fallback: geocoding package
+    // Final fallback: geocoding package
     try {
+      debugPrint('Attempting reverse geocoding with geocoding package');
       final places = await placemarkFromCoordinates(
         point.latitude,
         point.longitude,
@@ -1209,11 +1321,15 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         ];
         if (parts.isNotEmpty) {
           setState(() => _addressController.text = parts.join(', '));
+          debugPrint('Geocoding package reverse geocoding successful');
+          return; // Success, exit early
         }
       }
     } catch (error) {
       debugPrint('Geocoding package fallback failed: $error');
     }
+    
+    debugPrint('All reverse geocoding services failed');
   }
 
   Future<void> _openExpandedMap() async {
@@ -1264,6 +1380,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                                 selectedAddress = '';
                               });
                               expandedController.move(point, 15);
+                              // Three-tier reverse geocoding fallback for expanded map
+                              
+                              // Primary: Google reverse geocoding
                               try {
                                 final dio = Dio();
                                 final resp = await dio
@@ -1278,15 +1397,86 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                                     setDialogState(
                                       () => selectedAddress = address,
                                     );
+                                    return;
                                   }
                                 }
-                              } catch (_) {}
+                              } catch (error) {
+                                debugPrint('Google reverse geocoding failed in expanded map: $error');
+                              }
+                              
+                              // Secondary: Geoapify reverse geocoding
+                              try {
+                                final dio = Dio();
+                                final resp = await dio
+                                    .get<Map<String, dynamic>>(
+                                      'https://api.geoapify.com/v1/geocode/reverse?lat=${point.latitude}&lon=${point.longitude}&apiKey=$_geoapifyKey&lang=id',
+                                    )
+                                    .timeout(const Duration(seconds: 10));
+                                final features = (resp.data?['features'] as List?) ?? [];
+                                if (features.isNotEmpty) {
+                                  final properties = features.first['properties'] as Map<String, dynamic>?;
+                                  final address = properties?['formatted'] as String?;
+                                  if (address != null && address.isNotEmpty) {
+                                    setDialogState(
+                                      () => selectedAddress = address,
+                                    );
+                                    return;
+                                  }
+                                }
+                              } catch (error) {
+                                debugPrint('Geoapify reverse geocoding failed in expanded map: $error');
+                              }
+                              
+                              // Tertiary: Nominatim reverse geocoding
+                              try {
+                                final dio = Dio();
+                                dio.options.headers['User-Agent'] = 'KedotaApp/1.0';
+                                final resp = await dio
+                                    .get<Map<String, dynamic>>(
+                                      'https://nominatim.openstreetmap.org/reverse',
+                                      queryParameters: {
+                                        'lat': point.latitude,
+                                        'lon': point.longitude,
+                                        'format': 'json',
+                                        'addressdetails': 1,
+                                        'zoom': 18,
+                                        'accept-language': 'id',
+                                      },
+                                    )
+                                    .timeout(const Duration(seconds: 10));
+                                final data = resp.data;
+                                if (data != null) {
+                                  final addr = data['address'] as Map<String, dynamic>? ?? {};
+                                  final parts = <String>[
+                                    if ((addr['road'] ?? '').toString().trim().isNotEmpty)
+                                      addr['road'].toString().trim(),
+                                    if ((addr['suburb'] ?? addr['village'] ?? '').toString().trim().isNotEmpty)
+                                      (addr['suburb'] ?? addr['village']).toString().trim(),
+                                    if ((addr['city'] ?? addr['town'] ?? '').toString().trim().isNotEmpty)
+                                      (addr['city'] ?? addr['town']).toString().trim(),
+                                  ];
+                                  final address = parts.isNotEmpty
+                                      ? parts.join(', ')
+                                      : data['display_name']?.toString().split(', ').take(3).join(', ') ?? '';
+                                  if (address.isNotEmpty) {
+                                    setDialogState(
+                                      () => selectedAddress = address,
+                                    );
+                                  }
+                                }
+                              } catch (error) {
+                                debugPrint('Nominatim reverse geocoding failed in expanded map: $error');
+                              }
                             },
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate: _googleMapsTiles,
+                        urlTemplate: _currentTileUrl,
                         userAgentPackageName: 'com.kedota.physiotherapy',
+                        errorTileCallback: (tile, error, stackTrace) {
+                          debugPrint('Tile loading failed: $error');
+                          _fallbackToNextTileService();
+                        },
                       ),
                       MarkerLayer(
                         markers: [
@@ -1304,7 +1494,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                       ),
                       RichAttributionWidget(
                         attributions: [
-                          TextSourceAttribution('© Google Maps'),
+                          TextSourceAttribution(_currentTileService == 0 
+                              ? '© Google Maps' 
+                              : _currentTileService == 1 
+                                  ? '© Geoapify' 
+                                  : '© OpenStreetMap contributors'),
                         ],
                       ),
                     ],
@@ -2101,8 +2295,12 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: _googleMapsTiles,
+                    urlTemplate: _currentTileUrl,
                     userAgentPackageName: 'com.kedota.physiotherapy',
+                    errorTileCallback: (tile, error, stackTrace) {
+                      debugPrint('Tile loading failed: $error');
+                      _fallbackToNextTileService();
+                    },
                   ),
                   MarkerLayer(
                     markers: [
@@ -2120,7 +2318,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                   ),
                   RichAttributionWidget(
                     attributions: [
-                      TextSourceAttribution('OpenStreetMap contributors'),
+                      TextSourceAttribution(_currentTileService == 0 
+                          ? '© Google Maps' 
+                          : _currentTileService == 1 
+                              ? '© Geoapify' 
+                              : '© OpenStreetMap contributors'),
                     ],
                   ),
                 ],
@@ -2175,8 +2377,12 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: _googleMapsTiles,
+                    urlTemplate: _currentTileUrl,
                     userAgentPackageName: 'com.kedota.physiotherapy',
+                    errorTileCallback: (tile, error, stackTrace) {
+                      debugPrint('Tile loading failed: $error');
+                      _fallbackToNextTileService();
+                    },
                   ),
                   MarkerLayer(
                     markers: [
@@ -2194,7 +2400,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                   ),
                   RichAttributionWidget(
                     attributions: [
-                      TextSourceAttribution('OpenStreetMap contributors'),
+                      TextSourceAttribution(_currentTileService == 0 
+                          ? '© Google Maps' 
+                          : _currentTileService == 1 
+                              ? '© Geoapify' 
+                              : '© OpenStreetMap contributors'),
                     ],
                   ),
                 ],

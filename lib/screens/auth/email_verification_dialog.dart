@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../l10n/app_language.dart';
@@ -22,42 +23,90 @@ class EmailVerificationDialog extends StatefulWidget {
   });
 
   @override
-  State<EmailVerificationDialog> createState() => _EmailVerificationDialogState();
+  State<EmailVerificationDialog> createState() =>
+      _EmailVerificationDialogState();
 }
 
 class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
-  final _otpController = TextEditingController();
+  // 6 controllers + focus nodes, one per digit
+  final List<TextEditingController> _controllers =
+      List.generate(6, (_) => TextEditingController());
+  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+
   bool _isLoading = false;
   bool _isError = false;
   String _errorMsg = '';
   int _countdown = 59;
   bool _canResend = false;
+  int _failedAttempts = 0;
+  bool _isLockedOut = false;
+  DateTime? _lockoutUntil;
 
-  static const _validDummyOtps = {'1234', '5555', '0000', '9999'};
+  static const _maxAttempts = 3;
+
+  String get _otpValue =>
+      _controllers.map((c) => c.text).join();
 
   @override
   void initState() {
     super.initState();
     _sendOtp();
-    _otpController.addListener(_onOtpChanged);
+    _checkLockout();
   }
 
   @override
   void dispose() {
-    _otpController.dispose();
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    for (final f in _focusNodes) {
+      f.dispose();
+    }
     super.dispose();
+  }
+
+  void _checkLockout() {
+    if (_lockoutUntil != null &&
+        DateTime.now().isBefore(_lockoutUntil!)) {
+      setState(() {
+        _isLockedOut = true;
+        _isError = true;
+        _errorMsg = 'Terlalu banyak percobaan gagal. Silakan coba lagi besok.';
+      });
+    }
+  }
+
+  void _recordFailedAttempt() {
+    setState(() => _failedAttempts++);
+    if (_failedAttempts >= _maxAttempts) {
+      setState(() {
+        _isLockedOut = true;
+        _lockoutUntil = DateTime.now().add(const Duration(days: 1));
+        _isError = true;
+        _errorMsg =
+            'Terlalu banyak percobaan gagal (3x). Silakan coba lagi besok.';
+      });
+      _clearBoxes();
+    }
+  }
+
+  void _clearBoxes() {
+    for (final c in _controllers) {
+      c.clear();
+    }
+    if (!_isLockedOut) {
+      _focusNodes[0].requestFocus();
+    }
   }
 
   Future<void> _sendOtp() async {
     try {
       setState(() => _isLoading = true);
-      
       final svc = SupabaseAuthService();
       await svc.client.auth.signInWithOtp(
         email: widget.email,
-        shouldCreateUser: false,
+        shouldCreateUser: true, // needed so Supabase can verify OTP
       );
-
       setState(() {
         _isLoading = false;
         _isError = false;
@@ -65,14 +114,17 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         _countdown = 59;
         _canResend = false;
       });
-      
       _startCountdown();
+      // Auto-focus first box after OTP sent
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _focusNodes[0].requestFocus();
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _isError = true;
-        _errorMsg = 'Failed to send OTP: $e';
+        _errorMsg = 'Gagal mengirim OTP: $e';
       });
     }
   }
@@ -89,63 +141,122 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
     });
   }
 
-  void _onOtpChanged() {
-    if (_otpController.text.length == 6) {
-      _verifyOtp();
-    }
-    if (mounted) {
+  void _onDigitChanged(int index, String value) {
+    if (_isLockedOut) return;
+
+    // Clear error on typing
+    if (_isError) {
       setState(() {
         _isError = false;
         _errorMsg = '';
       });
     }
+
+    if (value.length == 1) {
+      if (index < 5) {
+        _focusNodes[index + 1].requestFocus();
+      } else {
+        _focusNodes[index].unfocus();
+        _verifyOtp();
+      }
+    }
+  }
+
+  void _onKeyEvent(int index, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.backspace &&
+        _controllers[index].text.isEmpty &&
+        index > 0) {
+      // Go back to previous box on backspace
+      _focusNodes[index - 1].requestFocus();
+      _controllers[index - 1].clear();
+    }
   }
 
   Future<void> _verifyOtp() async {
-    final otp = _otpController.text.trim();
-    
-    // For now, use dummy OTP system (can integrate real OTP later)
-    if (!_validDummyOtps.contains(otp)) {
+    if (_isLockedOut) return;
+
+    final otp = _otpValue;
+    if (otp.length != 6) {
       setState(() {
         _isError = true;
-        _errorMsg = t(context, 'otpInvalid');
+        _errorMsg = 'OTP harus 6 digit';
       });
-      _otpController.clear();
       return;
     }
 
+    setState(() => _isLoading = true);
+
     try {
-      setState(() => _isLoading = true);
-
       final svc = SupabaseAuthService();
-      final response = await svc.client.auth.verifyOTP(
-        email: widget.email,
-        token: otp,
-        type: OtpType.email,
-      );
 
-      if (response.session != null || response.user != null) {
-        // Mark email as verified in profiles
-        final user = svc.client.auth.currentUser;
-        if (user != null) {
-          await svc.client
-              .from('profiles')
-              .update({'email_verified': true})
-              .eq('email', widget.email);
+      try {
+        // Try real Supabase OTP
+        final response = await svc.client.auth.verifyOTP(
+          email: widget.email,
+          token: otp,
+          type: OtpType.email,
+        );
+
+        if (response.session != null || response.user != null) {
+          // Mark email as verified in profiles - use upsert-safe update
+          final user = svc.client.auth.currentUser;
+          if (user != null) {
+            try {
+              await svc.client
+                  .from('profiles')
+                  .update({'email_verified': true})
+                  .eq('id', user.id);
+            } catch (dbErr) {
+              debugPrint('DB update email_verified failed: $dbErr');
+              // Column might not exist yet, but OTP was valid - still mark as verified
+            }
+          }
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          widget.onVerified();
+          return;
         }
+      } catch (e) {
+        debugPrint('Supabase OTP failed: $e');
+        final errMsg = e.toString().toLowerCase();
+        // If OTP is actually expired or invalid, show error immediately
+        if (errMsg.contains('expired') || errMsg.contains('invalid')) {
+          _recordFailedAttempt();
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              if (!_isLockedOut) {
+                _isError = true;
+                _errorMsg = 'OTP tidak valid atau sudah kadaluarsa. Kirim ulang OTP.';
+              }
+            });
+            _clearBoxes();
+          }
+          return;
+        }
+      }
 
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        widget.onVerified();
+      // OTP wrong - no fallback, real OTP only
+      _recordFailedAttempt();
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (!_isLockedOut) {
+            _isError = true;
+            _errorMsg = t(context, 'otpInvalid');
+          }
+        });
+        _clearBoxes();
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _isError = true;
-        _errorMsg = 'Verification failed: $e';
+        _errorMsg = 'Verifikasi gagal: ${e.toString()}';
       });
-      _otpController.clear();
+      _clearBoxes();
     }
   }
 
@@ -172,21 +283,15 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                'OTP sent to ${widget.email}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF8AA8AC),
-                ),
+                'OTP dikirim ke ${widget.email}',
+                style: const TextStyle(fontSize: 13, color: Color(0xFF8AA8AC)),
               ),
               const SizedBox(height: 24),
 
-              // OTP Input
+                  // 6 OTP boxes
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(
-                  6,
-                  (i) => _buildOtpBox(i),
-                ),
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(6, (i) => _buildOtpBox(i)),
               ),
 
               // Error message
@@ -197,13 +302,14 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFFD94F45),
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
 
               const SizedBox(height: 24),
 
-              // Resend button
+              // Resend row
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -211,7 +317,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                     t(context, 'didntReceiveOtp'),
                     style: const TextStyle(fontSize: 13, color: _ink),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   _canResend
                       ? GestureDetector(
                           onTap: _sendOtp,
@@ -226,10 +332,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                         )
                       : Text(
                           '${t(context, 'resendOtpIn').replaceFirst('{time}', _countdown.toString())}s',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: _c500,
-                          ),
+                          style: const TextStyle(fontSize: 13, color: _c500),
                         ),
                 ],
               ),
@@ -241,7 +344,8 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _isLoading ? null : widget.onCancelled,
+                      onPressed:
+                          _isLoading ? null : widget.onCancelled,
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: _c500),
                         shape: RoundedRectangleBorder(
@@ -260,7 +364,9 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _isLoading || _otpController.text.length < 6
+                      onPressed: _isLoading ||
+                              _otpValue.length < 6 ||
+                              _isLockedOut
                           ? null
                           : _verifyOtp,
                       style: ElevatedButton.styleFrom(
@@ -277,7 +383,8 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                                 width: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation(_c500),
+                                  valueColor:
+                                      AlwaysStoppedAnimation(_c500),
                                 ),
                               )
                             : Text(
@@ -297,26 +404,53 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   }
 
   Widget _buildOtpBox(int index) {
-    final char = _otpController.text.length > index
-        ? _otpController.text[index]
-        : '';
-    return Container(
-      width: 45,
-      height: 50,
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: char.isNotEmpty ? _c700 : _c100,
-          width: 2,
-        ),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        char,
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: _ink,
+    final isFilled = _controllers[index].text.isNotEmpty;
+
+    return SizedBox(
+      width: 44,
+      height: 54,
+      child: KeyboardListener(
+        focusNode: FocusNode(),
+        onKeyEvent: (e) => _onKeyEvent(index, e),
+        child: TextField(
+          controller: _controllers[index],
+          focusNode: _focusNodes[index],
+          enabled: !_isLockedOut,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          maxLength: 1,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: _c700,
+          ),
+          decoration: InputDecoration(
+            counterText: '',
+            contentPadding: EdgeInsets.zero,
+            filled: true,
+            fillColor: isFilled ? _c100 : Colors.white,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isFilled ? _c700 : const Color(0xFFE6EEEE),
+                width: 2,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _c700, width: 2),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: Color(0xFFE6EEEE), width: 2),
+            ),
+          ),
+          onChanged: (v) {
+            setState(() {});
+            _onDigitChanged(index, v);
+          },
         ),
       ),
     );

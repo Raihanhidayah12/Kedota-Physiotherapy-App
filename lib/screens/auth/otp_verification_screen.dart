@@ -234,7 +234,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   phoneNumber: widget.phoneNumber,
                   email: accountResult.email ?? '',
                 );
-              } else if (accountResult.isRegistered) {
+              } else if (accountResult.isRegistered && accountResult.hasPinHash) {
+                // Profile exists with PIN → go to PIN verification (login)
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
                     builder: (_) =>
@@ -242,6 +243,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   ),
                 );
               } else {
+                // Profile doesn't exist OR exists but no PIN → go to complete profile/create PIN
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
                     builder: (_) => PhoneProfileCompletionScreen(

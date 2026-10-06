@@ -9,6 +9,7 @@ import '../../services/supabase_auth_service.dart';
 import '../../utils/app_snackbar.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
+import '../auth/email_verification_dialog.dart';
 import 'change_contact_screen.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   String? _email;
   String _medicalCode = '-';
   String? _profileImageUrl;
+  bool _emailVerified = false;
   bool _isLoading = false;
   bool _isUploading = false;
   bool _profileChanged = false;
@@ -148,6 +150,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         _nikCtr.text = profile['nik']?.toString().trim() ?? '';
         _addressCtr.text = profile['address']?.toString().trim() ?? '';
         _email = profile['email']?.toString().trim();
+        _emailVerified = profile['email_verified'] == true;
         _medicalCode = profile['medical_code']?.toString().trim() ?? '-';
         _phone = displayPhone;
         _birthDate = bd;
@@ -544,9 +547,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   }
 
   bool get _requiredFieldsComplete {
-    final nik = _nikCtr.text.trim();
-    return RegExp(r'^\d{16}$').hasMatch(nik) &&
-        _addressCtr.text.trim().isNotEmpty;
+    // NIK and address are no longer required - only full name is required
+    return _nameCtr.text.trim().isNotEmpty;
   }
 
   void _handleBack() {
@@ -555,6 +557,26 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       return;
     }
     Navigator.of(context).pop(_profileChanged);
+  }
+
+  Future<void> _showEmailVerificationDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => EmailVerificationDialog(
+        email: _email ?? '',
+        onVerified: () => Navigator.pop(context, true),
+        onCancelled: () => Navigator.pop(context, false),
+      ),
+    );
+
+    if (result == true && mounted) {
+      // Reload profile to get updated email_verified status
+      await _loadProfile();
+      if (mounted) {
+        _snack(t(context, 'emailVerificationSuccessful'));
+      }
+    }
   }
 
   // ── bottom sheet helpers ──────────────────────────────────────────────────
@@ -703,9 +725,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             ],
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
-                return widget.requireCompleteProfile
-                    ? t(context, 'nikRequired')
-                    : null;
+                // NIK is now optional
+                return null;
               }
               if (v.trim().length != 16) return t(context, 'nikLengthError');
               return null;
@@ -740,10 +761,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             autofocus: true,
             minLines: 2,
             maxLines: 4,
-            validator: (v) => widget.requireCompleteProfile &&
-                    (v == null || v.trim().isEmpty)
-                ? t(context, 'addressRequired')
-                : null,
+            validator: (v) {
+              // Address is now optional
+              return null;
+            },
             decoration: _sheetInputDecoration(t(context, 'addressHint')),
           ),
           onSave: () {
@@ -846,6 +867,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                         // ── Photo card ─────────────────────────────────────
                         _buildPhotoCard(),
                         const SizedBox(height: 16),
+
+                        // ── Email verification warning (if needed) ────────
+                        if (!_emailVerified && _email != null && _email!.isNotEmpty)
+                          _buildEmailVerificationWarning(),
 
                         // ── Info list card ─────────────────────────────────
                         _buildCard(children: [
@@ -1087,6 +1112,85 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       ],
     ),
   );
+
+  // ── email verification warning ─────────────────────────────────────────────
+  Widget _buildEmailVerificationWarning() => Container(
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFF4D8),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFFFE3A1), width: 1.5),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFFE59D2A).withValues(alpha: 0.1),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    margin: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    child: Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE59D2A).withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFE59D2A),
+            size: 22,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t(context, 'emailNotVerified'),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF8B6914),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                t(context, 'verifyEmailDesc'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFFA07A1F),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        GestureDetector(
+          onTap: _showEmailVerificationDialog,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE59D2A),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              t(context, 'verifyEmailBtn'),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
 
   // ── info row ──────────────────────────────────────────────────────────────
   Widget _infoRow({
