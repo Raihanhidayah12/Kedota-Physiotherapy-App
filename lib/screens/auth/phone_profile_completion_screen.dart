@@ -203,9 +203,10 @@ class _PhoneProfileCompletionScreenState
       }
 
       // Kirim OTP via Supabase Auth
+      // shouldCreateUser: true karena user belum ada di Supabase Auth
       await SupabaseAuthService().client.auth.signInWithOtp(
         email: email,
-        shouldCreateUser: false,
+        shouldCreateUser: true,
       );
 
       _otpSendCount++;
