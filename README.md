@@ -46,7 +46,8 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion |
 | 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
 | 📅 Reservasi Step-by-Step | 🟢 Selesai | 6 tahap dari data pasien hingga instruksi pembayaran, termasuk pilihan lokasi dan jadwal |
-| 🗺️ Peta Interaktif (Home Care) | 🟢 Selesai | `flutter_map` + Geoapify tile + reverse geocoding akurat; tap peta, gunakan lokasi terkini, ketik alamat → peta sync |
+| 🗺️ Peta Interaktif (Home Care) | 🟢 Selesai | `flutter_map` + sistem 3 tier Google Maps → Geoapify → OpenStreetMap; tile dan reverse/forward geocoding dengan fallback otomatis |
+| 📧 Email Verification | 🟢 Selesai | Verifikasi email ditampilkan sebagai peringatan di profil; pengiriman OTP via Gmail SMTP produksi |
 | 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, validasi slot, dan reminder baru |
 | 💳 DP & Pelunasan | 🟢 Selesai (Demo Gateway) | Card appointment tampilkan 2 tombol (Lihat Detail + Lunaskan) saat DP belum lunas |
 | 🧾 Identitas Pasien & Booking | 🟢 Selesai | `medical_code` format `KDT-` + 12 karakter; `booking_code` format `EMR-` |
@@ -128,6 +129,8 @@ Sign In → Continue with Google → PIN Verification → Home Screen
 - Tombol silang menyimpan status dismiss per akun di device, sehingga pengingat tidak muncul lagi setelah ditutup.
 - Pengingat juga tidak ditampilkan lagi jika akun sudah memiliki janji temu.
 - Navigasi utama menyediakan tab Beranda, Progress, Janji Temu, dan Profil.
+- NIK dan alamat tidak lagi diwajibkan untuk menyelesaikan profil; keduanya bersifat opsional.
+- Pengingat profil tidak muncul jika NIK sudah terisi atau jika akun sudah memiliki janji temu.
 
 ---
 
@@ -211,21 +214,53 @@ Batas pembayaran berlaku 10 menit sejak metode dipilih atau pengguna masuk ke in
 
 ### 9. 🗺️ Peta Interaktif (Home Care)
 
-- Tile peta: **Geoapify** (`osm-bright` style) — lebih detail dari OpenStreetMap standar.
-- **Geocoding akurat** menggunakan Geoapify API (3000 req/hari gratis) dengan fallback otomatis ke Nominatim lalu `geocoding` package.
-- **Reverse geocoding** (koordinat → alamat lengkap): tap di peta atau gunakan lokasi terkini → field Alamat terisi otomatis dengan format `Jalan, Kelurahan, Kecamatan, Kota, Provinsi, Kode Pos`.
-- **Forward geocoding** (ketik alamat → pindah peta): debounce 900ms setelah berhenti ketik → peta dan marker sync ke lokasi.
-- **Popup peta** (fullscreen): tampil floating label alamat di atas peta, field detail di bawah, tombol ✕ untuk confirm & tutup.
-- **Gunakan Lokasi Terkini**: `LocationAccuracy.bestForNavigation` untuk akurasi GPS tertinggi.
+Fitur peta digunakan khusus pada alur reservasi Home Care dan menerapkan sistem **3 tier cascading fallback** untuk keandalan tinggi.
 
-**Fallback chain geocoding:**
+**Hierarki layanan tile peta:**
+1. **Google Maps** (utama) — tile Google Maps dengan kualitas premium
+2. **Geoapify** (sekunder) — tile `osm-bright` style, failover otomatis
+3. **OpenStreetMap** (tersier) — tile standar OSM, selalu tersedia gratis
+
+**Hierarki geocoding (forward & reverse):**
 ```
-Geoapify API (akurat, 3000/hari)
-    ↓ quota habis / error
+Google Maps Geocoding API (akurat, berbayar per-request)
+    ↓ gagal / quota habis
+Geoapify API (3000 req/hari gratis)
+    ↓ gagal / quota habis
 Nominatim OpenStreetMap (gratis unlimited)
-    ↓ error
-geocoding package (butuh Google Play Services)
 ```
+
+**Fitur:**
+- **Reverse geocoding** (koordinat → alamat): tap peta atau gunakan lokasi terkini → field Alamat terisi otomatis dengan format `Jalan, Kelurahan, Kecamatan, Kota, Provinsi, Kode Pos`.
+- **Forward geocoding** (ketik alamat → pindah peta): debounce 900ms → peta dan marker sinkron ke lokasi.
+- **Popup peta** (fullscreen): floating label alamat di atas peta, field detail di bawah, tombol ✕ untuk confirm & tutup.
+- **Lokasi Terkini**: `LocationAccuracy.bestForNavigation` untuk akurasi GPS tertinggi.
+- **Atribusi real-time**: label atribusi di peta berubah sesuai layanan yang aktif.
+- **Debug logging**: setiap pergantian layanan dicatat untuk memudahkan troubleshooting.
+
+**Environment:**
+```dotenv
+GOOGLE_MAPS_API_KEY=<google-maps-api-key>
+GEOAPPIFY_API_KEY=<geoapify-api-key>
+```
+
+**Reliabilitas:** sistem multi-tier mencapai uptime ~99.9% — layanan premium digunakan saat tersedia, fallback gratis menjaga fungsionalitas saat terjadi gangguan.
+
+### 9a. 📧 Email Verification & Medical Code
+
+**Email Verification:**
+- Verifikasi email ditampilkan sebagai **peringatan di screen profil** alih-alih di alur registrasi inline.
+- Pengiriman OTP nyata melalui integrasi **Gmail SMTP** yang dikonfigurasi di Supabase Auth.
+- Pengguna dapat menyelesaikan registrasi dan menggunakan aplikasi sebelum memverifikasi email.
+
+**Medical Code (Kode Pasien):**
+- Kode medis pasien (`medical_code`) digenerate **otomatis** saat pembuatan profil.
+- Format: `KDT-` diikuti 12 karakter heksadesimal acak (contoh: `KDT-a3f8c1e20b94`).
+- Unik per pasien; digunakan sebagai identitas di formulir reservasi.
+
+**Change Contact Flow:**
+- Pengguna dapat mengganti nomor HP atau email melalui alur OTP verification yang komprehensif.
+- Setiap perubahan kontak memerlukan verifikasi OTP ke nomor/email baru sebelum tersimpan.
 
 ---
 
@@ -427,7 +462,7 @@ Kolom berikut merangkum kolom yang dipakai aplikasi, bukan dump lengkap dari dat
 | Backend | Supabase (PostgreSQL + Auth + Storage + Edge Functions) |
 | OAuth | Google Sign-In & Apple Sign-In (OAuth) |
 | HTTP Client | Dio + Retrofit (generated) |
-| Peta | `flutter_map` v8 + Geoapify tile & geocoding |
+| Peta | `flutter_map` v8 + Google Maps tiles & geocoding (utama) + Geoapify tile & geocoding (sekunder) + OpenStreetMap/Nominatim (tersier) |
 | Lokasi | `geolocator` + `geocoding` (fallback) |
 | Koneksi | `connectivity_plus` + probe HTTP Supabase untuk deteksi internet |
 | Local Storage | `shared_preferences` |
@@ -458,9 +493,11 @@ Salin `.env.example` menjadi `.env`, lalu isi:
 ```dotenv
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_ANON_KEY=<publishable-or-anon-key>
+GOOGLE_MAPS_API_KEY=<google-maps-api-key>
+GEOAPPIFY_API_KEY=<geoapify-api-key>
 ```
 
-`.env` disertakan sebagai asset Flutter sehingga nilainya dapat dibaca dari aplikasi client. Gunakan hanya publishable/anon key di sini. Jangan masukkan service-role key atau secret provider ke client; Edge Functions menggunakan konfigurasi server Supabase.
+`.env` disertakan sebagai asset Flutter sehingga nilainya dapat dibaca dari aplikasi client. Gunakan hanya publishable/anon key di sini. GOOGLE_MAPS_API_KEY dan GEOAPIFY_API_KEY adalah kunci API opsional yang digunakan untuk sistem fallback peta pada alur reservasi homecare. Jika Google Maps tidak tersedia, aplikasi secara otomatis beralih ke Geoapify kemudian OpenStreetMap. Jangan masukkan service-role key atau secret provider ke client; Edge Functions menggunakan konfigurasi server Supabase.
 
 ### Menjalankan
 

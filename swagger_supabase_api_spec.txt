@@ -34,12 +34,28 @@ info:
     - nik (String, 16 digit)
     - address (String)
     - medical_code (String, format KDT- + 12 karakter heksadesimal)
+    - email_verified (Boolean, default false — true setelah pengguna memverifikasi email)
     - profile_photo_url (String, opsional)
     - last_login_at (Timestamp)
     - created_at, updated_at (Timestamp)
 
     Tabel `appointments` menyimpan satu jadwal terapi per record dan digunakan
     untuk Home, Riwayat, Progress, notifikasi, reschedule, dan pembayaran.
+
+    Konfigurasi Maps & Geocoding:
+    Aplikasi menggunakan sistem 3 tier cascading fallback untuk peta dan geocoding
+    di alur reservasi Home Care:
+    - Tier 1 (Utama): Google Maps API — tile dan geocoding premium
+    - Tier 2 (Sekunder): Geoapify — tile osm-bright dan geocoding (3000 req/hari gratis)
+    - Tier 3 (Tersier): OpenStreetMap/Nominatim — tile standar dan geocoding gratis unlimited
+    Konfigurasi: GOOGLE_MAPS_API_KEY dan GEOAPIFY_API_KEY di file .env client.
+    Pergantian layanan terjadi otomatis saat tier utama gagal, tanpa downtime bagi pengguna.
+
+    Email & Notifikasi:
+    - OTP dikirim via Gmail SMTP yang dikonfigurasi di Supabase Auth (production).
+    - Verifikasi email ditampilkan sebagai peringatan di profil (bukan blocking di registrasi).
+    - Medical code (KDT- + 12 hex chars) digenerate otomatis saat createProfile.
+    - NIK dan address bersifat opsional di profil.
 servers:
   - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/rest/v1
     description: Production Supabase REST API
@@ -62,6 +78,8 @@ tags:
     description: Supabase Postgres RPC untuk operasi appointment atomik
   - name: Observability
     description: Endpoint logging error dari client
+  - name: Maps
+    description: Konfigurasi dan fallback sistem peta dan geocoding (Google Maps → Geoapify → OSM)
 security:
   - apiKeyAuth: []
   - bearerAuth: []
@@ -1184,6 +1202,38 @@ paths:
         '405':
           description: Method selain POST tidak diizinkan.
 
+  /maps-config:
+    get:
+      tags:
+        - Maps
+      summary: Konfigurasi sistem peta 3 tier (referensi)
+      description: >
+        Bukan endpoint REST — dokumen ini mendeskripsikan konfigurasi sistem peta
+        cascading fallback yang digunakan di alur reservasi Home Care.
+
+        **Hierarki tile peta:**
+        1. Google Maps tiles (GOOGLE_MAPS_API_KEY) — utama
+        2. Geoapify osm-bright tiles (GEOAPIFY_API_KEY) — sekunder
+        3. OpenStreetMap standard tiles — tersier (selalu tersedia)
+
+        **Hierarki geocoding:**
+        1. Google Maps Geocoding API — forward dan reverse geocoding premium
+        2. Geoapify Geocoding API — 3000 request/hari gratis
+        3. Nominatim OpenStreetMap — gratis unlimited
+
+        **Environment variables yang dibutuhkan di .env client:**
+        - GOOGLE_MAPS_API_KEY: API key Google Maps Platform
+        - GEOAPIFY_API_KEY: API key Geoapify (sudah tersedia di .env)
+
+        **Perilaku fallback:**
+        - Pergantian tier terjadi otomatis saat error atau quota habis
+        - Atribusi di peta berubah sesuai layanan aktif
+        - Debug log mencatat setiap pergantian layanan
+        - User tidak merasakan gangguan saat terjadi fallback
+      responses:
+        '200':
+          description: Referensi konfigurasi (tidak ada server yang melayani path ini).
+
 components:
   securitySchemes:
     apiKeyAuth:
@@ -1361,6 +1411,23 @@ components:
         is_profile_complete:
           type: boolean
           example: true
+        nik:
+          type: string
+          description: NIK 16 digit (opsional)
+          example: "3273012345678901"
+        address:
+          type: string
+          description: Alamat lengkap (opsional)
+          example: "Jl. Mawar No. 1, Malang"
+        medical_code:
+          type: string
+          description: Digenerate otomatis oleh server; tidak perlu dikirim oleh client
+          example: "KDT-a3f8c1e20b94"
+        email_verified:
+          type: boolean
+          description: Default false; diupdate ke true setelah verifikasi email OTP
+          default: false
+          example: false
         created_at:
           type: string
           format: date-time
@@ -1601,6 +1668,23 @@ components:
           type: string
           format: date-time
           example: "2026-08-17T10:30:00Z"
+        email_verified:
+          type: boolean
+          description: Flag apakah email sudah diverifikasi. Default false, true setelah konfirmasi OTP email.
+          default: false
+          example: false
+        nik:
+          type: string
+          description: NIK 16 digit (opsional, tidak wajib untuk kelengkapan profil)
+          example: "3273012345678901"
+        address:
+          type: string
+          description: Alamat lengkap (opsional, tidak wajib untuk kelengkapan profil)
+          example: "Jl. Mawar No. 1, Malang"
+        medical_code:
+          type: string
+          description: Kode medis pasien yang digenerate otomatis. Format KDT- + 12 karakter heksadesimal.
+          example: "KDT-a3f8c1e20b94"
 
     Appointment:
       type: object
