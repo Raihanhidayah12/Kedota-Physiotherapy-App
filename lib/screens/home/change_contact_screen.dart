@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
@@ -73,8 +74,8 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   String _currentValue = '';
   String _newValue = '';
 
-  // Dummy valid OTPs matching the rest of the app
-  static const _validOtps = {'1234', '5555', '0000', '9999'};
+  // Dummy valid OTPs for phone verification (since SMS not implemented yet)
+  static const _validDummyOtps = {'1234', '5555', '0000', '9999'};
 
   bool get _isPhone => widget.mode == ChangeContactMode.phone;
 
@@ -196,7 +197,17 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     }
 
     final otp = _otpCtr.text.trim();
-    if (!_validOtps.contains(otp)) {
+    bool isValid = false;
+
+    if (_isPhone) {
+      // Phone: use dummy OTP system
+      isValid = _validDummyOtps.contains(otp);
+    } else {
+      // Email: verify with Supabase Auth
+      isValid = await _verifyEmailOtp(otp);
+    }
+
+    if (!isValid) {
       _otpVerifyCount++;
       _lastOtpVerifyDate = DateTime.now().toUtc();
       setState(() {
@@ -300,9 +311,15 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         return;
       }
 
-      // Send OTP (in production)
-      _otpSendCount++;
-      _lastOtpSendDate = DateTime.now().toUtc();
+      // Send OTP (real for email, dummy for phone)
+      if (_isPhone) {
+        // Phone SMS not implemented yet - use dummy system
+        _otpSendCount++;
+        _lastOtpSendDate = DateTime.now().toUtc();
+      } else {
+        // Email - use Supabase Auth OTP
+        await _sendEmailOtp(_currentValue);
+      }
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -372,9 +389,15 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         return;
       }
 
-      // Send OTP to new value (in production)
-      _otpSendCount++;
-      _lastOtpSendDate = DateTime.now().toUtc();
+      // Send OTP to new value (real for email, dummy for phone)
+      if (_isPhone) {
+        // Phone SMS not implemented yet - use dummy system
+        _otpSendCount++;
+        _lastOtpSendDate = DateTime.now().toUtc();
+      } else {
+        // Email - use Supabase Auth OTP
+        await _sendEmailOtp(_newValue);
+      }
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -386,6 +409,37 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         _isError = true;
         _errorMsg = e.toString();
       });
+    }
+  }
+
+  // ── Email OTP via Supabase Auth ───────────────────────────────────────────
+
+  /// Sends a real OTP to [email] via Supabase Auth (signInWithOtp).
+  /// Supabase sends a 6-digit code by email automatically.
+  Future<void> _sendEmailOtp(String email) async {
+    final svc = SupabaseAuthService();
+    await svc.client.auth.signInWithOtp(
+      email: email,
+      shouldCreateUser: false, // don't register new users
+    );
+    _otpSendCount++;
+    _lastOtpSendDate = DateTime.now().toUtc();
+  }
+
+  /// Verifies the 6-digit [otp] code for [email] using Supabase Auth verifyOTP.
+  /// Returns true if valid, false otherwise.
+  Future<bool> _verifyEmailOtp(String otp) async {
+    final email = _step == 1 ? _currentValue : _newValue;
+    try {
+      final svc = SupabaseAuthService();
+      final response = await svc.client.auth.verifyOTP(
+        email: email,
+        token: otp,
+        type: OtpType.email,
+      );
+      return response.session != null || response.user != null;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -798,7 +852,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                     ),
                   )
                 : GestureDetector(
-                    onTap: () {
+                    onTap: () async {
                       if (!_canSendOtp()) {
                         setState(() {
                           _isError = true;
@@ -806,8 +860,22 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                         });
                         return;
                       }
-                      _otpSendCount++;
-                      _lastOtpSendDate = DateTime.now().toUtc();
+                      if (_isPhone) {
+                        _otpSendCount++;
+                        _lastOtpSendDate = DateTime.now().toUtc();
+                      } else {
+                        // Resend email OTP
+                        final email = _step == 1 ? _currentValue : _newValue;
+                        try {
+                          await _sendEmailOtp(email);
+                        } catch (e) {
+                          setState(() {
+                            _isError = true;
+                            _errorMsg = 'Failed to resend OTP: $e';
+                          });
+                          return;
+                        }
+                      }
                       _otpCtr.clear();
                       setState(() {
                         _isError = false;
