@@ -248,15 +248,16 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   String _formatAddressForDisplay(String rawAddress) {
     // Hapus bagian yang tidak perlu: Indonesia, country codes, dll
     String formatted = rawAddress
+        .replaceAll(RegExp(r',\s*JI\s*,\s*Indonesia\s*$', caseSensitive: false), '') // Hapus ", JI, Indonesia" dulu
+        .replaceAll(RegExp(r',\s*JI\s*$', caseSensitive: false), '') // Hapus ", JI" di akhir
         .replaceAll(RegExp(r',\s*Indonesia\s*$', caseSensitive: false), '') // Hapus ", Indonesia" di akhir
         .replaceAll(RegExp(r',\s*ID\s*$'), '') // Hapus ", ID" di akhir  
-        .replaceAll(RegExp(r',\s*JI\s*,\s*Indonesia\s*$'), '') // Hapus ", JI, Indonesia" 
         .replaceAll(RegExp(r',\s*Jawa Timur\s*,\s*Indonesia\s*$'), ', Jawa Timur') // Jaga "Jawa Timur"
         .replaceAll(RegExp(r',\s*East Java\s*,\s*Indonesia\s*$'), ', Jawa Timur') // Convert English
         .trim();
 
     // Hapus koma berlebih di akhir
-    if (formatted.endsWith(',')) {
+    while (formatted.endsWith(',')) {
       formatted = formatted.substring(0, formatted.length - 1).trim();
     }
 
