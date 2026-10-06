@@ -241,36 +241,38 @@ class _SignInScreenState extends State<SignInScreen> {
   /// Only verify if:
   /// 1. Email is new (tidak ada di DB sebelumnya)
   /// 2. Email belum di-verify sebelumnya
-  /// Kalau email sudah ada di DB dan verified → skip, login langsung
+  /// Cek email verification hanya untuk user yang sudah punya profil di DB
+  /// (daftar via nomor HP) tapi belum verified emailnya.
+  /// User baru via Google → skip, Google sudah jamin email valid.
   Future<bool> _checkAndVerifyEmailIfNeeded(String email) async {
     if (email.isEmpty) return true;
     
     try {
       final service = SupabaseAuthService();
       
-      // Cek apakah email sudah ada di DB (dari registrasi sebelumnya)
+      // Cek apakah email sudah ada di DB (dari registrasi nomor HP sebelumnya)
       final existingProfile = await service.client
           .from('profiles')
-          .select('id, email_verified')
+          .select('id, email_verified, signup_method')
           .eq('email', email)
           .maybeSingle();
 
-      // Kalau email sudah di DB dan sudah verified → skip, login langsung
-      if (existingProfile != null) {
-        final isVerified = existingProfile['email_verified'] == true;
-        if (isVerified) {
-          // Email sudah verified, langsung login
-          return true;
-        }
-        // Email ada tapi belum verified (edge case) → verifikasi
-      } else {
-        // Email baru, belum di DB → harus verifikasi
-        // (buat guard kalau user pakai email baru di Google)
+      // Email tidak ada di DB → user baru Google, skip verifikasi
+      // Google sendiri sudah memverifikasi email mereka
+      if (existingProfile == null) return true;
+
+      // Email ada tapi dari signup nomor HP dan belum verified → perlu verifikasi
+      final signupMethod = existingProfile['signup_method']?.toString() ?? '';
+      final isVerified = existingProfile['email_verified'] == true;
+
+      if (signupMethod == 'phone' && !isVerified) {
+        // Hanya user phone signup yang emailnya belum verified yang perlu verifikasi
+        if (!mounted) return false;
+        return await _showEmailVerificationDialog(email) ?? false;
       }
 
-      // Show verification dialog untuk email baru atau belum verified
-      if (!mounted) return false;
-      return await _showEmailVerificationDialog(email) ?? false;
+      // Sudah verified atau signup method bukan phone → izinkan login
+      return true;
     } catch (e) {
       // Silent fallback - allow login
       return true;
