@@ -41,6 +41,7 @@ dependencies:
   flutter_svg: ^2.0.0
   supabase_flutter: ^2.2.0
   crypto: ^3.0.7
+  encrypt: ^5.0.3
   shared_preferences: ^2.2.0
   google_sign_in: ^6.2.1
   flutter_dotenv: ^5.2.1

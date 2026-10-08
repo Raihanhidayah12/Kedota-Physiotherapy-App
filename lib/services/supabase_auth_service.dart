@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/phone_validator.dart';
+import '../utils/rest_crypto_interceptor.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -145,6 +146,7 @@ class SupabaseAuthService {
         },
       ),
     );
+    dio.interceptors.add(RestCryptoInterceptor());
     dio.options.headers['apikey'] = _supabasePublishableKey;
     dio.options.headers['Content-Type'] = 'application/json';
     final supabaseUrl =
