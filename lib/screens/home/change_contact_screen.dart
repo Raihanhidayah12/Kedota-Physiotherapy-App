@@ -360,6 +360,30 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
       final user = svc.client.auth.currentUser;
       if (user == null) throw Exception('Not logged in');
 
+      // Jika ubah email, cek apakah nomor telepon sudah diubah hari ini
+      if (!_isPhone) {
+        final todayStr = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+        final profileCheck = await svc.client
+            .from('profiles')
+            .select('phone_changed_at')
+            .eq('id', user.id)
+            .maybeSingle();
+        final phoneChangedAt = profileCheck?['phone_changed_at']?.toString();
+        if (phoneChangedAt != null) {
+          final phoneChangedDate = DateTime.tryParse(phoneChangedAt);
+          if (phoneChangedDate != null &&
+              phoneChangedDate.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+              _isError = true;
+              _errorMsg = t(context, 'emailBlockedPhoneChangedToday');
+            });
+            return;
+          }
+        }
+      }
+
       final existing = await svc.client
           .from('profiles')
           .select('id')
@@ -454,6 +478,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
               .from('profiles')
               .update({
                 'phone': _newValue,
+                'phone_changed_at': DateTime.now().toUtc().toIso8601String(),
                 'updated_at': DateTime.now().toUtc().toIso8601String(),
               })
               .eq('id', user.id);

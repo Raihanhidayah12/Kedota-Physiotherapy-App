@@ -104,7 +104,8 @@ const _translations = {
     'physiotherapyApp': ' Physiotherapy App',
     'signInSubtitle':
         'Please sign in to your account or register now to start your journey with us.',
-    'phoneNumber': 'Enter Phone No.',
+    'phoneNumber': '8XX-XXXX-XXXX',
+    'phoneLabel': 'Phone Number',
     'enterPin': 'Enter 6-digit PIN',
     'continuePhone': 'Continue with Phone Number',
     'orContinueWith': 'or sign in with',
@@ -127,7 +128,7 @@ const _translations = {
     'createAccount': 'Create Account',
     'createAccountSubtitle':
         'Register your account with one modern, secure step.',
-    'phoneExample': 'Example: 81234567890',
+    'phoneExample': 'Example: 8XX-XXXX-XXXX',
     'continue': 'Continue',
     'or': 'OR',
     'alreadyHaveAccount': 'Already have an account? ',
@@ -768,7 +769,8 @@ const _translations = {
     'redirectLoginIn': 'You will be redirected to login in {n} seconds',
     'contactChangeWarning':
         'Warning: Phone number can only be changed once per day.',
-    'emailChangeWarning': 'Warning: Email can only be changed once per day.',
+    'emailChangeWarning': 'Warning: Email can only be changed once per day and you cannot change your phone number at the same time.',
+    'emailBlockedPhoneChangedToday': 'Cannot change email today because your phone number was already changed today.',
     'otpSentToPhone': 'Enter the 6-digit OTP code sent to {phone}',
     'otpSentToEmail': 'Enter the 6-digit OTP code sent to {email}',
     'resendOtpIn': 'Resend in {time}',
@@ -930,7 +932,7 @@ Device information, application activity logs, and usage data for security and s
     // ── Hardcoded string fixes ──────────────────────────────────────────
     // sign_in_screen
     'welcomeAt': 'Welcome to',
-    'phoneHint': '08XX XXXX XXXX',
+    'phoneHint': '8XX-XXXX-XXXX',
     'signInWithGoogle': 'Google',
     'signInWithApple': 'Apple',
     'countryCode': '+62',
@@ -983,7 +985,8 @@ Device information, application activity logs, and usage data for security and s
     'physiotherapyApp': ' Physiotherapy',
     'signInSubtitle':
         'Silakan masuk ke akun Anda atau daftar sekarang untuk memulai perjalanan bersama kami.',
-    'phoneNumber': 'Masukkan No. Telp',
+    'phoneNumber': '8XX-XXXX-XXXX',
+    'phoneLabel': 'No. Telepon',
     'enterPin': 'Masukkan PIN 6 digit',
     'continuePhone': 'Lanjut dengan Nomor Telepon',
     'orContinueWith': 'atau masuk dengan',
@@ -1005,7 +1008,7 @@ Device information, application activity logs, and usage data for security and s
     'createAccount': 'Buat Akun',
     'createAccountSubtitle':
         'Daftarkan akun Anda dengan satu langkah modern dan aman.',
-    'phoneExample': 'Contoh: 81234567890',
+    'phoneExample': 'Contoh: 8XX-XXXX-XXXX',
     'continue': 'Lanjut',
     'or': 'ATAU',
     'alreadyHaveAccount': 'Sudah punya akun? ',
@@ -1654,7 +1657,8 @@ Device information, application activity logs, and usage data for security and s
     'redirectLoginIn': 'Anda akan diarahkan ke halaman login dalam {n} detik',
     'contactChangeWarning':
         'Peringatan: Nomor Telepon hanya bisa diubah 1x sehari.',
-    'emailChangeWarning': 'Peringatan: Email hanya bisa diubah 1x sehari.',
+    'emailChangeWarning': 'Peringatan: Email hanya bisa diubah 1x sehari dan tidak dapat mengubah nomor telepon disaat yang sama.',
+    'emailBlockedPhoneChangedToday': 'Tidak dapat mengubah email hari ini karena nomor telepon sudah diubah hari ini.',
     'otpSentToPhone': 'Masukkan 6 digit kode OTP yang telah dikirimkan ke nomor {phone}',
     'otpSentToEmail': 'Masukkan 6 digit kode OTP yang telah dikirimkan ke email {email}',
     'resendOtpIn': 'Kirim Ulang Dalam {time}',
@@ -1835,7 +1839,7 @@ Informasi perangkat, log aktivitas aplikasi, dan data penggunaan untuk keperluan
     // ── Hardcoded string fixes ──────────────────────────────────────────
     // sign_in_screen
     'welcomeAt': 'Selamat datang di',
-    'phoneHint': '08XX XXXX XXXX',
+    'phoneHint': '8XX-XXXX-XXXX',
     'signInWithGoogle': 'Google',
     'signInWithApple': 'Apple',
     'countryCode': '+62',
