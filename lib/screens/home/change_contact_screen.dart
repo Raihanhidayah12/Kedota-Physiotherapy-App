@@ -392,11 +392,29 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         }
       }
 
-      final existing = await svc.client
-          .from('profiles')
-          .select('id')
-          .eq(_isPhone ? 'phone' : 'email', _newValue)
-          .maybeSingle();
+      // Cek apakah nomor/email baru sudah dipakai akun lain
+      // Untuk phone: gunakan multi-variant matching karena format bisa berbeda
+      dynamic existing;
+      if (_isPhone) {
+        final digits = _newValue.replaceAll(RegExp(r'\D'), '');
+        final variants = [
+          '+$digits',                                          // +6282...
+          digits,                                             // 6282...
+          '0${digits.substring(2)}',                         // 082...
+          digits.substring(2),                               // 82...
+        ];
+        existing = await svc.client
+            .from('profiles')
+            .select('id')
+            .inFilter('phone', variants)
+            .maybeSingle();
+      } else {
+        existing = await svc.client
+            .from('profiles')
+            .select('id')
+            .eq('email', _newValue)
+            .maybeSingle();
+      }
 
       if (existing != null && existing['id'] != user.id) {
         if (!mounted) return;
