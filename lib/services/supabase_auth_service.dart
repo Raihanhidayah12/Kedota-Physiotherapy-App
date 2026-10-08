@@ -9,6 +9,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/phone_validator.dart';
+
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'supabase_api_client.dart';
@@ -295,7 +297,7 @@ class SupabaseAuthService {
     required DateTime birthDate,
     required String gender,
   }) async {
-    final normalizedPhone = phone.replaceAll(RegExp(r'\D'), '');
+    final normalizedPhone = PhoneValidator.normalizePhoneNumber(phone);
     final authEmail = resolveAuthEmail(phone, suppliedEmail: email);
 
     try {
@@ -348,7 +350,7 @@ class SupabaseAuthService {
     required String pin,
   }) async {
     try {
-      final normalizedPhone = phone.replaceAll(RegExp(r'\D'), '');
+      final normalizedPhone = PhoneValidator.normalizePhoneNumber(phone);
       debugPrint(
         'signInWithPhone: raw phone=$phone normalizedPhone=$normalizedPhone',
       );
@@ -517,7 +519,7 @@ class SupabaseAuthService {
         throw Exception('No active social session found.');
       }
 
-      final normalizedPhone = phone.replaceAll(RegExp(r'\D'), '');
+      final normalizedPhone = PhoneValidator.normalizePhoneNumber(phone);
 
       // Attempt to update the user's password if allowed for this provider session
       try {
@@ -714,7 +716,7 @@ class SupabaseAuthService {
     required String gender,
     required String pin,
   }) async {
-    final normalizedPhone = phone.replaceAll(RegExp(r'\D'), '');
+    final normalizedPhone = PhoneValidator.normalizePhoneNumber(phone);
 
     // Use the real email as auth identity so Google linking works later.
     // Fall back to generated email only if user didn't provide a valid one.
