@@ -657,7 +657,7 @@ class _ForgotPinScreenState extends State<ForgotPinScreen>
                             const SizedBox(height: 24),
                             // Label
                             Text(
-                              t(context, 'phoneNumber'),
+                              t(context, 'phoneLabel'),
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,

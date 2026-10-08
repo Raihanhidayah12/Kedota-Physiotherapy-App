@@ -1909,7 +1909,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       const SizedBox(height: 10),
       Text(
         t(context, 'reservationForWho'),
-        style: const TextStyle(color: _muted, fontSize: 12),
+        style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w500),
       ),
       const SizedBox(height: 14),
       _choiceButton(t(context, 'reservationForSelf'), true),
@@ -1952,7 +1952,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       children: [
         Text(
           t(context, 'reservationPatientDataDesc'),
-          style: const TextStyle(color: _muted, fontSize: 12),
+          style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 16),
         _field(
@@ -2040,7 +2040,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         children: [
           Text(
             t(context, 'reservationScheduleHint'),
-            style: const TextStyle(color: _muted, fontSize: 12),
+            style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 16),
 
@@ -2172,8 +2172,8 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
               child: Row(
                 children: [
                   SizedBox(
-                    width: 24,
-                    height: 24,
+                    width: 28,
+                    height: 28,
                     child: Checkbox(
                       value: _therapistAvailability,
                       activeColor: _teal,
@@ -2182,11 +2182,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       t(context, 'reservationTherapistAvailability'),
-                      style: const TextStyle(fontSize: 11, color: _muted),
+                      style: const TextStyle(fontSize: 13, color: _muted),
                     ),
                   ),
                 ],
@@ -2551,7 +2551,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       children: [
         Text(
           t(context, 'reservationSessionHint'),
-          style: const TextStyle(color: _muted, fontSize: 12),
+          style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 12),
         _sessionChoice(),
@@ -2624,7 +2624,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
             dropdownColor: Colors.white,
             hint: Text(
               '-- ${t(context, 'reservationChooseSession')} --',
-              style: const TextStyle(color: _muted, fontSize: 12),
+              style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w500),
             ),
             icon: const Icon(
               Icons.keyboard_arrow_down_rounded,
@@ -2731,7 +2731,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       const SizedBox(height: 6),
       Text(
         t(context, 'reservationTaxAdminDisclaimer'),
-        style: const TextStyle(fontSize: 12, color: _muted),
+        style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w500),
       ),
     ],
   );
@@ -2741,15 +2741,15 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: _muted)),
+        Text(label, style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w500)),
         const SizedBox(width: 6),
-        const Text(':', style: TextStyle(fontSize: 12, color: _muted)),
+        const Text(':', style: TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w500)),
         const SizedBox(width: 6),
         Flexible(
           child: Text(
             value.isEmpty ? '-' : value,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: _ink),
+            style: const TextStyle(fontSize: 12, color: _ink, fontWeight: FontWeight.w500),
           ),
         ),
       ],
@@ -2769,18 +2769,18 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           Expanded(
             child: Row(
               children: [
-                Text(label, style: const TextStyle(fontSize: 12, color: _muted)),
+                Text(label, style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w500)),
                 const SizedBox(width: 6),
-                Text(value, style: const TextStyle(fontSize: 12, color: _muted)),
+                Text(value, style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
-          Text(valuePrice, style: const TextStyle(fontSize: 12, color: _ink)),
+          Text(valuePrice, style: const TextStyle(fontSize: 12, color: _ink, fontWeight: FontWeight.w500)),
         ] else ...[
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12, color: _muted),
+              style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w500),
             ),
           ),
           Text(
@@ -2788,7 +2788,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
             style: TextStyle(
               fontSize: 12,
               color: _ink,
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
         ],
@@ -2801,11 +2801,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, color: _muted)),
+            Text(label, style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w500)),
             const SizedBox(width: 6),
-            Text(': $plan', style: const TextStyle(fontSize: 12, color: _ink)),
+            Text(': $plan', style: const TextStyle(fontSize: 12, color: _ink, fontWeight: FontWeight.w500)),
             const Spacer(),
-            Text(price, style: const TextStyle(fontSize: 12, color: _ink)),
+            Text(price, style: const TextStyle(fontSize: 12, color: _ink, fontWeight: FontWeight.w500)),
           ],
         ),
       );
@@ -2987,16 +2987,16 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: _muted,
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
         ),
         Text(
           value.isEmpty ? '-' : value,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             color: color ?? _ink,
             fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
           ),
@@ -3033,7 +3033,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       children: [
         Text(
           t(context, 'reservationPaymentAvailable'),
-          style: const TextStyle(color: _muted, fontSize: 12),
+          style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 18),
         // ── QRIS & E-Wallet ─────────────────────────────────────────────
@@ -3326,7 +3326,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     children: [
       Text(
         t(context, 'reservationQrisDescription'),
-        style: const TextStyle(color: _muted, fontSize: 12, height: 1.4),
+        style: const TextStyle(color: _muted, fontSize: 12, height: 1.4, fontWeight: FontWeight.w500),
       ),
       const SizedBox(height: 16),
       const Center(
@@ -3475,7 +3475,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       children: [
         Text.rich(
           TextSpan(
-            style: const TextStyle(color: _muted, fontSize: 12),
+            style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w500),
             children: [
               TextSpan(text: '${t(context, 'paymentDeadlineBefore')} '),
               TextSpan(
@@ -4413,7 +4413,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: _muted)),
+        Text(label, style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w500)),
         Row(
           children: values
               .map(

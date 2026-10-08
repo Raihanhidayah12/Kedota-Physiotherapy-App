@@ -573,8 +573,8 @@ class _GoogleProfileCompletionScreenState
                                           fontWeight: FontWeight.w600,
                                           color: Color(0xFF1E293B),
                                         ),
-                                        decoration: const InputDecoration(
-                                          hintText: '08XX XXXX XXXX',
+                                        decoration: InputDecoration(
+                                          hintText: t(context, 'phoneHint'),
                                           hintStyle: TextStyle(
                                             color: Color(0xFF94A3B8),
                                             fontSize: 14,

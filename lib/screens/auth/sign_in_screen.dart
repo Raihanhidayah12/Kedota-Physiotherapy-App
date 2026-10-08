@@ -431,7 +431,7 @@ class _SignInScreenState extends State<SignInScreen> {
                               TextSpan(
                                 children: [
                                   TextSpan(
-                                    text: t(context, 'phoneNumber'),
+                                    text: t(context, 'phoneLabel'),
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,

@@ -221,7 +221,7 @@ class UpcomingAppointmentCard extends StatelessWidget {
           : t(context, 'statusUpcoming'),
       style: const TextStyle(
         color: _c700,
-        fontSize: 10,
+        fontSize: 11,
         fontWeight: FontWeight.w700,
       ),
     ),
@@ -255,12 +255,12 @@ class UpcomingAppointmentCard extends StatelessWidget {
 
   Widget _infoRow(IconData icon, String text) => Row(
     children: [
-      Icon(icon, size: 13, color: _ink3),
+      Icon(icon, size: 14, color: _ink3),
       const SizedBox(width: 5),
       Flexible(
         child: Text(
           text,
-          style: const TextStyle(fontSize: 11, color: _ink),
+          style: const TextStyle(fontSize: 13, color: _ink),
           overflow: TextOverflow.ellipsis,
         ),
       ),
