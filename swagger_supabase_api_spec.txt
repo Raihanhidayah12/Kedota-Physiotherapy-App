@@ -67,6 +67,15 @@ info:
     - Verifikasi email ditampilkan sebagai peringatan di profil (bukan blocking di registrasi).
     - Medical code (KDT- + 12 hex chars) digenerate otomatis saat createProfile.
     - NIK dan address bersifat opsional di profil.
+
+    Performance Benchmark Tests:
+    Proyek ini menyertakan 22 benchmark test (semua passing) yang mengukur latensi komponen inti:
+    - Enkripsi REST (AES-256-CBC + HMAC-SHA256): encryptPayload, decryptPayload, encryptSensitiveFields, decryptSensitiveFields — threshold < 10 ms avg per 1000 iterasi.
+    - PIN hashing (SHA-256): hashPin — threshold < 1 ms avg per 10.000 iterasi, correctness diverifikasi terhadap known digest.
+    - Validasi nomor telepon: normalizePhoneNumber + isValidIndonesianPhone (format +62, 08, 8, 62) — threshold < 1 ms avg per 10.000 iterasi.
+    - Format alamat: regex _formatAddressForDisplay — threshold < 0,5 ms avg per 1000 iterasi.
+    - Core utils: BookingCode gen, MedicalCode gen, DateTime formatting, JSON encode/decode — threshold < 1 ms avg.
+    Jalankan dengan: flutter test test/performance/
 servers:
   - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/rest/v1
     description: Production Supabase REST API

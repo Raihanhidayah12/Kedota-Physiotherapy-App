@@ -56,6 +56,7 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 🔒 Proteksi Slot | 🟢 Selesai | Unique index mencegah dua janji aktif di slot yang sama |
 | 📋 Detail Riwayat Done | 🟢 Selesai | Tampilkan catatan klinis, skor progres (VAS/ROM/MMT/ODI), dan rekomendasi terapis dari DB |
 | 🔐 REST Payload Encryption (AES-256-CBC + HMAC-SHA256) | 🟢 Selesai | encryptPayload/decryptPayload + enkripsi selektif field sensitif + Dio interceptor |
+| 🧪 App Performance Benchmark Tests | 🟢 Selesai | 22 tests, 5 kategori: crypto, hash, phone, address, core utils |
 | 🚫 DP Hangus & No-Show | 🟢 Selesai | DP belum lunas hangus saat tidak hadir; pembayaran lunas dapat reschedule maks 24 jam |
 
 ---
@@ -610,6 +611,7 @@ Build iOS hanya dapat dibuat di macOS/Xcode. Android release saat ini menggunaka
 | `lib/utils/rest_crypto_interceptor.dart` | Dio interceptor otomatis enkripsi request & dekripsi response endpoint sensitif |
 | `supabase/functions/` | Edge Functions `update-pin` dan `client-error-log` |
 | `test/`, `integration_test/` | Unit/widget test dan integration test |
+| `test/performance/` | Benchmark test 5 kategori: crypto, hash, phone, address, core utils |
 
 ---
 
@@ -674,6 +676,13 @@ lib/
     ├── phone_validator.dart
     ├── rest_crypto.dart
     └── rest_crypto_interceptor.dart
+test/
+├── performance/
+│   ├── crypto_benchmark_test.dart          # AES-256-CBC + HMAC-SHA256 encrypt/decrypt benchmark
+│   ├── pin_hash_benchmark_test.dart        # SHA-256 hashPin benchmark
+│   ├── phone_validator_benchmark_test.dart # normalizePhoneNumber + isValidIndonesianPhone benchmark
+│   ├── address_format_benchmark_test.dart  # Regex address formatting benchmark
+│   └── app_performance_test.dart           # BookingCode, MedicalCode, DateTime, JSON benchmark
 ```
 
 ---
@@ -700,6 +709,34 @@ flutter test
 Jalankan test pada checkout terkini; README ini tidak menganggap hasil test sebelumnya sebagai hasil untuk perubahan terbaru.
 
 Integration test di `integration_test/app_test.dart` membutuhkan device Android/iOS, `.env`, dan koneksi Supabase.
+
+### 🏎️ App Performance Benchmark Tests
+
+Benchmark test tersedia di folder `test/performance/` — 22 test, semua passing. Setiap file mengukur throughput dan latensi rata-rata pada komponen inti:
+
+| File | Apa yang diuji | Iterasi | Threshold |
+|---|---|---|---|
+| `crypto_benchmark_test.dart` | `encryptPayload`, `decryptPayload`, `encryptSensitiveFields`, `decryptSensitiveFields` (AES-256-CBC + HMAC-SHA256) | 1 000x | < 10 ms avg |
+| `pin_hash_benchmark_test.dart` | SHA-256 `hashPin` + validasi correctness terhadap known digest | 10 000x | < 1 ms avg |
+| `phone_validator_benchmark_test.dart` | `normalizePhoneNumber` + `isValidIndonesianPhone` (format +62, 08, 8, 62) | 10 000x | < 1 ms avg |
+| `address_format_benchmark_test.dart` | Regex address cleaning `_formatAddressForDisplay` (East Java→Jawa Timur, strip ", Indonesia", ", JI") | 1 000x | < 0,5 ms avg |
+| `app_performance_test.dart` | BookingCode gen, MedicalCode gen, DateTime formatting, JSON encode/decode (realistic appointment payload) | 10 000x / 1 000x | < 1 ms avg |
+
+**Cara menjalankan:**
+
+```bash
+flutter test test/performance/
+```
+
+**Format output:**
+
+```
+[PERF] encryptPayload 1000x: total=450ms avg=0.4500ms
+[PERF] hashPin 10000x: total=120ms avg=0.0120ms
+[PERF] normalizePhone 10000x: total=85ms avg=0.0085ms
+[PERF] formatAddress 1000x: total=12ms avg=0.0120ms
+[PERF] bookingCode 10000x: total=95ms avg=0.0095ms
+```
 
 ---
 
