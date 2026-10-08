@@ -768,7 +768,7 @@ const _translations = {
     'emailChangedSuccess': 'Email Changed Successfully',
     'redirectLoginIn': 'You will be redirected to login in {n} seconds',
     'contactChangeWarning':
-        'Warning: Phone number can only be changed once per day.',
+        'Warning: Phone number can only be changed once per day and you cannot change your email at the same time.',
     'emailChangeWarning': 'Warning: Email can only be changed once per day and you cannot change your phone number at the same time.',
     'emailBlockedPhoneChangedToday': 'Cannot change email today because your phone number was already changed today.',
     'otpSentToPhone': 'Enter the 6-digit OTP code sent to {phone}',
@@ -1656,7 +1656,7 @@ Device information, application activity logs, and usage data for security and s
     'emailChangedSuccess': 'Email Berhasil Diubah',
     'redirectLoginIn': 'Anda akan diarahkan ke halaman login dalam {n} detik',
     'contactChangeWarning':
-        'Peringatan: Nomor Telepon hanya bisa diubah 1x sehari.',
+        'Peringatan: Nomor Telepon hanya bisa diubah 1x sehari dan tidak dapat mengubah email disaat yang sama.',
     'emailChangeWarning': 'Peringatan: Email hanya bisa diubah 1x sehari dan tidak dapat mengubah nomor telepon disaat yang sama.',
     'emailBlockedPhoneChangedToday': 'Tidak dapat mengubah email hari ini karena nomor telepon sudah diubah hari ini.',
     'otpSentToPhone': 'Masukkan 6 digit kode OTP yang telah dikirimkan ke nomor {phone}',

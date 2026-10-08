@@ -723,9 +723,24 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
             child: Container(
               width: 24,
               height: 24,
-              color: Colors.red,
-              child: const Center(
-                child: Text('🇮🇩', style: TextStyle(fontSize: 14)),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
+              ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      color: const Color(0xFFCE1126),
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
