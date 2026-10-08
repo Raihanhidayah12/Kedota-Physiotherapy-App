@@ -1,0 +1,10 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    "HMAC tamper detection bypassed in interceptor — onResponse catches SecurityException and calls handler.next(response) with the tampered/undecrypted data, nullifying verify-before-decrypt. Fix: reject the request via handler.reject(DioException(...)) on SecurityException instead of proceeding. Same applies to onRequest encryption failures sending plaintext.",
+    "Test keys are identical to production keys — rest_crypto_test.dart hardcodes the same hex strings as .env; the test file is source-controlled and not gitignored. Rotate production keys immediately and supply distinct generated values for tests.",
+    "No key-length validation in _getAesKey / _getHmacKey — a wrong-length .env value produces a cryptic encrypt-package exception at call time. Add an explicit assertion: if (bytes.length != 32) throw StateError('REST_ENCRYPT_KEY must be 32 bytes (64 hex chars), got ${bytes.length}').",
+    "Non-constant-time HMAC comparison — sig != expectedSig uses Dart String equality which is not constant-time. Replace with a constant-time byte comparison; the crypto package already imported provides the necessary primitives."
+  ],
+  "reviewDoc": "d:\\kedotaapp\\.agents\\tasks\\2026-10-08-201545-review.md"
+}
