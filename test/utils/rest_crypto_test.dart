@@ -2,54 +2,159 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:kedotaapp/utils/rest_crypto.dart';
 
+// ── Dedicated test keys — NOT the production keys from .env ──────────────────
+// These are synthetic keys used only for unit tests.
+// Production keys live in .env and must never appear in source control.
+const _testEncryptKey =
+    'deadbeefcafebabe0123456789abcdef0123456789abcdef0123456789abcdef';  // 64 hex
+const _testHmacKey =
+    'feedfacedeadbeefcafebabefeedface0123456789abcdef0123456789abcdef01'; // 66 hex (≥64)
+
 void main() {
   setUpAll(() async {
-    // Load test env with known keys
     dotenv.testLoad(fileInput: '''
-REST_ENCRYPT_KEY=4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c
-REST_HMAC_KEY=a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+REST_ENCRYPT_KEY=$_testEncryptKey
+REST_HMAC_KEY=$_testHmacKey
 ''');
   });
 
-  group('RestCrypto', () {
-    test('encryptPayload -> decryptPayload round trip', () {
+  group('RestCrypto — full envelope', () {
+    test('encryptPayload / decryptPayload round-trip', () {
       final original = {'pin': '123456', 'phone': '+6282310699436'};
       final encrypted = RestCrypto.encryptPayload(original);
-      
-      expect(encrypted['data'], isNotNull);
-      expect(encrypted['iv'], isNotNull);
-      expect(encrypted['sig'], isNotNull);
+
+      // Envelope fields exist
+      expect(encrypted['data'], isA<String>());
+      expect(encrypted['iv'],   isA<String>());
+      expect(encrypted['sig'],  isA<String>());
+
+      // Plaintext is NOT visible in ciphertext
       expect(encrypted['data'], isNot(contains('123456')));
-      
+      expect(encrypted['data'], isNot(contains('+6282310699436')));
+
+      // Round-trip produces identical data
       final decrypted = RestCrypto.decryptPayload(encrypted);
-      expect(decrypted['pin'], equals('123456'));
+      expect(decrypted['pin'],   equals('123456'));
       expect(decrypted['phone'], equals('+6282310699436'));
     });
 
-    test('encryptSensitiveFields encrypts only sensitive fields', () {
-      final payload = {
-        'patient_name': 'John',
-        'phone': '+6282310699436',
-        'pin_hash': 'abc123hash',
-        'appointment_date': '2026-10-08',
-      };
-      final result = RestCrypto.encryptSensitiveFields(payload);
-      
-      expect(result['patient_name'], equals('John'));
-      expect(result['appointment_date'], equals('2026-10-08'));
-      expect(result['phone'], isA<Map>());
-      expect(result['pin_hash'], isA<Map>());
+    test('each encryption produces a different ciphertext (random IV)', () {
+      final payload = {'value': 'same'};
+      final enc1 = RestCrypto.encryptPayload(payload);
+      final enc2 = RestCrypto.encryptPayload(payload);
+      expect(enc1['data'], isNot(equals(enc2['data'])));
+      expect(enc1['iv'],   isNot(equals(enc2['iv'])));
     });
 
-    test('tampered payload throws SecurityException', () {
-      final original = {'data': 'test'};
-      final encrypted = RestCrypto.encryptPayload(original);
-      encrypted['data'] = 'TAMPERED_DATA';
-      
+    test('tampered data field throws SecurityException', () {
+      final encrypted = RestCrypto.encryptPayload({'x': 1});
+      encrypted['data'] = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
       expect(
         () => RestCrypto.decryptPayload(encrypted),
         throwsA(isA<SecurityException>()),
       );
+    });
+
+    test('tampered iv field throws SecurityException', () {
+      final encrypted = RestCrypto.encryptPayload({'x': 1});
+      encrypted['iv'] = 'AAAAAAAAAAAAAAAAAAAAAA==';
+      expect(
+        () => RestCrypto.decryptPayload(encrypted),
+        throwsA(isA<SecurityException>()),
+      );
+    });
+
+    test('tampered sig field throws SecurityException', () {
+      final encrypted = RestCrypto.encryptPayload({'x': 1});
+      encrypted['sig'] = '0' * 64;
+      expect(
+        () => RestCrypto.decryptPayload(encrypted),
+        throwsA(isA<SecurityException>()),
+      );
+    });
+  });
+
+  group('RestCrypto — selective field encryption', () {
+    test('only sensitive fields are encrypted', () {
+      final payload = {
+        'patient_name':     'John',         // NOT sensitive
+        'appointment_date': '2026-10-08',   // NOT sensitive
+        'phone':            '+6282310699436', // sensitive
+        'pin_hash':         'abc123hash',    // sensitive
+      };
+      final result = RestCrypto.encryptSensitiveFields(payload);
+
+      // Non-sensitive pass through unchanged
+      expect(result['patient_name'],     equals('John'));
+      expect(result['appointment_date'], equals('2026-10-08'));
+
+      // Sensitive fields are replaced with envelope maps
+      expect(result['phone'],    isA<Map>());
+      expect(result['pin_hash'], isA<Map>());
+
+      // Envelope contains the required keys
+      final phoneEnv = result['phone'] as Map;
+      expect(phoneEnv.containsKey('_enc'), isTrue);
+      expect(phoneEnv.containsKey('_iv'),  isTrue);
+      expect(phoneEnv.containsKey('_sig'), isTrue);
+    });
+
+    test('selective encrypt / decrypt round-trip', () {
+      final payload = {
+        'label': 'keep-me',
+        'pin':   'secret-pin',
+        'phone': '+6281234567890',
+      };
+      final encrypted = RestCrypto.encryptSensitiveFields(payload);
+      final decrypted = RestCrypto.decryptSensitiveFields(encrypted);
+
+      expect(decrypted['label'], equals('keep-me'));
+      expect(decrypted['pin'],   equals('secret-pin'));
+      expect(decrypted['phone'], equals('+6281234567890'));
+    });
+
+    test('tampered selective field throws SecurityException', () {
+      final encrypted = RestCrypto.encryptSensitiveFields({'pin': 'secret'});
+      // Corrupt the ciphertext of the pin envelope
+      (encrypted['pin'] as Map)['_enc'] = 'TAMPERED==';
+      expect(
+        () => RestCrypto.decryptSensitiveFields(encrypted),
+        throwsA(isA<SecurityException>()),
+      );
+    });
+  });
+
+  group('RestCrypto — key validation', () {
+    test('short AES key throws StateError', () {
+      dotenv.testLoad(fileInput: '''
+REST_ENCRYPT_KEY=tooshort
+REST_HMAC_KEY=$_testHmacKey
+''');
+      expect(
+        () => RestCrypto.encryptPayload({'x': 1}),
+        throwsA(isA<StateError>()),
+      );
+      // Restore valid keys for subsequent tests
+      dotenv.testLoad(fileInput: '''
+REST_ENCRYPT_KEY=$_testEncryptKey
+REST_HMAC_KEY=$_testHmacKey
+''');
+    });
+
+    test('empty HMAC key throws StateError', () {
+      dotenv.testLoad(fileInput: '''
+REST_ENCRYPT_KEY=$_testEncryptKey
+REST_HMAC_KEY=
+''');
+      expect(
+        () => RestCrypto.encryptPayload({'x': 1}),
+        throwsA(isA<StateError>()),
+      );
+      // Restore
+      dotenv.testLoad(fileInput: '''
+REST_ENCRYPT_KEY=$_testEncryptKey
+REST_HMAC_KEY=$_testHmacKey
+''');
     });
   });
 }
