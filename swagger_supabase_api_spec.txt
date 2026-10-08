@@ -17,6 +17,8 @@ info:
     - Edge Function client-error-log menerima metadata response HTTP 5xx dari client.
     - Password Supabase Auth disinkronkan setiap kali PIN diperbarui via
       Edge Function atau direct session update.
+    - Nomor telepon selalu disimpan dalam format +62xxx (dinormalisasi via PhoneValidator.normalizePhoneNumber() di createPhoneProfile, signInWithPhone, completeSocialProfile, dan createPhoneProfileAndPin).
+    - Perubahan nomor HP dan email dibatasi 1x/hari per field dan tidak bisa bersamaan pada hari yang sama (mutual exclusion). Email harus diverifikasi sebelum bisa diubah. OTP perubahan nomor HP = 4 digit.
 
     DATABASE SCHEMA:
     Tabel utama yang digunakan adalah `profiles` dengan struktur:
@@ -38,6 +40,8 @@ info:
     - profile_photo_url (String, opsional)
     - last_login_at (Timestamp)
     - created_at, updated_at (Timestamp)
+    - phone_changed_at (Timestamptz, nullable) — timestamp perubahan nomor HP terakhir; digunakan untuk rate-limit 1x/hari
+    - email_changed_at (Timestamptz, nullable) — timestamp perubahan email terakhir; digunakan untuk rate-limit 1x/hari
 
     Tabel `appointments` menyimpan satu jadwal terapi per record dan digunakan
     untuk Home, Riwayat, Progress, notifikasi, reschedule, dan pembayaran.
@@ -450,6 +454,13 @@ paths:
         Selalu menggunakan Bearer session token dari user yang sedang login.
         Untuk update pin_hash tanpa session (forgot PIN), gunakan Edge Function
         /functions/v1/update-pin.
+
+        Update phone dan email melalui alur Change Contact tunduk pada aturan:
+        - Nomor HP dan email masing-masing hanya dapat diubah 1x per hari (dicatat di phone_changed_at / email_changed_at).
+        - Nomor HP dan email tidak dapat diubah pada hari yang sama.
+        - Email hanya dapat diubah jika email_verified = true.
+        - Nomor HP baru dicek duplikat dengan multi-variant matching (+62, 62, 08, 8).
+        - OTP perubahan nomor HP menggunakan 4 digit.
       parameters:
         - in: path
           name: id
@@ -1473,6 +1484,18 @@ components:
           type: string
           format: date-time
           example: "2026-08-17T10:30:00Z"
+        phone_changed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp terakhir nomor HP diubah. Null jika belum pernah diubah. Digunakan untuk rate-limit perubahan nomor HP (1x/hari).
+          example: "2026-08-17T10:00:00Z"
+        email_changed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp terakhir email diubah. Null jika belum pernah diubah. Digunakan untuk rate-limit perubahan email (1x/hari).
+          example: "2026-08-17T12:00:00Z"
 
     UpdatePinRequest:
       type: object
@@ -1611,7 +1634,7 @@ components:
           example: 123e4567-e89b-12d3-a456-426614174000
         phone:
           type: string
-          description: Format +62xxx (atau tanpa +, tergantung input saat registrasi)
+          description: Format +62xxx. Selalu dinormalisasi ke format internasional +62 menggunakan PhoneValidator.normalizePhoneNumber() sebelum disimpan.
           example: "+6281234567890"
         full_name:
           type: string
@@ -1685,6 +1708,18 @@ components:
           type: string
           description: Kode medis pasien yang digenerate otomatis. Format KDT- + 12 karakter heksadesimal.
           example: "KDT-a3f8c1e20b94"
+        phone_changed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp terakhir nomor HP diubah. Null jika belum pernah diubah. Digunakan untuk rate-limit perubahan nomor HP (1x/hari).
+          example: "2026-08-17T10:00:00Z"
+        email_changed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp terakhir email diubah. Null jika belum pernah diubah. Digunakan untuk rate-limit perubahan email (1x/hari).
+          example: "2026-08-17T12:00:00Z"
 
     Appointment:
       type: object

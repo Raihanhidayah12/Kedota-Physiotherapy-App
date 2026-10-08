@@ -46,7 +46,8 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion |
 | 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
 | 📅 Reservasi Step-by-Step | 🟢 Selesai | 6 tahap dari data pasien hingga instruksi pembayaran, termasuk pilihan lokasi dan jadwal |
-| 🗺️ Peta Interaktif (Home Care) | 🟢 Selesai | `flutter_map` + sistem 3 tier Google Maps → Geoapify → OpenStreetMap; tile dan reverse/forward geocoding dengan fallback otomatis |
+| 🗺️ Peta Interaktif (Home Care) | 🟢 Selesai | `flutter_map` + sistem 3 tier Google Maps → Geoapify → OpenStreetMap; Google: `region=ID`, `language=id`, `components=country:ID`; Geoapify: `filter=countrycode:id`; tile dan reverse/forward geocoding dengan fallback otomatis |
+| 🔄 Ubah Kontak (HP/Email) | 🟢 Selesai | Ubah nomor HP atau email via OTP, masing-masing maks 1x/hari; tidak bisa mengubah keduanya di hari yang sama; email wajib terverifikasi sebelum bisa diubah |
 | 📧 Email Verification | 🟢 Selesai | Verifikasi email ditampilkan sebagai peringatan di profil; pengiriman OTP via Gmail SMTP produksi |
 | 🔄 Reschedule | 🟢 Selesai | Screen modern untuk ubah tanggal/jam, validasi slot, dan reminder baru |
 | 💳 DP & Pelunasan | 🟢 Selesai (Demo Gateway) | Card appointment tampilkan 2 tombol (Lihat Detail + Lunaskan) saat DP belum lunas |
@@ -241,8 +242,10 @@ Nominatim OpenStreetMap (gratis unlimited)
 **Environment:**
 ```dotenv
 GOOGLE_MAPS_API_KEY=<google-maps-api-key>
-GEOAPPIFY_API_KEY=<geoapify-api-key>
+GEOAPIFY_API_KEY=<geoapify-api-key>
 ```
+
+Gunakan `GEOAPIFY_API_KEY` (bukan `GEOAPPIFY_API_KEY`) di file `.env`.
 
 **Reliabilitas:** sistem multi-tier mencapai uptime ~99.9% — layanan premium digunakan saat tersedia, fallback gratis menjaga fungsionalitas saat terjadi gangguan.
 
@@ -261,6 +264,12 @@ GEOAPPIFY_API_KEY=<geoapify-api-key>
 **Change Contact Flow:**
 - Pengguna dapat mengganti nomor HP atau email melalui alur OTP verification yang komprehensif.
 - Setiap perubahan kontak memerlukan verifikasi OTP ke nomor/email baru sebelum tersimpan.
+- **Pembatasan frekuensi:** Nomor HP dan email masing-masing hanya dapat diubah **1x per hari**.
+- Nomor HP dan email **tidak dapat diubah pada hari yang sama** (mutual exclusion per hari).
+- Pengguna hanya dapat mengubah email jika **email sudah diverifikasi** (`email_verified = true`). Jika belum, ditampilkan info bottom sheet dan navigasi ke ChangeContactScreen diblokir.
+- OTP perubahan nomor HP menggunakan **4 digit** (bukan 6).
+- Saat menyimpan nomor baru atau email baru, sistem memeriksa duplikat dengan multi-variant phone matching (+62, 62, 08, 8) untuk nomor HP.
+- Kolom `phone_changed_at` dan `email_changed_at` (timestamptz) dicatat di tabel `profiles` saat perubahan berhasil.
 
 ---
 
@@ -340,6 +349,7 @@ PIN Verification → Lupa PIN
 | Google Account Picker | `signOut()` sebelum `signIn()` — dialog selalu muncul |
 | Biometric saat logout | Biometric aplikasi dan PIN lokal akun dinonaktifkan saat logout eksplisit; penguncian saat aplikasi berpindah/background tidak menghapus preferensi |
 | Service-Role Key | Hanya di Edge Function, tidak pernah di client |
+| Batas Perubahan Kontak | Nomor HP dan email masing-masing hanya bisa diubah 1x/hari; tidak bisa mengubah keduanya di hari yang sama; email wajib terverifikasi |
 
 ---
 
@@ -448,9 +458,13 @@ Kolom berikut merangkum kolom yang dipakai aplikasi, bukan dump lengkap dari dat
 | `address` | text | Alamat untuk reservasi |
 | `signup_method` | text | `phone` / `google` / `apple` |
 | `status` | text | `active` / `deactivated` / `recycled` |
+| `is_profile_complete` | boolean | Flag kelengkapan profil (bukan penentu utama routing) |
 | `medical_code` | text | Format `KDT-` + 12 karakter acak unik |
+| `email_verified` | boolean | Default `false`; `true` setelah pengguna memverifikasi email |
 | `last_login_at` | timestamptz | Deteksi akun dormant (>60 hari) |
 | `created_at` / `updated_at` | timestamptz | Timestamp |
+| `phone_changed_at` | timestamptz | *(nullable)* Timestamp terakhir nomor HP diubah; digunakan untuk rate-limit 1x/hari |
+| `email_changed_at` | timestamptz | *(nullable)* Timestamp terakhir email diubah; digunakan untuk rate-limit 1x/hari |
 
 ---
 
@@ -494,7 +508,7 @@ Salin `.env.example` menjadi `.env`, lalu isi:
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_ANON_KEY=<publishable-or-anon-key>
 GOOGLE_MAPS_API_KEY=<google-maps-api-key>
-GEOAPPIFY_API_KEY=<geoapify-api-key>
+GEOAPIFY_API_KEY=<geoapify-api-key>
 ```
 
 `.env` disertakan sebagai asset Flutter sehingga nilainya dapat dibaca dari aplikasi client. Gunakan hanya publishable/anon key di sini. GOOGLE_MAPS_API_KEY dan GEOAPIFY_API_KEY adalah kunci API opsional yang digunakan untuk sistem fallback peta pada alur reservasi homecare. Jika Google Maps tidak tersedia, aplikasi secara otomatis beralih ke Geoapify kemudian OpenStreetMap. Jangan masukkan service-role key atau secret provider ke client; Edge Functions menggunakan konfigurasi server Supabase.
@@ -693,6 +707,14 @@ ALTER TABLE appointments
   ADD COLUMN IF NOT EXISTS therapist_recommendation TEXT,
   ADD COLUMN IF NOT EXISTS therapist_sipf TEXT,
   ADD COLUMN IF NOT EXISTS therapist_photo_url TEXT;
+```
+
+Untuk mengaktifkan pembatasan frekuensi perubahan kontak (1x/hari per field, mutual exclusion), tambahkan kolom berikut ke tabel `profiles`:
+
+```sql
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS phone_changed_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS email_changed_at TIMESTAMPTZ;
 ```
 
 ---
