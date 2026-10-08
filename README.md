@@ -55,6 +55,7 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | ⏱️ Auto Expire | 🟢 Selesai | Janji `expired` 15 menit setelah waktu mulai |
 | 🔒 Proteksi Slot | 🟢 Selesai | Unique index mencegah dua janji aktif di slot yang sama |
 | 📋 Detail Riwayat Done | 🟢 Selesai | Tampilkan catatan klinis, skor progres (VAS/ROM/MMT/ODI), dan rekomendasi terapis dari DB |
+| 🔐 REST Payload Encryption (AES-256-CBC + HMAC-SHA256) | 🟢 Selesai | encryptPayload/decryptPayload + enkripsi selektif field sensitif + Dio interceptor |
 | 🚫 DP Hangus & No-Show | 🟢 Selesai | DP belum lunas hangus saat tidak hadir; pembayaran lunas dapat reschedule maks 24 jam |
 
 ---
@@ -350,6 +351,49 @@ PIN Verification → Lupa PIN
 | Biometric saat logout | Biometric aplikasi dan PIN lokal akun dinonaktifkan saat logout eksplisit; penguncian saat aplikasi berpindah/background tidak menghapus preferensi |
 | Service-Role Key | Hanya di Edge Function, tidak pernah di client |
 | Batas Perubahan Kontak | Nomor HP dan email masing-masing hanya bisa diubah 1x/hari; tidak bisa mengubah keduanya di hari yang sama; email wajib terverifikasi |
+| Enkripsi Payload REST | AES-256-CBC; envelope `{data, iv, sig}`; diterapkan otomatis via Dio interceptor |
+| Integritas Payload (HMAC) | HMAC-SHA256; perbandingan constant-time; tampered payload direjek |
+| Constant-time Comparison | `_constantTimeEquals` mencegah timing attack pada verifikasi HMAC |
+
+---
+
+### 17. 🔐 REST Payload Encryption
+
+Aplikasi menggunakan enkripsi AES-256-CBC + HMAC-SHA256 untuk melindungi payload REST pada endpoint sensitif. Implementasi terdiri dari dua lapisan:
+
+**Full Envelope (`encryptPayload` / `decryptPayload`)**
+
+Seluruh request body dienkripsi dan dikemas dalam envelope:
+```json
+{ "data": "<base64-ciphertext>", "iv": "<base64-iv>", "sig": "<hmac-hex>" }
+```
+- IV acak baru di setiap request (AES-256-CBC).
+- HMAC-SHA256 dihitung atas `data + iv` menggunakan `REST_HMAC_KEY`.
+- Signature diverifikasi sebelum dekripsi; jika tidak cocok, `SecurityException` dilempar.
+- Interceptor memanggil `handler.reject()` — payload yang telah diubah tidak pernah diteruskan ke aplikasi.
+
+**Enkripsi Selektif (`encryptSensitiveFields` / `decryptSensitiveFields`)**
+
+Hanya field sensitif tertentu yang dienkripsi per-field:
+- Field: `pin_hash`, `pin`, `patient_nik`, `patient_phone`, `phone`, `new_pin_hash`, `new_pin`
+- Field lain tetap plaintext sehingga routing dan non-sensitive logic tidak berubah.
+
+**Dio Interceptor (`RestCryptoInterceptor`)**
+
+- Mendaftar di `supabase_auth_service.dart` `apiClient` getter.
+- Endpoint yang dienkripsi otomatis:
+  - `/functions/v1/update-pin`
+  - `/functions/v1/client-error-log`
+- Menambahkan header `X-Encrypted: 1` dan `X-Encryption: AES-256-CBC` pada request terenkripsi.
+- Mendekripsi response secara otomatis.
+
+**Keamanan**
+
+- Perbandingan HMAC menggunakan constant-time (`_constantTimeEquals`) — mencegah timing attack.
+- Validasi panjang kunci: `REST_ENCRYPT_KEY` wajib 64 hex chars (32 byte), `REST_HMAC_KEY` ≥ 64 hex chars.
+- Kunci test bersifat sintetis dan tidak identik dengan kunci produksi.
+
+**Unit Test:** `test/utils/rest_crypto_test.dart` — 10 test, semua passing: round-trip, random IV, 3x tamper detection (data/iv/sig), enkripsi selektif, tamper selektif, validasi kunci x2.
 
 ---
 
@@ -482,6 +526,7 @@ Kolom berikut merangkum kolom yang dipakai aplikasi, bukan dump lengkap dari dat
 | Local Storage | `shared_preferences` |
 | Simpan QR | `file_saver` 0.6.0 + pemilih file native pada platform yang mendukung |
 | Security | SHA-256 PIN Hashing + Phone Masking |
+| Enkripsi REST | `encrypt` ^5.0.3 + `crypto` (AES-256-CBC + HMAC-SHA256) |
 | Server Functions | Supabase Edge Functions (Deno Runtime) |
 | Multi-Language | `AppLanguageScope` (Indonesia default + English) |
 | Observability | Dio interceptor + Flutter error handler + `client-error-log` Edge Function |
@@ -509,9 +554,11 @@ SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_ANON_KEY=<publishable-or-anon-key>
 GOOGLE_MAPS_API_KEY=<google-maps-api-key>
 GEOAPIFY_API_KEY=<geoapify-api-key>
+REST_ENCRYPT_KEY=<64-hex-char AES-256 key>
+REST_HMAC_KEY=<64+-hex-char HMAC-SHA256 key>
 ```
 
-`.env` disertakan sebagai asset Flutter sehingga nilainya dapat dibaca dari aplikasi client. Gunakan hanya publishable/anon key di sini. GOOGLE_MAPS_API_KEY dan GEOAPIFY_API_KEY adalah kunci API opsional yang digunakan untuk sistem fallback peta pada alur reservasi homecare. Jika Google Maps tidak tersedia, aplikasi secara otomatis beralih ke Geoapify kemudian OpenStreetMap. Jangan masukkan service-role key atau secret provider ke client; Edge Functions menggunakan konfigurasi server Supabase.
+`.env` disertakan sebagai asset Flutter sehingga nilainya dapat dibaca dari aplikasi client. Gunakan hanya publishable/anon key di sini. GOOGLE_MAPS_API_KEY dan GEOAPIFY_API_KEY adalah kunci API opsional yang digunakan untuk sistem fallback peta pada alur reservasi homecare. Jika Google Maps tidak tersedia, aplikasi secara otomatis beralih ke Geoapify kemudian OpenStreetMap. Jangan masukkan service-role key atau secret provider ke client; Edge Functions menggunakan konfigurasi server Supabase. REST_ENCRYPT_KEY (64 hex chars, 32 byte) dan REST_HMAC_KEY (minimal 64 hex chars) digunakan untuk enkripsi AES-256-CBC dan verifikasi HMAC-SHA256 payload pada endpoint sensitif. Jangan masukkan nilai kunci produksi ke repository.
 
 ### Menjalankan
 
@@ -559,6 +606,8 @@ Build iOS hanya dapat dibuat di macOS/Xcode. Android release saat ini menggunaka
 | `lib/l10n/app_language.dart` | Kamus Bahasa Indonesia dan English |
 | `lib/widgets/` | Komponen reusable, network guard, error state, dan bottom sheet |
 | `lib/utils/` | Snackbar, validasi nomor telepon, dan kode booking |
+| `lib/utils/rest_crypto.dart` | AES-256-CBC enkripsi/dekripsi payload REST + validasi kunci + SecurityException |
+| `lib/utils/rest_crypto_interceptor.dart` | Dio interceptor otomatis enkripsi request & dekripsi response endpoint sensitif |
 | `supabase/functions/` | Edge Functions `update-pin` dan `client-error-log` |
 | `test/`, `integration_test/` | Unit/widget test dan integration test |
 
@@ -622,7 +671,9 @@ lib/
 └── utils/
     ├── app_snackbar.dart
     ├── booking_code.dart
-    └── phone_validator.dart
+    ├── phone_validator.dart
+    ├── rest_crypto.dart
+    └── rest_crypto_interceptor.dart
 ```
 
 ---

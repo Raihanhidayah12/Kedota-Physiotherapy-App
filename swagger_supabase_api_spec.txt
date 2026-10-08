@@ -55,6 +55,13 @@ info:
     Konfigurasi: GOOGLE_MAPS_API_KEY dan GEOAPIFY_API_KEY di file .env client.
     Pergantian layanan terjadi otomatis saat tier utama gagal, tanpa downtime bagi pengguna.
 
+    Enkripsi REST Payload:
+    Enkripsi AES-256-CBC + HMAC-SHA256 diterapkan di lapisan Dio interceptor (RestCryptoInterceptor)
+    untuk endpoint sensitif. Format envelope: {data: <base64-ciphertext>, iv: <base64-iv>, sig: <hmac-hex>}.
+    Field sensitif (phone, pin_hash, NIK) juga mendukung enkripsi per-field selektif.
+    Payload yang terdeteksi telah diubah (HMAC tidak cocok) langsung direjek oleh interceptor.
+    Env vars yang dibutuhkan: REST_ENCRYPT_KEY (64 hex chars) dan REST_HMAC_KEY (>=64 hex chars).
+
     Email & Notifikasi:
     - OTP dikirim via Gmail SMTP yang dikonfigurasi di Supabase Auth (production).
     - Verifikasi email ditampilkan sebagai peringatan di profil (bukan blocking di registrasi).
@@ -640,6 +647,9 @@ paths:
         - Service-role key hanya di server-side
         - Cegah user update PIN user lain (jika punya session)
         - Rollback otomatis jika sync auth password gagal
+        - Request body dienkripsi otomatis dengan AES-256-CBC oleh RestCryptoInterceptor sebelum dikirim.
+        - Response didekripsi otomatis. Header X-Encrypted: 1 dan X-Encryption: AES-256-CBC ditambahkan.
+        - HMAC-SHA256 diverifikasi; payload yang terdeteksi diubah direjek (handler.reject()) oleh interceptor.
         
         **Alur:**
         1. Validasi Authorization header (JWT atau anon key)
@@ -667,6 +677,19 @@ paths:
         ```
       security:
         - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Encrypted
+          schema:
+            type: string
+            example: "1"
+          description: Ditambahkan otomatis oleh RestCryptoInterceptor. Nilai '1' menandai body terenkripsi AES-256-CBC.
+        - in: header
+          name: X-Encryption
+          schema:
+            type: string
+            example: AES-256-CBC
+          description: Algoritma enkripsi yang digunakan. Ditambahkan otomatis oleh RestCryptoInterceptor.
       requestBody:
         required: true
         content:
@@ -1191,6 +1214,22 @@ paths:
       description: >-
         Menerima metadata aman dari Dio interceptor ketika client menerima
         status HTTP 500-599. Token, password, dan body request tidak dikirim.
+        Request body dienkripsi otomatis dengan AES-256-CBC oleh RestCryptoInterceptor sebelum dikirim.
+        Response didekripsi otomatis. Header X-Encrypted: 1 dan X-Encryption: AES-256-CBC ditambahkan.
+        HMAC-SHA256 diverifikasi; payload yang terdeteksi diubah direjek oleh interceptor.
+      parameters:
+        - in: header
+          name: X-Encrypted
+          schema:
+            type: string
+            example: "1"
+          description: Ditambahkan otomatis oleh RestCryptoInterceptor. Nilai '1' menandai body terenkripsi AES-256-CBC.
+        - in: header
+          name: X-Encryption
+          schema:
+            type: string
+            example: AES-256-CBC
+          description: Algoritma enkripsi yang digunakan. Ditambahkan otomatis oleh RestCryptoInterceptor.
       requestBody:
         required: true
         content:
@@ -1257,6 +1296,16 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Supabase JWT session token atau service-role key
+    restEncryptionKey:
+      type: apiKey
+      in: header
+      name: X-Encrypted
+      description: >-
+        Menandai request yang body-nya telah dienkripsi dengan AES-256-CBC.
+        Nilai '1' berarti body adalah envelope {data, iv, sig}.
+        Kunci enkripsi: REST_ENCRYPT_KEY (env var, 64 hex chars / 32 byte).
+        Kunci HMAC: REST_HMAC_KEY (env var, minimal 64 hex chars).
+        Ditambahkan otomatis oleh RestCryptoInterceptor; tidak perlu di-set manual.
 
   schemas:
     SignupRequest:
