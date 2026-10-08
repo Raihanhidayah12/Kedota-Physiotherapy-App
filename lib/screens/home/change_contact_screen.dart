@@ -174,7 +174,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   }
 
   void _onOtpChanged() {
-    if (_otpCtr.text.length == 6 && mounted) {
+    if (_otpCtr.text.length == 4 && mounted) {
       _verifyOtp();
     }
     if (mounted) {
@@ -952,7 +952,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
+                  LengthLimitingTextInputFormatter(4),
                 ],
               ),
             ),
@@ -967,7 +967,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
       onTap: () => _otpFocus.requestFocus(),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(6, (index) {
+        children: List.generate(4, (index) {
           final filled = index < _otpCtr.text.length;
           final active = index == _otpCtr.text.length;
           final char = filled ? _otpCtr.text[index] : '';
