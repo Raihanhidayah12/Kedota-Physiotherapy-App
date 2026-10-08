@@ -7,6 +7,7 @@ import '../../l10n/app_language.dart';
 import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../utils/app_snackbar.dart';
+import '../../utils/phone_validator.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
 import '../auth/email_verification_dialog.dart';
@@ -141,10 +142,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       }
 
       final rawPhone = profile['phone']?.toString().trim() ?? '';
-      final displayPhone = rawPhone.isNotEmpty
-          ? '+62 ${rawPhone.replaceAll(RegExp(r'^\+?62'), '')}'
-          : '-';
-
+      _phone = rawPhone.isNotEmpty ? PhoneValidator.normalizePhoneNumber(rawPhone) : null;
       setState(() {
         _nameCtr.text = profile['full_name']?.toString().trim() ?? '';
         _nikCtr.text = profile['nik']?.toString().trim() ?? '';
@@ -152,7 +150,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         _email = profile['email']?.toString().trim();
         _emailVerified = profile['email_verified'] == true;
         _medicalCode = profile['medical_code']?.toString().trim() ?? '-';
-        _phone = displayPhone;
+        _phone = rawPhone.isNotEmpty ? PhoneValidator.normalizePhoneNumber(rawPhone) : null;
         _birthDate = bd;
         _gender = profile['gender']?.toString();
         final rawUrl = profile['profile_photo_url']?.toString().trim() ?? '';
@@ -924,7 +922,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                           // 6. Nomor Telepon — tappable → ubah nomor
                           _infoRow(
                             icon: Icons.phone_iphone_rounded,
-                            label: t(context, 'phoneNumber'),
+                            label: t(context, 'phoneLabel'),
                             value: _displayPhone,
                             showChevron: true,
                             onTap: () async {

@@ -83,10 +83,10 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   void initState() {
     super.initState();
     if (widget.currentValue != null) {
-      // Strip +62 prefix for phone pre-fill
+      // Strip +62 prefix (and optional space) for phone pre-fill
       final v = widget.currentValue!;
       _inputCtr.text = _isPhone
-          ? v.replaceFirst(RegExp(r'^\+?62'), '')
+          ? v.replaceFirst(RegExp(r'^\+?62\s*'), '').trim()
           : v;
     }
     _loadOtpLimits();
@@ -288,7 +288,15 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
           ? profile['phone']?.toString().trim() ?? ''
           : profile['email']?.toString().trim() ?? '';
 
-      if (dbValue != _currentValue) {
+      // Normalize both values before comparing for phone
+      final normalizedDb = _isPhone
+          ? PhoneValidator.normalizePhoneNumber(dbValue)
+          : dbValue;
+      final normalizedCurrent = _isPhone
+          ? PhoneValidator.normalizePhoneNumber(_currentValue)
+          : _currentValue;
+
+      if (normalizedDb != normalizedCurrent) {
         if (!mounted) return;
         setState(() {
           _isLoading = false;
