@@ -369,23 +369,68 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
       if (user == null) throw Exception('Not logged in');
 
       // Jika ubah email, cek apakah nomor telepon sudah diubah hari ini
+      // Jika ubah phone, cek apakah phone atau email sudah diubah hari ini
+      final todayStr = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+      final profileCheck = await svc.client
+          .from('profiles')
+          .select('phone_changed_at, email_changed_at')
+          .eq('id', user.id)
+          .maybeSingle();
+
       if (!_isPhone) {
-        final todayStr = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-        final profileCheck = await svc.client
-            .from('profiles')
-            .select('phone_changed_at')
-            .eq('id', user.id)
-            .maybeSingle();
+        // Cek: email tidak boleh diubah kalau phone sudah diubah hari ini
         final phoneChangedAt = profileCheck?['phone_changed_at']?.toString();
         if (phoneChangedAt != null) {
-          final phoneChangedDate = DateTime.tryParse(phoneChangedAt);
-          if (phoneChangedDate != null &&
-              phoneChangedDate.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+          final d = DateTime.tryParse(phoneChangedAt);
+          if (d != null && d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
             if (!mounted) return;
             setState(() {
               _isLoading = false;
               _isError = true;
               _errorMsg = t(context, 'emailBlockedPhoneChangedToday');
+            });
+            return;
+          }
+        }
+        // Cek: email hanya bisa diubah 1x sehari
+        final emailChangedAt = profileCheck?['email_changed_at']?.toString();
+        if (emailChangedAt != null) {
+          final d = DateTime.tryParse(emailChangedAt);
+          if (d != null && d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+              _isError = true;
+              _errorMsg = t(context, 'emailChangedTodayLimit');
+            });
+            return;
+          }
+        }
+      } else {
+        // Cek: phone hanya bisa diubah 1x sehari
+        final phoneChangedAt = profileCheck?['phone_changed_at']?.toString();
+        if (phoneChangedAt != null) {
+          final d = DateTime.tryParse(phoneChangedAt);
+          if (d != null && d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+              _isError = true;
+              _errorMsg = t(context, 'phoneChangedTodayLimit');
+            });
+            return;
+          }
+        }
+        // Cek: phone tidak boleh diubah kalau email sudah diubah hari ini
+        final emailChangedAt = profileCheck?['email_changed_at']?.toString();
+        if (emailChangedAt != null) {
+          final d = DateTime.tryParse(emailChangedAt);
+          if (d != null && d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+            if (!mounted) return;
+            setState(() {
+              _isLoading = false;
+              _isError = true;
+              _errorMsg = t(context, 'phoneBlockedEmailChangedToday');
             });
             return;
           }
@@ -513,6 +558,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
               .from('profiles')
               .update({
                 'email': _newValue,
+                'email_changed_at': DateTime.now().toUtc().toIso8601String(),
                 'updated_at': DateTime.now().toUtc().toIso8601String(),
               })
               .eq('id', user.id);
