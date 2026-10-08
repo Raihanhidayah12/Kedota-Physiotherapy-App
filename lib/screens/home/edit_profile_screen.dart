@@ -959,6 +959,17 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                             value: _maskEmail(_email),
                             showChevron: true,
                             onTap: () async {
+                              // Block jika email belum diverifikasi
+                              if (!_emailVerified) {
+                                CustomBottomSheet.show(
+                                  context,
+                                  type: BottomSheetType.info,
+                                  title: t(context, 'emailNotVerified'),
+                                  subtitle: t(context, 'emailMustVerifyFirst'),
+                                  singleButtonText: t(context, 'closeBtn'),
+                                );
+                                return;
+                              }
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) => ChangeContactScreen(
