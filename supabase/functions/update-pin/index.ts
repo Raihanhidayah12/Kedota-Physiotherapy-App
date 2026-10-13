@@ -1,10 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptPayload, encryptPayload } from "../_shared/rest_crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-encrypted, x-encryption",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Expose-Headers": "X-Encrypted, X-Encryption",
 };
 
 Deno.serve(async (req) => {
@@ -24,18 +26,26 @@ Deno.serve(async (req) => {
     }
     const userJwt = authHeader.replace("Bearer ", "");
 
-    // 2. Parse seluruh body sekaligus
-    // Body fields:
-    //   profile_id  : UUID profil yang akan diupdate
-    //   new_pin_hash: SHA-256 hash dari PIN baru (untuk disimpan di profiles)
-    //   new_pin     : PIN baru plaintext (untuk disync ke Supabase Auth password)
-    const body = await req.json() as {
+    // PIN-related request data must never be accepted as plaintext.
+    if (req.headers.get("X-Encrypted") !== "1") {
+      return new Response(
+        JSON.stringify({ error: "Encrypted request body required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // 2. Verify and decrypt the signed payload before parsing user data.
+    const envelope = await req.json() as {
+      data?: string;
+      iv?: string;
+      sig?: string;
+    };
+    const body = await decryptPayload(envelope);
+    const { profile_id, new_pin_hash, new_pin } = body as {
       profile_id?: string;
       new_pin_hash?: string;
       new_pin?: string;
     };
-
-    const { profile_id, new_pin_hash, new_pin } = body;
 
     if (!profile_id || !new_pin_hash || !new_pin) {
       return new Response(
@@ -125,10 +135,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    return new Response(
-      JSON.stringify({ success: true, profile: updatedProfile }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    const responseEnvelope = await encryptPayload({
+      success: true,
+      profile: updatedProfile,
+    });
+    return new Response(JSON.stringify(responseEnvelope), {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+        "X-Encrypted": "1",
+        "X-Encryption": "AES-256-CBC",
+      },
+    });
   } catch (err) {
     console.error("Unexpected error:", err);
     return new Response(

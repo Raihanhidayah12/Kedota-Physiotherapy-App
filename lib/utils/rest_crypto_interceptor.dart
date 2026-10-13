@@ -2,6 +2,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'rest_crypto.dart';
 
+/// Creates a Dio client that encrypts and decrypts the configured REST payloads.
+Dio createRestCryptoDio({Dio? dio}) {
+  final client = dio ?? Dio();
+  if (!client.interceptors.any((interceptor) => interceptor is RestCryptoInterceptor)) {
+    client.interceptors.add(RestCryptoInterceptor());
+  }
+  return client;
+}
+
 /// Dio interceptor that transparently encrypts outgoing request bodies
 /// and decrypts incoming response bodies for configured sensitive endpoints.
 ///

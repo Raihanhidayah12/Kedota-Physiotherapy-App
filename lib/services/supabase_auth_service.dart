@@ -26,7 +26,15 @@ String get _supabasePublishableKey =>
     );
 
 class SupabaseAuthService {
+  SupabaseAuthService({Dio? updatePinDio})
+    : _updatePinDio = updatePinDio == null
+          ? null
+          : createRestCryptoDio(dio: updatePinDio);
+
   SupabaseClient? _client;
+  Dio? _updatePinDio;
+
+  Dio get _encryptedUpdatePinDio => _updatePinDio ??= createRestCryptoDio();
 
   SupabaseClient get client {
     if (_client != null) {
@@ -1307,8 +1315,7 @@ class SupabaseAuthService {
       final token =
           client.auth.currentSession?.accessToken ?? _supabasePublishableKey;
 
-      final dio = Dio();
-      final response = await dio.post(
+      final response = await _encryptedUpdatePinDio.post(
         _updatePinFunctionUrl,
         data: {
           'profile_id': profileId,

@@ -19,11 +19,15 @@ This directory contains Supabase Edge Functions for the Kedota Physiotherapy App
 **Request Body:**
 ```json
 {
-  "profile_id": "uuid-of-user-profile",
-  "new_pin_hash": "sha256-hash-of-new-pin",
-  "new_pin": "123456"
+  "data": "base64-AES-256-CBC-ciphertext",
+  "iv": "base64-random-16-byte-IV",
+  "sig": "hex-HMAC-SHA256"
 }
 ```
+
+Requests must include `X-Encrypted: 1` and `X-Encryption: AES-256-CBC`.
+The success response uses the same encrypted envelope and sets `X-Encrypted: 1`.
+The Edge Function rejects plaintext request bodies.
 
 **Response (Success):**
 ```json
@@ -106,7 +110,15 @@ Edge Functions have access to these environment variables automatically:
 - `SUPABASE_SERVICE_ROLE_KEY` - Service role key (secure)
 - `SUPABASE_ANON_KEY` - Anonymous key
 
-No additional configuration needed!
+Set `REST_ENCRYPT_KEY` (exactly 64 hex characters) and `REST_HMAC_KEY` (at
+least 64 hex characters) as Supabase Edge Function secrets. They must match the
+app's configured values for the envelope protocol to interoperate. Never commit
+production keys to source control. Because any symmetric key shipped inside a
+mobile app can be extracted, this mechanism is defense-in-depth only; HTTPS and
+server-side authorization remain mandatory.
+
+Deploy the updated client and Edge Function together. Older clients that send
+plaintext to `update-pin` will be rejected.
 
 ## Adding New Functions
 
