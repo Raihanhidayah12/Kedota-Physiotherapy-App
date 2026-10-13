@@ -128,6 +128,8 @@ Sign In → Continue with Google → PIN Verification → Home Screen
 
 ### 4a. 🏠 Beranda & Pengingat Kelengkapan Profil
 
+- Bagian atas Beranda menampilkan banner promo gradasi teal dengan ilustrasi fisioterapi, teks diskon 30% untuk pengguna baru, dan tombol notifikasi.
+- Teks banner mengikuti bahasa aplikasi (Bahasa Indonesia atau English).
 - Pengingat melengkapi profil muncul untuk akun yang belum memiliki NIK dan alamat lengkap.
 - Tombol silang menyimpan status dismiss per akun di device, sehingga pengingat tidak muncul lagi setelah ditutup.
 - Pengingat juga tidak ditampilkan lagi jika akun sudah memiliki janji temu.
@@ -426,6 +428,7 @@ App dibuka
 | Lupa PIN | Header teal (logo KEDOTA) + white card bawah |
 | Edit Profil | White card layout + avatar gradient + dialogs |
 | Settings | Header gradient teal + profile card + menu list |
+| Beranda | Banner promo gradasi teal dengan ilustrasi fisioterapi, promo diskon 30% untuk pengguna baru, dan tombol notifikasi |
 | Reservasi | 6 tahap dengan transisi dan animasi isi, form pasien, jadwal/lokasi, sesi, pilihan pembayaran, dan instruksi pembayaran |
 | Detail Riwayat Done | Card data klinis + grid progres 2×2 + banner rekomendasi |
 

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -16,7 +15,6 @@ import 'upcoming_appointment_card.dart';
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _c700 = Color(0xFF007F78);
 const _c500 = Color(0xFF00A79D);
-const _c300 = Color(0xFF5ECFC9);
 const _c100 = Color(0xFFD4F5F3);
 const _bg = Color(0xFFF0F7F7);
 const _ink = Color(0xFF0E2C2F);
@@ -32,25 +30,17 @@ class HomeBody extends StatefulWidget {
 }
 
 class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
-  String _fullName = '';
   String? _profileImageUrl;
   // header expand animation
   late AnimationController _headerCtrl;
   late Animation<double> _headerExpand; // height expand from top-to-bottom
-  // header sub-element animations
-  late Animation<double> _greetFade;
-  late Animation<Offset> _greetSlide;
-  late Animation<double> _avatarFade;
-  late Animation<Offset> _avatarSlide;
   // staggered section animations
   late AnimationController _staggerCtrl;
   late List<Animation<double>> _sectionFades;
   late List<Animation<Offset>> _sectionSlides;
-  // promo / search
-  Timer? _promoTimer;
+  // search
   late TextEditingController _searchCtrl;
   late FocusNode _searchFocus;
-  int _promoPage = 0;
   bool _isSearching = false;
   String _searchQuery = '';
   Map<String, dynamic>? _upcomingAppointment;
@@ -75,31 +65,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(parent: _headerCtrl, curve: Curves.easeOutCubic));
-
-    _greetFade = CurvedAnimation(
-      parent: _headerCtrl,
-      curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
-    );
-    _greetSlide = Tween<Offset>(begin: const Offset(-0.25, 0), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _headerCtrl,
-            curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
-          ),
-        );
-
-    // avatar + notif: slides in from right, starts at 100ms (0.11), ends at 600ms
-    _avatarFade = CurvedAnimation(
-      parent: _headerCtrl,
-      curve: const Interval(0.11, 0.66, curve: Curves.easeOut),
-    );
-    _avatarSlide = Tween<Offset>(begin: const Offset(0.3, 0), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _headerCtrl,
-            curve: const Interval(0.11, 0.66, curve: Curves.easeOutCubic),
-          ),
-        );
 
     // stagger: total 900 ms, each section 300 ms window, offset 120 ms
     _staggerCtrl = AnimationController(
@@ -130,10 +95,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       );
     });
 
-    _promoTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!mounted) return;
-      setState(() => _promoPage = (_promoPage + 1) % 2);
-    });
     _searchCtrl = TextEditingController();
     _searchFocus = FocusNode();
 
@@ -214,7 +175,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   void dispose() {
     _headerCtrl.dispose();
     _staggerCtrl.dispose();
-    _promoTimer?.cancel();
     _searchCtrl.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -238,10 +198,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       final user = service.client.auth.currentUser;
       final profile = await service.checkUserProfileExists();
       final metadata = user?.userMetadata ?? <String, dynamic>{};
-      final profileName = profile?['full_name']?.toString().trim() ?? '';
-      final metadataName = (metadata['full_name'] ?? metadata['name'])
-          ?.toString()
-          .trim();
       final persistedImageUrl = profile?['profile_photo_url']
           ?.toString()
           .trim();
@@ -260,14 +216,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
             metadata['photo_url'],
           ]);
       if (!mounted) return;
-      setState(() {
-        _fullName = profileName.isNotEmpty
-            ? profileName
-            : (metadataName?.isNotEmpty == true
-                  ? metadataName!
-                  : t(context, 'patientName'));
-        _profileImageUrl = imageUrl;
-      });
+      setState(() => _profileImageUrl = imageUrl);
     } catch (e) {
       debugPrint('Home profile load failed: $e');
     }
@@ -327,15 +276,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     return null;
   }
 
-  void _handleProfileImageError() {
-    if (!mounted || _profileImageUrl == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() => _profileImageUrl = null);
-    });
-  }
-
-  String get _firstName => _fullName.split(' ').first;
-
   // ── build ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -354,8 +294,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      const SizedBox(height: 20),
-                      _fadeSlide(0, _buildPromoTicker()),
                       const SizedBox(height: 28),
                       _fadeSlide(
                         1,
@@ -418,84 +356,72 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
         },
         child: Container(
           margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          height: 108,
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFD9F4F0), Color(0xFF83D8CF)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: _ink.withValues(alpha: 0.05),
-                blurRadius: 14,
-                offset: const Offset(0, 5),
+                color: _ink.withValues(alpha: 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Stack(
             children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  MediaQuery.of(context).padding.top + 16,
-                  20,
-                  28,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        // Avatar sits beside the greeting, matching the reference layout.
-                        FadeTransition(
-                          opacity: _avatarFade,
-                          child: SlideTransition(
-                            position: _avatarSlide,
-                            child: _buildAvatar(),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FadeTransition(
-                            opacity: _greetFade,
-                            child: SlideTransition(
-                              position: _greetSlide,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    t(context, 'welcomeGreeting'),
-                                    style: const TextStyle(
-                                      color: _c700,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _firstName,
-                                    style: const TextStyle(
-                                      color: _ink,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        FadeTransition(
-                          opacity: _avatarFade,
-                          child: SlideTransition(
-                            position: _avatarSlide,
-                            child: _buildNotifButton(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                  ],
+              Positioned(
+                right: -4,
+                bottom: -12,
+                child: Image.asset(
+                  'assets/image/Boarding/image 18.png',
+                  width: 142,
+                  height: 126,
+                  fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 96, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t(context, 'promoNewPatientTitle'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _c500,
+                          fontSize: 21,
+                          height: 1.1,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        t(context, 'promoNewPatientSubtitle'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _ink,
+                          fontSize: 12,
+                          height: 1.2,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(top: 10, right: 10, child: _buildNotifButton()),
             ],
           ),
         ),
@@ -540,33 +466,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     ),
   );
 
-  Widget _buildAvatar() => Container(
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      border: Border.all(color: _c100, width: 2),
-      boxShadow: [
-        BoxShadow(
-          color: _ink.withValues(alpha: 0.12),
-          blurRadius: 8,
-          offset: const Offset(0, 3),
-        ),
-      ],
-    ),
-    child: CircleAvatar(
-      radius: 20,
-      backgroundColor: _c300,
-      backgroundImage: _profileImageUrl == null
-          ? null
-          : NetworkImage(_profileImageUrl!),
-      onBackgroundImageError: _profileImageUrl == null
-          ? null
-          : (_, _) => _handleProfileImageError(),
-      child: _profileImageUrl == null
-          ? const Icon(Icons.person, color: Colors.white, size: 22)
-          : null,
-    ),
-  );
-
   // ── search data & overlay ─────────────────────────────────────────────────
 
   List<({IconData icon, String label, String desc, Color color})>
@@ -598,18 +497,9 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   ];
 
   List<({String name, String spec})> get _searchableTherapists => [
-    (
-      name: 'Marvin McKinney',
-      spec: t(context, 'specGeneralPhysio'),
-    ),
-    (
-      name: 'Sinta Dewi',
-      spec: t(context, 'specPostOpRehab'),
-    ),
-    (
-      name: 'Budi Santoso',
-      spec: t(context, 'specSportsPhysio'),
-    ),
+    (name: 'Marvin McKinney', spec: t(context, 'specGeneralPhysio')),
+    (name: 'Sinta Dewi', spec: t(context, 'specPostOpRehab')),
+    (name: 'Budi Santoso', spec: t(context, 'specSportsPhysio')),
     (name: 'Rina Kusuma', spec: t(context, 'specRelaxation')),
   ];
 
@@ -864,38 +754,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       ],
     );
   }
-
-  // ── promo ticker ──────────────────────────────────────────────────────────
-  Widget _buildPromoTicker() => SizedBox(
-    height: 22,
-    child: Center(
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 450),
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.35),
-              end: Offset.zero,
-            ).animate(animation),
-            child: child,
-          ),
-        ),
-        child: Text(
-          _promoPage == 0
-              ? t(context, 'promoTickerPackage')
-              : t(context, 'promoTickerConsultation'),
-          key: ValueKey(_promoPage),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: _c500,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    ),
-  );
 
   // ── section row ───────────────────────────────────────────────────────────
   Widget _buildSectionRow(
@@ -1199,9 +1057,13 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       romScore: _nullableInt(appointment['rom_score']),
       mmtScore: _nullableInt(appointment['mmt_score']),
       odiScore: _nullableInt(appointment['odi_score']),
-      therapistRecommendation: _nullIfEmpty(appointment['therapist_recommendation']?.toString()),
+      therapistRecommendation: _nullIfEmpty(
+        appointment['therapist_recommendation']?.toString(),
+      ),
       therapistSipf: _nullIfEmpty(appointment['therapist_sipf']?.toString()),
-      therapistPhotoUrl: _nullIfEmpty(appointment['therapist_photo_url']?.toString()),
+      therapistPhotoUrl: _nullIfEmpty(
+        appointment['therapist_photo_url']?.toString(),
+      ),
     );
   }
 
@@ -1247,9 +1109,13 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       romScore: _nullableInt(appointment['rom_score']),
       mmtScore: _nullableInt(appointment['mmt_score']),
       odiScore: _nullableInt(appointment['odi_score']),
-      therapistRecommendation: _nullIfEmpty(appointment['therapist_recommendation']?.toString()),
+      therapistRecommendation: _nullIfEmpty(
+        appointment['therapist_recommendation']?.toString(),
+      ),
       therapistSipf: _nullIfEmpty(appointment['therapist_sipf']?.toString()),
-      therapistPhotoUrl: _nullIfEmpty(appointment['therapist_photo_url']?.toString()),
+      therapistPhotoUrl: _nullIfEmpty(
+        appointment['therapist_photo_url']?.toString(),
+      ),
     );
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => AppointmentDetailScreen(item: item)),
@@ -1299,9 +1165,13 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       romScore: _nullableInt(appointment['rom_score']),
       mmtScore: _nullableInt(appointment['mmt_score']),
       odiScore: _nullableInt(appointment['odi_score']),
-      therapistRecommendation: _nullIfEmpty(appointment['therapist_recommendation']?.toString()),
+      therapistRecommendation: _nullIfEmpty(
+        appointment['therapist_recommendation']?.toString(),
+      ),
       therapistSipf: _nullIfEmpty(appointment['therapist_sipf']?.toString()),
-      therapistPhotoUrl: _nullIfEmpty(appointment['therapist_photo_url']?.toString()),
+      therapistPhotoUrl: _nullIfEmpty(
+        appointment['therapist_photo_url']?.toString(),
+      ),
     );
     final paid = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => SettlePaymentScreen(appointment: item)),
@@ -1384,7 +1254,7 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       key: 'painScaleDropdown',
       yLabelKey: 'painLevel',
       data: [9.0, 8.5, 7.8, 7.0, 6.0, 5.0, 4.2, 3.5, 2.8],
-      trendDown: true,  // nilai makin kecil = makin baik
+      trendDown: true, // nilai makin kecil = makin baik
     ),
     _ProgressMetric(
       key: 'romLabel',
@@ -1512,7 +1382,6 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
     );
   }
 
-
   // ── tips card ─────────────────────────────────────────────────────────────
   Widget _buildTipsCard() => Container(
     padding: const EdgeInsets.all(18),
@@ -1596,10 +1465,10 @@ class _SearchResult {
 // ─── Progress metric model ────────────────────────────────────────────────────
 
 class _ProgressMetric {
-  final String key;       // localization key untuk label dropdown
+  final String key; // localization key untuk label dropdown
   final String yLabelKey; // localization key untuk Y-axis label
   final List<double> data;
-  final bool trendDown;   // true = nilai kecil lebih baik (nyeri, ODI)
+  final bool trendDown; // true = nilai kecil lebih baik (nyeri, ODI)
 
   const _ProgressMetric({
     required this.key,
@@ -1624,7 +1493,17 @@ class _RehabProgressPainter extends CustomPainter {
     required this.trendDown,
   });
 
-  static const _sessions = ['S1','S2','S3','S4','S5','S6','S7','S8','S9'];
+  static const _sessions = [
+    'S1',
+    'S2',
+    'S3',
+    'S4',
+    'S5',
+    'S6',
+    'S7',
+    'S8',
+    'S9',
+  ];
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1665,10 +1544,7 @@ class _RehabProgressPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(
-        canvas,
-        Offset(padL - tp.width - 4, y - tp.height / 2),
-      );
+      tp.paint(canvas, Offset(padL - tp.width - 4, y - tp.height / 2));
     }
 
     // ── Y axis title (rotated) ────────────────────────────────────────────
@@ -1692,9 +1568,12 @@ class _RehabProgressPainter extends CustomPainter {
     for (var i = 1; i < data.length; i++) {
       final cpx = (xOf(i - 1) + xOf(i)) / 2;
       fillPath.cubicTo(
-        cpx, yOf(data[i - 1]),
-        cpx, yOf(data[i]),
-        xOf(i), yOf(data[i]),
+        cpx,
+        yOf(data[i - 1]),
+        cpx,
+        yOf(data[i]),
+        xOf(i),
+        yOf(data[i]),
       );
     }
     fillPath.lineTo(xOf(data.length - 1), padT + chartH);
@@ -1718,9 +1597,12 @@ class _RehabProgressPainter extends CustomPainter {
     for (var i = 1; i < data.length; i++) {
       final cpx = (xOf(i - 1) + xOf(i)) / 2;
       linePath.cubicTo(
-        cpx, yOf(data[i - 1]),
-        cpx, yOf(data[i]),
-        xOf(i), yOf(data[i]),
+        cpx,
+        yOf(data[i - 1]),
+        cpx,
+        yOf(data[i]),
+        xOf(i),
+        yOf(data[i]),
       );
     }
     canvas.drawPath(
@@ -1741,11 +1623,7 @@ class _RehabProgressPainter extends CustomPainter {
         3.0,
         Paint()..color = const Color(0xFF007F78),
       );
-      canvas.drawCircle(
-        Offset(cx, cy),
-        1.5,
-        Paint()..color = Colors.white,
-      );
+      canvas.drawCircle(Offset(cx, cy), 1.5, Paint()..color = Colors.white);
     }
 
     // ── X axis session labels ─────────────────────────────────────────────
@@ -1757,10 +1635,7 @@ class _RehabProgressPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(
-        canvas,
-        Offset(xOf(i) - tp.width / 2, size.height - padB + 4),
-      );
+      tp.paint(canvas, Offset(xOf(i) - tp.width / 2, size.height - padB + 4));
     }
 
     // ── X axis title "Sesi" ───────────────────────────────────────────────
@@ -1773,10 +1648,7 @@ class _RehabProgressPainter extends CustomPainter {
     )..layout();
     xTitlePainter.paint(
       canvas,
-      Offset(
-        padL + chartW / 2 - xTitlePainter.width / 2,
-        size.height - 10,
-      ),
+      Offset(padL + chartW / 2 - xTitlePainter.width / 2, size.height - 10),
     );
   }
 
@@ -1784,5 +1656,3 @@ class _RehabProgressPainter extends CustomPainter {
   bool shouldRepaint(covariant _RehabProgressPainter old) =>
       old.data != data || old.yLabel != yLabel;
 }
-
-
