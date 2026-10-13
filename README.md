@@ -303,7 +303,7 @@ Appointment yang sudah selesai (`completed`) menampilkan data klinis nyata dari 
 | `therapist_sipf` | Nomor lisensi terapis |
 | `therapist_photo_url` | Foto avatar terapis |
 
-Kolom-kolom di atas perlu ditambahkan ke tabel `appointments` di Supabase. Selama kosong, tampilan fallback ke teks placeholder dari localization.
+Kolom-kolom di atas sudah dicantumkan pada migration baseline repository. Isinya tetap harus diberikan oleh terapis atau proses backend; migration tidak membuat data klinis dan UI dapat menampilkan placeholder jika nilainya kosong.
 
 ---
 
@@ -461,7 +461,12 @@ supabase functions deploy client-error-log
 
 ## 🗃️ Schema Supabase Database
 
-Kolom berikut merangkum kolom yang dipakai aplikasi, bukan dump lengkap dari database live. Project Supabase saat ini memiliki tabel `error_logs` yang sudah diuji. Folder `supabase/migrations` belum berisi migration lengkap untuk schema `profiles`, `appointments`, Storage, RPC, dan policies. Karena itu database live belum dapat direkonstruksi hanya dengan `supabase db push`; simpan perubahan yang dibuat di Dashboard sebagai migration SQL sebelum menyiapkan project baru.
+Migration baseline untuk tabel `profiles`, `appointments`, dan `error_logs`, RPC appointment, Storage foto profil, indeks, trigger, serta Row Level Security tersedia di:
+`supabase/migrations/20261013120000_complete_kedota_app_schema.sql`.
+
+Migration tersebut mendefinisikan struktur dan aturan akses; migration tidak mengisi data pasien atau janji temu lama. Migration juga belum diterapkan ke project Supabase live. Sebelum menerapkan, periksa project dan data tujuan terlebih dahulu. **Penting:** RLS pada `profiles` hanya mengizinkan user yang sudah login membaca profilnya sendiri, sedangkan beberapa alur aplikasi saat ini mencari profil lewat nomor telepon sebelum login. Alur pra-login itu perlu dipindahkan ke mekanisme server yang aman sebelum RLS migration ini diterapkan agar login tidak terputus. Jangan menonaktifkan RLS atau membuka akses baca profil untuk mengatasi hal tersebut.
+
+Migration tidak otomatis mengirim pembayaran ke payment gateway, mengaktifkan verifikasi SMS, atau membuat record janji temu; semua itu membutuhkan alur integrasi/aksi tersendiri. Project live dan data aktualnya belum dapat diverifikasi dari sesi ini karena akun Supabase aktif tidak memiliki akses ke project Kedota.
 
 ### Tabel `appointments`
 
@@ -469,15 +474,25 @@ Kolom berikut merangkum kolom yang dipakai aplikasi, bukan dump lengkap dari dat
 |---|---|---|
 | `id` | uuid | Primary key |
 | `booker_id` | uuid | FK ke `auth.users` |
+| `patient_is_self` | boolean | Apakah pasien adalah pemesan |
+| `patient_nik` / `patient_medical_code` | text | Identitas pasien |
+| `patient_full_name` | text | Nama pasien |
+| `patient_birth_date` | date | Tanggal lahir pasien |
+| `patient_phone` | text | Nomor telepon pasien |
+| `patient_gender` | text | Gender pasien |
+| `patient_complaint` | text | Keluhan pasien |
 | `service_type` | text | `Klinik` atau `Home Care` |
 | `clinic_name` | text | Nama klinik/lokasi |
+| `address` | text | Alamat layanan |
+| `therapist_name` | text | Nama terapis |
 | `appointment_date` | date | Tanggal pertemuan |
 | `appointment_time` | time | Jam pertemuan |
 | `session_count` | integer | Jumlah sesi dalam paket |
 | `appointment_status` | text | `upcoming`, `completed`, `expired`, `cancelled` |
 | `payment_plan` | text | `full` atau `deposit` |
 | `payment_status` | text | `paid`, `pending`, `failed`, `expired` |
-| `amount_due` | numeric | Sisa pembayaran |
+| `payment_method` | text | Metode pembayaran |
+| `base_price`, `travel_fee`, `discount_amount`, `total_amount`, `amount_due` | bigint | Rincian harga dan pembayaran |
 | `booking_code` | text | Format `EMR-####-########` |
 | `clinical_note` | text | *(opsional)* Catatan klinis terapis pasca sesi |
 | `vas_score` | integer | *(opsional)* Skala nyeri VAS (0-10) |
@@ -770,7 +785,7 @@ supabase functions deploy client-error-log
 supabase functions deploy update-pin
 ```
 
-Jangan menjalankan `supabase db push` untuk membuat environment baru sebelum migration schema lengkap ditambahkan dan direview; database live saat ini tidak seluruhnya direpresentasikan di `supabase/migrations`.
+Jangan menjalankan `supabase db push` pada project live sebelum migration baseline ini direview dan diuji, khususnya karena alur pencarian profil pra-login belum sesuai dengan kebijakan RLS. Kondisi database live belum diverifikasi.
 
 > Jangan commit `.env`. Service-role key hanya boleh digunakan oleh Edge Function.
 
@@ -786,27 +801,7 @@ supabase functions serve client-error-log
 
 ## 🗒️ Catatan Migrasi DB
 
-Untuk mengaktifkan fitur Detail Riwayat Done dengan data klinis nyata, tambahkan kolom berikut ke tabel `appointments`:
-
-```sql
-ALTER TABLE appointments
-  ADD COLUMN IF NOT EXISTS clinical_note TEXT,
-  ADD COLUMN IF NOT EXISTS vas_score INTEGER,
-  ADD COLUMN IF NOT EXISTS rom_score INTEGER,
-  ADD COLUMN IF NOT EXISTS mmt_score INTEGER,
-  ADD COLUMN IF NOT EXISTS odi_score INTEGER,
-  ADD COLUMN IF NOT EXISTS therapist_recommendation TEXT,
-  ADD COLUMN IF NOT EXISTS therapist_sipf TEXT,
-  ADD COLUMN IF NOT EXISTS therapist_photo_url TEXT;
-```
-
-Untuk mengaktifkan pembatasan frekuensi perubahan kontak (1x/hari per field, mutual exclusion), tambahkan kolom berikut ke tabel `profiles`:
-
-```sql
-ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS phone_changed_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS email_changed_at TIMESTAMPTZ;
-```
+Kolom data klinis dan timestamp perubahan kontak sudah tercakup dalam migration baseline di `supabase/migrations/20261013120000_complete_kedota_app_schema.sql`. Sebelum menerapkannya ke project live, selaraskan alur pencarian profil sebelum login dengan RLS yang aman, lalu tinjau skema dan data yang sudah ada. Migration belum diterapkan dan belum diuji pada database lokal/non-production di sesi ini.
 
 ---
 

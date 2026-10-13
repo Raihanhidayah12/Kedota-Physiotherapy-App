@@ -1,27 +1,124 @@
 openapi: 3.0.0
 info:
-  title: Kedota Physiotherapy App API
-  version: 2.0.0
+  title: Kedota Physiotherapy App API and Data Rebuild Contract
+  version: 3.0.0
   description: >-
-    Spesifikasi OpenAPI untuk API produksi aplikasi Kedota Physiotherapy yang
-    berjalan di atas Supabase. Dokumen ini mencakup alur autentikasi phone dan
-    Google OAuth, manajemen profil, appointment, pembayaran, reschedule,
-    RPC operasional, dan Edge Functions yang saat ini digunakan aplikasi Flutter.
+    Kontrak perilaku API dan data yang sedang digunakan aplikasi Kedota.
+    Bagian ini dimaksudkan sebagai acuan untuk membangun ulang backend dan
+    database pada platform milik atasan, bukan hanya sebagai daftar URL
+    Supabase. Path kanonis di bawah masih merupakan path integrasi Supabase
+    saat ini. Saat backend diganti, pertahankan perilaku, field, validasi, dan
+    hak aksesnya; path Supabase bukan keharusan bagi backend baru.
+
+    Cakupan: Supabase Auth, PostgREST untuk profiles dan appointments, RPC,
+    Supabase Storage foto profil, serta Edge Functions update-pin dan
+    client-error-log. Ini bukan dump seluruh endpoint bawaan Supabase.
+
+    Bukti dan batasan: kode aplikasi dan migration repository menjadi sumber
+    kontrak field dan perilaku. Screenshot Supabase yang diberikan menunjukkan
+    tabel public.profiles, public.appointments, dan public.error_logs tersedia
+    di project yang digunakan saat ini. Screenshot tersebut tidak menampilkan
+    definisi kolom, constraint, index, policy, atau fungsi database; karena itu
+    rincian tersebut ditandai sebagai definisi kontrak dari repository, bukan
+    hasil inspeksi langsung database live. Spec ini juga bukan inventaris
+    seluruh endpoint bawaan Supabase. Endpoint berlabel
+    x-client-flow-only/deprecated bukan route server.
+
+    Untuk rebuild di database/backend baru:
+    - Implementasikan tiga entitas yang benar-benar terlihat/didefinisikan:
+      profiles, appointments, dan error_logs. Jangan menyimpulkan adanya tabel
+      pasien, terapis, pembayaran, notifikasi, atau OTP terpisah: informasi
+      pasien/terapis/klinis/pembayaran yang tersimpan sekarang berada pada
+      kolom appointments; sebagian preferensi/notifikasi/OTP berada lokal di
+      device.
+    - Login dan kredensial saat ini dikelola Supabase Auth, bukan salah satu
+      dari tiga tabel public tersebut. Backend pengganti tetap membutuhkan
+      sistem identitas/session dan penyimpanan kredensial yang aman; jangan
+      menyimpan PIN/password mentah pada profiles atau appointments.
+    - Gunakan komponen Profile, Appointment, dan ErrorLog beserta x-database
+      extensions sebagai kontrak kolom, tipe, nullability, default, relasi,
+      constraint, dan indeks. x-database mengenalkan kebutuhan logis; ganti
+      UUID auth.users/FK Supabase dengan identitas user pada sistem atasan.
+    - Pertahankan endpoint/flow yang dipakai dan perilaku yang dijelaskan,
+      khususnya registrasi/login, profil dan kontak, foto, booking/slot,
+      riwayat/progress, reschedule, pembayaran demo, expiry, dan logging 5xx.
+      Implementasi endpoint target boleh berbeda.
+    - RLS/policies, Supabase Auth, Storage dan RPC adalah implementasi saat ini,
+      bukan prasyarat vendor-neutral. Backend pengganti harus menyediakan
+      autentikasi, otorisasi per pemilik, penyimpanan foto, validasi bisnis,
+      serta kontrak error yang setara.
+
+    Peta layar ke API:
+    - Daftar/masuk dengan nomor HP: GET /rest/v1/profiles (lookup profil dan
+      PIN hash pada kode saat ini), lalu POST /auth/v1/token?grant_type=password.
+      Pemulihan session memakai POST /auth/v1/token?grant_type=refresh_token.
+    - Daftar akun: POST /auth/v1/signup lalu POST /rest/v1/profiles (upsert).
+    - Masuk Google/Apple: POST /auth/v1/token?grant_type=id_token pada alur
+      native, atau GET /auth/v1/authorize pada alur OAuth redirect; profil
+      dibaca/dibuat melalui /rest/v1/profiles.
+    - OTP email: POST /auth/v1/otp dan POST /auth/v1/verify; status email
+      diperbarui melalui PATCH /rest/v1/profiles.
+    - OTP nomor HP untuk beberapa layar, termasuk lupa PIN dan ubah nomor,
+      masih diverifikasi secara lokal dengan kode demo. Itu bukan request OTP
+      yang diverifikasi Supabase dan tidak aman untuk pemakaian produksi.
+    - Splash, Profil, Pengaturan, Edit Profil, dan data foto: GET/PATCH
+      /rest/v1/profiles, upload ke /storage/v1/object/... dan baca URL public.
+    - Home, Janji Temu, Riwayat, Progress, Detail, notifikasi, dan pilihan
+      slot: GET /rest/v1/appointments; pembuatan reservasi memakai POST yang
+      sama. Data klinis pada detail dibaca dari kolom appointment.
+    - Expiry, reschedule terkontrol, dan pelunasan: POST ke RPC
+      expire_overdue_appointments, reschedule_appointment, dan
+      settle_appointment_payment.
+    - Sebagian penyimpanan status notifikasi, preferensi, OTP telepon, serta
+      autentikasi biometrik dilakukan lokal di device; fitur-fitur tersebut
+      tidak memiliki endpoint Supabase tersendiri.
+    - Perubahan PIN dengan session aktif memakai PATCH profiles dan PUT
+      /auth/v1/user. Lupa PIN memakai POST /functions/v1/update-pin; OTP yang
+      mendahului request ini belum diverifikasi oleh server.
+    - Error HTTP 5xx dari client dikirim ke POST
+      /functions/v1/client-error-log. Pembayaran masih demo, tanpa gateway
+      atau webhook production.
 
     Catatan implementasi:
     - PIN di-hash menggunakan SHA-256 sebelum disimpan ke kolom pin_hash.
     - Auth email untuk signup phone menggunakan email asli user (jika valid),
       fallback ke format {digits}@kedota.local.
-    - Update PIN untuk forgot PIN flow menggunakan Edge Function (update-pin)
-      yang berjalan server-side dengan service-role key aman.
+    - Reset PIN tanpa session diarahkan ke Edge Function update-pin; keamanan
+      alur ini belum production-ready sampai OTP dibuktikan oleh server.
+      Ganti PIN dengan session aktif memakai PATCH profiles dan Supabase Auth
+      user update.
     - Edge Function client-error-log menerima metadata response HTTP 5xx dari client.
-    - Password Supabase Auth disinkronkan setiap kali PIN diperbarui via
-      Edge Function atau direct session update.
+    - Password Supabase Auth disinkronkan pada alur ganti/reset PIN.
     - Nomor telepon selalu disimpan dalam format +62xxx (dinormalisasi via PhoneValidator.normalizePhoneNumber() di createPhoneProfile, signInWithPhone, completeSocialProfile, dan createPhoneProfileAndPin).
-    - Perubahan nomor HP dan email dibatasi 1x/hari per field dan tidak bisa bersamaan pada hari yang sama (mutual exclusion). Email harus diverifikasi sebelum bisa diubah. OTP perubahan nomor HP = 4 digit.
+    - Aturan perubahan kontak dan limit OTP di UI bukan validasi server yang
+      lengkap. OTP nomor HP pada alur perubahan kontak adalah demo lokal;
+      email menggunakan Supabase Auth OTP.
+
+    Catatan kesesuaian database dan keamanan:
+    - Migration repository mendefinisikan profiles, appointments, error_logs,
+      tiga RPC, bucket profile-photos, trigger, indeks, dan RLS.
+    - RLS owner-only pada profiles di migration belum kompatibel dengan
+      pencarian profil pra-login yang dilakukan aplikasi. Login nomor HP
+      saat ini juga membaca pin_hash dan membandingkan hash di client; lookup
+      semua baris profil sebagai fallback tidak aman. Perlu mekanisme server
+      terbatas sebelum menerapkan RLS tersebut ke project live. Jangan membuka
+      SELECT seluruh profil untuk mengatasi masalah ini.
+    - PATCH appointment langsung dari salah satu alur edit reservasi hanya
+      divalidasi oleh client untuk jendela waktu. Gunakan RPC
+      reschedule_appointment untuk validasi server-side.
+    - Migration hanya mendefinisikan struktur; tidak membuat data pasien,
+      appointment, atau data klinis. Status schema dan data project live belum
+      dapat dipastikan dari repository.
 
     DATABASE SCHEMA:
-    Tabel utama yang digunakan adalah `profiles` dengan struktur:
+    Definisi kolom lengkap untuk ketiga tabel saat ini tersedia pada
+    components/schemas Profile, Appointment, dan ErrorLog. Ekstensi
+    x-database pada masing-masing schema merangkum tipe DB, nullability melalui
+    properti nullable, default, primary/foreign key, constraint, dan index
+    berdasarkan migration repository. Ini adalah baseline yang harus
+    dicocokkan saat database pengganti dirancang; screenshot hanya memastikan
+    nama tabel, bukan detail DDL live.
+    Tabel `profiles` memiliki struktur:
     - id (UUID, PK)
     - phone (String)
     - full_name (String)
@@ -45,6 +142,13 @@ info:
 
     Tabel `appointments` menyimpan satu jadwal terapi per record dan digunakan
     untuk Home, Riwayat, Progress, notifikasi, reschedule, dan pembayaran.
+    Pasien yang dibooking, pilihan layanan/terapis, rincian harga, serta data
+    klinis tersimpan dalam kolom row appointment (lihat skema lengkap), bukan
+    relasi ke tabel terpisah dalam baseline sekarang.
+    Tabel `error_logs` menyimpan metadata error 5xx melalui Edge Function;
+    client tidak diberi akses REST langsung ke tabel tersebut. Model data
+    terpisah untuk audit log yang dihapus/retensi tidak terlihat pada kontrak
+    saat ini.
 
     Konfigurasi Maps & Geocoding:
     Aplikasi menggunakan sistem 3 tier cascading fallback untuk peta dan geocoding
@@ -56,33 +160,28 @@ info:
     Pergantian layanan terjadi otomatis saat tier utama gagal, tanpa downtime bagi pengguna.
 
     Enkripsi REST Payload:
-    Enkripsi AES-256-CBC + HMAC-SHA256 diterapkan di lapisan Dio interceptor (RestCryptoInterceptor)
-    untuk endpoint sensitif. Format envelope: {data: <base64-ciphertext>, iv: <base64-iv>, sig: <hmac-hex>}.
-    Field sensitif (phone, pin_hash, NIK) juga mendukung enkripsi per-field selektif.
-    Payload yang terdeteksi telah diubah (HMAC tidak cocok) langsung direjek oleh interceptor.
+    Enkripsi AES-256-CBC + HMAC-SHA256 pada Dio interceptor saat ini hanya
+    diterapkan pada request Edge Function update-pin dan respons sukses
+    terenkripsinya. client-error-log dan endpoint Supabase lainnya memakai
+    JSON/binary biasa melalui HTTPS. Field-level encryption tersedia sebagai
+    helper namun bukan lapisan yang otomatis dipasang pada semua API.
     Env vars yang dibutuhkan: REST_ENCRYPT_KEY (64 hex chars) dan REST_HMAC_KEY (>=64 hex chars).
 
     Email & Notifikasi:
-    - OTP dikirim via Gmail SMTP yang dikonfigurasi di Supabase Auth (production).
-    - Verifikasi email ditampilkan sebagai peringatan di profil (bukan blocking di registrasi).
+    - OTP email memakai Supabase Auth; konfigurasi email provider perlu tersedia
+      pada project Supabase yang digunakan.
+    - Verifikasi email ditampilkan sebagai peringatan di profil, bukan blocking
+      di registrasi.
     - Medical code (KDT- + 12 hex chars) digenerate otomatis saat createProfile.
     - NIK dan address bersifat opsional di profil.
 
-    Performance Benchmark Tests:
-    Proyek ini menyertakan 22 benchmark test (semua passing) yang mengukur latensi komponen inti:
-    - Enkripsi REST (AES-256-CBC + HMAC-SHA256): encryptPayload, decryptPayload, encryptSensitiveFields, decryptSensitiveFields — threshold < 10 ms avg per 1000 iterasi.
-    - PIN hashing (SHA-256): hashPin — threshold < 1 ms avg per 10.000 iterasi, correctness diverifikasi terhadap known digest.
-    - Validasi nomor telepon: normalizePhoneNumber + isValidIndonesianPhone (format +62, 08, 8, 62) — threshold < 1 ms avg per 10.000 iterasi.
-    - Format alamat: regex _formatAddressForDisplay — threshold < 0,5 ms avg per 1000 iterasi.
-    - Core utils: BookingCode gen, MedicalCode gen, DateTime formatting, JSON encode/decode — threshold < 1 ms avg.
-    Jalankan dengan: flutter test test/performance/
+    Tes checklist performa otomatis terdapat di test/performance/ dan mencakup
+    workload CPU sintetis, pengamatan RSS, request API tiruan, decode aset lokal,
+    dan workload kripto. Ini bukan pengukuran baterai, jaringan/server produksi,
+    atau perangkat lama. Jalankan dengan: flutter test test/performance/
 servers:
-  - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/rest/v1
-    description: Production Supabase REST API
-  - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/auth/v1
-    description: Production Supabase Auth API
-  - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co/functions/v1
-    description: Production Supabase Edge Functions
+  - url: https://wwmctqhbqpsbkyxkeaqv.supabase.co
+    description: Supabase project base URL; operation paths include service prefixes
 tags:
   - name: Auth
     description: Endpoint untuk registrasi, login, dan OAuth pengguna
@@ -99,170 +198,137 @@ tags:
   - name: Observability
     description: Endpoint logging error dari client
   - name: Maps
-    description: Konfigurasi dan fallback sistem peta dan geocoding (Google Maps → Geoapify → OSM)
+    description: Layanan peta/geocoding pihak ketiga; bukan endpoint API aplikasi
+  - name: Storage
+    description: Supabase Storage untuk foto profil
 security:
   - apiKeyAuth: []
-  - bearerAuth: []
+    bearerAuth: []
 paths:
-  /auth/signup:
+  /auth/v1/signup:
     post:
       tags:
         - Auth
-      summary: Daftar akun baru via nomor HP
+      summary: Buat identitas Supabase Auth
       description: >-
-        Membuat akun pengguna baru di Supabase Auth menggunakan email asli user
-        (jika valid) atau email yang digenerate dari nomor HP ({digits}@kedota.local),
-        lalu menyimpan profil ke tabel profiles dengan signup_method = phone.
-        Jika akun auth sudah ada (race condition), akan mencoba signIn ulang
-        dan upsert profil. PIN di-hash dengan SHA-256 sebelum disimpan.
+        Endpoint Supabase Auth yang dipanggil oleh signUpWithPhone. Aplikasi
+        mengirim email identitas dan PIN sebagai password; setelah user dibuat,
+        aplikasi melakukan upsert terpisah ke /rest/v1/profiles. Nomor telepon,
+        nama, dan signup_method dikirim sebagai user metadata.
+      security:
+        - apiKeyAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SignupRequest'
+              $ref: '#/components/schemas/SupabaseSignUpRequest'
       responses:
-        '201':
-          description: Akun berhasil dibuat.
+        '200':
+          description: Identitas berhasil dibuat; session dapat tidak ada jika konfirmasi email diwajibkan.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
-          description: Payload tidak valid atau data yang dikirim tidak lengkap.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Tidak memiliki otorisasi yang valid.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          description: Payload atau kredensial tidak valid.
         '429':
-          description: Rate limit pendaftaran tercapai. Tunggu beberapa menit.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Kesalahan internal server saat memproses pendaftaran.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          description: Batas permintaan Auth tercapai.
 
-  /auth/signin:
+  /auth/v1/token:
     post:
       tags:
         - Auth
-      summary: Login pengguna via nomor HP dan PIN
+      summary: Login password atau pertukaran Google ID token
       description: >-
-        Melakukan login menggunakan nomor telepon dan PIN. PIN diverifikasi
-        dengan membandingkan SHA-256 hash terhadap pin_hash di tabel profiles.
-        Auth identity dicari berurutan dari auth_email → email → generated email
-        (multi-kandidat untuk menangani migrasi email). Setelah login berhasil,
-        last_login_at diperbarui.
+        Endpoint native Supabase Auth. Login nomor telepon di aplikasi bukan
+        endpoint khusus: client mencari auth_email/profile melalui PostgREST,
+        mencocokkan hash PIN, lalu meminta token password memakai email identity
+        dan PIN. Google native menggunakan grant_type=id_token; sign-in Google
+        web menggunakan /auth/v1/authorize.
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - in: query
+          name: grant_type
+          required: true
+          schema:
+            type: string
+            enum: [password, id_token, refresh_token]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SignInRequest'
+              oneOf:
+                - $ref: '#/components/schemas/PasswordGrantRequest'
+                - $ref: '#/components/schemas/IdTokenGrantRequest'
+                - $ref: '#/components/schemas/RefreshTokenRequest'
       responses:
         '200':
-          description: Login berhasil.
+          description: Autentikasi berhasil.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
-          description: Data login tidak valid.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Kredensial tidak valid — PIN salah atau nomor tidak terdaftar.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Kesalahan internal server saat login.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          description: Grant atau kredensial tidak valid.
+        '429':
+          description: Batas permintaan Auth tercapai.
 
-  /auth/google:
-    post:
+  /auth/v1/authorize:
+    get:
       tags:
         - Auth
-      summary: Login atau Daftar via Google OAuth
+      summary: Mulai OAuth provider
       description: >-
-        Melakukan autentikasi menggunakan Google Sign-In. Di Android/iOS
-        menggunakan native Google SDK (signInWithIdToken), di web menggunakan
-        signInWithOAuth. Dialog pilih akun selalu muncul karena signOut()
-        dipanggil sebelum signIn().
-
-        Routing setelah OAuth callback:
-        - phone ada && pin_hash ada di profiles → PinVerificationScreen
-        - salah satu kosong → GoogleProfileCompletionScreen
-        - signup_method == 'phone' && phone ada → sign out Google → OtpVerificationScreen
+        Memulai redirect OAuth Supabase. Digunakan oleh alur Google OAuth di
+        web; Apple provider hanya tersedia bila provider dan kredensial telah
+        dikonfigurasi pada project Supabase.
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - in: query
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [google, apple]
+        - in: query
+          name: redirect_to
+          schema:
+            type: string
+            format: uri
       responses:
-        '200':
-          description: OAuth berhasil, session Supabase dibuat.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
+        '302':
+          description: Redirect ke halaman autentikasi provider.
+        '400':
+          description: Provider atau parameter OAuth tidak valid.
+
+  /auth/v1/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout session Supabase
+      description: Mengakhiri session aktif melalui Supabase Auth.
+      responses:
+        '204':
+          description: Session berhasil diakhiri.
         '401':
-          description: OAuth gagal atau user membatalkan.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          description: Access token tidak valid atau tidak tersedia.
 
-  /auth/apple:
+  /auth/v1/otp:
     post:
       tags:
         - Auth
-      summary: Login via Apple OAuth
+      summary: Minta OTP Auth
       description: >-
-        Melakukan autentikasi menggunakan Apple Sign-In.
-      responses:
-        '200':
-          description: OAuth berhasil, session Supabase dibuat.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          description: OAuth gagal atau user membatalkan.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /auth/signout:
-    post:
-      tags:
-        - Auth
-      summary: Logout dari session saat ini
-      description: Mengakhiri session aktif user di Supabase Auth.
-      responses:
-        '200':
-          description: Berhasil logout.
-
-  /auth/otp:
-    post:
-      tags:
-        - Auth
-      summary: Minta OTP via SMS (Production Plan)
-      description: >-
-        Endpoint untuk meminta kode OTP via SMS menggunakan native Supabase OTP.
+        Supabase Auth endpoint untuk mengirim OTP. Aplikasi memakai alur ini
+        untuk verifikasi email. Pengiriman OTP SMS untuk nomor telepon belum
+        diimplementasikan pada aplikasi; kode OTP telepon yang digunakan pada
+        beberapa layar masih demo dan bukan bukti verifikasi server.
+      security:
+        - apiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -271,17 +337,23 @@ paths:
               $ref: '#/components/schemas/SendOtpRequest'
       responses:
         '200':
-          description: OTP berhasil dikirim.
+          description: Permintaan OTP diterima oleh Auth.
         '400':
-          description: Nomor telepon tidak valid atau limit tercapai.
+          description: Email/nomor tidak valid atau konfigurasi provider tidak tersedia.
+        '429':
+          description: Batas permintaan OTP tercapai.
 
-  /auth/verify:
+  /auth/v1/verify:
     post:
       tags:
         - Auth
-      summary: Verifikasi kode OTP (Production Plan)
+      summary: Verifikasi OTP Auth
       description: >-
-        Verifikasi kode OTP yang diterima user untuk mendapatkan session/auth.
+        Endpoint native Supabase untuk menukar OTP email dengan user/session.
+        Di aplikasi dipakai untuk verifikasi email; belum terhubung ke alur
+        forgot PIN berbasis OTP SMS yang diverifikasi server.
+      security:
+        - apiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -290,53 +362,240 @@ paths:
               $ref: '#/components/schemas/VerifyOtpRequest'
       responses:
         '200':
-          description: OTP valid, login/verifikasi sukses.
+          description: OTP valid; mengembalikan data user dan session.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
-          description: OTP salah atau kadaluarsa.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          description: OTP tidak valid atau kedaluwarsa.
 
-  /profiles:
+  /auth/v1/user:
+    put:
+      tags:
+        - Auth
+        - PIN
+      summary: Perbarui atribut user Auth
+      description: >-
+        Digunakan saat PIN/password Auth diganti ketika user memiliki session
+        aktif. PIN baru dikirim sebagai password melalui koneksi HTTPS dengan
+        bearer session Supabase. Ini bukan Edge Function update-pin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAuthPasswordRequest'
+      responses:
+        '200':
+          description: User Auth berhasil diperbarui.
+        '401':
+          description: Session tidak valid.
+        '422':
+          description: Password tidak memenuhi ketentuan Auth.
+
+  /storage/v1/object/{bucket}/{objectPath}:
+    post:
+      tags:
+        - Storage
+      summary: Upload atau timpa foto profil
+      description: >-
+        Upload binary ke bucket profile-photos dengan path
+        {auth-user-id}/profile.jpg atau profile.png. Aplikasi mengirim
+        content-type dan upsert=true. Setelah upload, client mendapat public URL
+        lalu memperbarui profile_photo_url pada /rest/v1/profiles. Kebijakan
+        Storage/RLS harus membatasi user ke folder miliknya.
+      parameters:
+        - in: path
+          name: bucket
+          required: true
+          schema:
+            type: string
+            enum: [profile-photos]
+        - in: path
+          name: objectPath
+          required: true
+          schema:
+            type: string
+          description: Path relatif objek, biasanya <auth-user-id>/profile.jpg.
+        - in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+            enum: [image/jpeg, image/png]
+        - in: header
+          name: x-upsert
+          required: true
+          schema:
+            type: string
+            enum: ["true"]
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Objek berhasil diunggah atau ditimpa.
+        '400':
+          description: File atau metadata tidak valid.
+        '401':
+          description: Session tidak valid.
+        '403':
+          description: Kebijakan Storage menolak akses.
+    get:
+      tags:
+        - Storage
+      summary: Ambil objek foto profil (autentikasi)
+      description: Endpoint objek Storage untuk bucket privat. Foto profil aplikasi biasanya memakai URL public bucket.
+      parameters:
+        - in: path
+          name: bucket
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: objectPath
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Konten gambar.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Objek tidak ditemukan.
+        '401':
+          description: Session tidak valid untuk bucket privat.
+
+  /storage/v1/object/public/{bucket}/{objectPath}:
+    get:
+      tags:
+        - Storage
+      summary: Ambil foto profil dari bucket public
+      description: URL yang dibangun oleh Supabase Storage getPublicUrl; dapat dibuka langsung oleh image client tanpa bearer token jika bucket public.
+      security: []
+      parameters:
+        - in: path
+          name: bucket
+          required: true
+          schema:
+            type: string
+            enum: [profile-photos]
+        - in: path
+          name: objectPath
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Konten gambar.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Objek tidak ditemukan.
+
+  /rest/v1/profiles:
     get:
       tags:
         - Profiles
       summary: Ambil daftar profil
       description: >-
-        Mengambil daftar data profil pengguna dari tabel profiles.
-        Mendukung filter by id, email, atau phone via query parameter.
-        Pencarian phone mendukung multi-variant matching (+62xxx, 62xxx, 08xxx, 8xxx)
-        menggunakan inFilter. Jika inFilter gagal, fallback ke client-side matching.
+        PostgREST collection untuk membaca profil. Filter yang digunakan aplikasi
+        meliputi id=eq.<uuid>, auth_email=eq.<email>, email=eq.<email>,
+        medical_code=eq.<code>, phone=in.(...), serta status dan signup_method. Alur check
+        phone/email/status serta verifikasi tanggal lahir dilakukan dengan query
+        ke collection ini dan validasi di client; tidak ada route khusus untuk
+        operasi-operasi tersebut. Aplikasi saat ini juga memakai select(*) pada
+        lookup profil dan membaca pin_hash untuk login telepon. Itu memerlukan
+        desain autentikasi server yang aman: jangan memberi akses pra-login
+        untuk membaca seluruh profil atau pin_hash.
       parameters:
         - in: query
           name: select
           schema:
             type: string
-            example: "id,full_name,email,phone,pin_hash,signup_method,birth_date"
-          description: Kolom yang ingin diambil menggunakan PostgREST select syntax.
+            example: "id,full_name,email,phone,signup_method,birth_date,status"
+          description: >-
+            Kolom yang ingin diambil menggunakan PostgREST select syntax.
+            pin_hash sensitif dan hanya disebut karena login telepon saat ini
+            membacanya; pemanggil umum tidak boleh mendapatkannya.
         - in: query
           name: id
           schema:
             type: string
             example: "eq.123e4567-e89b-12d3-a456-426614174000"
-          description: Filter profil berdasarkan ID menggunakan format PostgREST eq.value.
+          description: Filter profil berdasarkan ID, misalnya eq.<uuid>.
         - in: query
           name: phone
           schema:
             type: string
             example: "in.(+6281234567890,6281234567890,081234567890,81234567890)"
-          description: Filter profil berdasarkan nomor telepon dengan multi-variant matching.
+          description: Filter nomor telepon PostgREST; untuk multi-format gunakan in.(...).
         - in: query
           name: email
           schema:
             type: string
             example: "eq.budi@example.com"
-          description: Filter profil berdasarkan email.
+          description: Filter email, misalnya eq.user@example.com.
+        - in: query
+          name: auth_email
+          schema:
+            type: string
+            example: "eq.81234567890@kedota.local"
+          description: Filter identity email Supabase, berbeda dari email profil bila memakai fallback nomor HP.
+        - in: query
+          name: status
+          schema:
+            type: string
+            example: "eq.active"
+          description: Filter status akun profil.
+        - in: query
+          name: signup_method
+          schema:
+            type: string
+            enum: [phone, google, apple]
+          description: Filter jenis pendaftaran.
+        - in: query
+          name: email_verified
+          schema:
+            type: string
+            example: "eq.true"
+          description: Filter status verifikasi email.
+        - in: query
+          name: birth_date
+          schema:
+            type: string
+            example: "eq.1995-08-10"
+          description: Filter tanggal lahir; perbandingan verifikasi yang dilakukan aplikasi berlangsung di client.
+        - in: query
+          name: medical_code
+          schema:
+            type: string
+            example: "eq.KDT-A1B2C3D4E5F6"
+          description: Filter kode medis untuk pengecekan duplikasi kode oleh aplikasi.
       responses:
         '200':
           description: Daftar profil berhasil diambil.
@@ -364,19 +623,17 @@ paths:
         - Profiles
       summary: Tambah data profil baru
       description: >-
-        Membuat entri profil baru untuk pengguna. Dipakai saat
-        completeSocialProfile (Google) dan createPhoneProfile (HP).
-        Implementasi menggunakan upsert (client.from('profiles').upsert()),
-        fallback ke Retrofit _persistProfile jika upsert gagal.
-        Membutuhkan header Prefer: return=representation agar response
-        mengembalikan row yang dibuat.
+        Membuat atau melakukan upsert profil setelah Supabase Auth membuat user.
+        Google/Apple profile completion juga menyimpan profil melalui operasi
+        ini. PostgREST upsert memerlukan Prefer: resolution=merge-duplicates;
+        return=representation meminta row hasil operasi.
       parameters:
         - in: header
           name: Prefer
           schema:
             type: string
-            example: return=representation
-          description: Wajib untuk mendapatkan data profil yang baru dibuat sebagai response.
+            example: resolution=merge-duplicates,return=representation
+          description: Merge berdasarkan primary key; return representation meminta row hasil operasi.
       requestBody:
         required: true
         content:
@@ -384,8 +641,16 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateProfileRequest'
       responses:
+        '200':
+          description: Upsert memperbarui profil yang sudah ada.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
         '201':
-          description: Profil berhasil dibuat.
+          description: Profil baru berhasil dibuat.
           content:
             application/json:
               schema:
@@ -417,12 +682,66 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+    patch:
+      tags:
+        - Profiles
+        - PIN
+      summary: Perbarui profil milik pengguna
+      description: >-
+        PostgREST update; target user ditentukan dengan filter id=eq.<uuid>,
+        bukan path parameter. Dipakai untuk profil, last_login_at, dan pin_hash.
+        Perubahan pin_hash saat session aktif diikuti request terpisah ke
+        /auth/v1/user untuk menyinkronkan password Auth. Reset tanpa session
+        menggunakan Edge Function update-pin. Aturan ganti kontak di UI bukan
+        pengganti validasi/RLS server.
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+            example: eq.123e4567-e89b-12d3-a456-426614174000
+          description: Filter primary key PostgREST; biasanya ID user yang sedang login.
+        - in: header
+          name: Prefer
+          schema:
+            type: string
+            example: return=representation
+          description: Opsional; mengembalikan row yang diperbarui.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profil berhasil diperbarui.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+        '204':
+          description: Profil diperbarui tanpa representation.
+        '400':
+          description: Filter atau payload tidak valid.
+        '401':
+          description: Session atau API key tidak valid.
+        '403':
+          description: RLS menolak perubahan.
+
   /profiles/{id}:
     get:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - Profiles
       summary: Ambil detail profil by ID
-      description: Mengambil detail profil berdasarkan UUID pengguna.
+      description: >-
+        BUKAN endpoint server. Ini hanya label alur lama; client membaca detail
+        melalui GET /rest/v1/profiles?id=eq.<uuid>.
       parameters:
         - in: path
           name: id
@@ -459,11 +778,14 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
     patch:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - Profiles
       summary: Update profil pengguna
       description: >-
-        Memperbarui data profil. Dipakai untuk update nama, email, TTL, gender,
+        BUKAN endpoint server. Ini hanya label alur lama. Perubahan aktual
+        menggunakan PATCH /rest/v1/profiles?id=eq.<uuid> untuk update nama, email, TTL, gender,
         last_login_at, atau is_profile_complete. Membutuhkan header
         Prefer: return=representation.
 
@@ -531,10 +853,14 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
     delete:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - Profiles
       summary: Hapus profil pengguna
-      description: Menghapus data profil pengguna dari tabel profiles.
+      description: >-
+        BUKAN endpoint server dan tidak dipakai aplikasi. Operasi profil yang
+        tersedia menggunakan collection PostgREST /rest/v1/profiles.
       parameters:
         - in: path
           name: id
@@ -570,12 +896,15 @@ paths:
 
   /profiles/{id}/pin:
     patch:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - PIN
       summary: Update PIN pengguna (session aktif)
       description: >-
-        Memperbarui pin_hash profil pengguna menggunakan SHA-256 hash dari PIN baru.
-        Endpoint ini digunakan HANYA untuk user dengan session aktif (logged in).
+        BUKAN endpoint server. Client memperbarui pin_hash melalui
+        PATCH /rest/v1/profiles?id=eq.<uuid>, lalu menyinkronkan password Auth
+        melalui PUT /auth/v1/user. Alur ini digunakan dengan session aktif.
         
         Untuk forgot PIN flow (tanpa session), gunakan Edge Function /functions/v1/update-pin.
         
@@ -648,20 +977,22 @@ paths:
         mengekspos service-role key. Berjalan di server-side (Deno runtime).
         
         **Kapan digunakan:**
-        - Forgot PIN flow — user tidak punya session aktif
-        - Future: admin reset PIN user
+        - Reset PIN tanpa session — saat ini belum aman untuk production karena
+          OTP tidak diverifikasi oleh function ini.
         
         **Keamanan:**
-        - Validasi JWT token (atau anon key untuk forgot PIN)
+        - Wajib mengirim Authorization: Bearer dan apikey.
+        - Session valid dibatasi ke profil pemilik session; token anon bukan
+          bukti identitas untuk reset PIN.
         - Service-role key hanya di server-side
         - Cegah user update PIN user lain (jika punya session)
         - Rollback otomatis jika sync auth password gagal
-        - Request body dienkripsi otomatis dengan AES-256-CBC oleh RestCryptoInterceptor sebelum dikirim.
-        - Response didekripsi otomatis. Header X-Encrypted: 1 dan X-Encryption: AES-256-CBC ditambahkan.
-        - HMAC-SHA256 diverifikasi; payload yang terdeteksi diubah direjek (handler.reject()) oleh interceptor.
+        - Hanya request dan response sukses yang memakai envelope AES-256-CBC + HMAC-SHA256 melalui RestCryptoInterceptor.
+        - Error response tetap JSON biasa melalui HTTPS.
         
         **Alur:**
-        1. Validasi Authorization header (JWT atau anon key)
+        1. Validasi Authorization header Bearer (JWT sesi pengguna atau anon
+           key untuk alur tanpa sesi; anon key bukan bukti OTP).
         2. Cek session — jika ada, pastikan profile_id = user.id
         3. Ambil pin_hash lama (untuk rollback)
         4. Update pin_hash di tabel profiles
@@ -669,23 +1000,12 @@ paths:
         6. Jika gagal → rollback pin_hash lama
         7. Return success/error response
         
-        **Implementasi di client (Flutter):**
-        ```dart
-        // Service: supabase_auth_service.dart
-        // Method: updateUserPin()
-        
-        // Jika user punya session → direct update
-        if (currentUser != null && currentUser.id == profileId) {
-          await client.from('profiles').update(...);
-          await client.auth.updateUser(...);
-        }
-        // Jika tidak ada session → Edge Function
-        else {
-          await dio.post('/functions/v1/update-pin', ...);
-        }
-        ```
+        Alur ganti PIN dengan session aktif tidak memanggil function ini; client
+        memperbarui /rest/v1/profiles lalu menyinkronkan password melalui
+        /auth/v1/user.
       security:
-        - bearerAuth: []
+        - apiKeyAuth: []
+          bearerAuth: []
       parameters:
         - in: header
           name: X-Encrypted
@@ -704,14 +1024,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EdgeFunctionUpdatePinRequest'
+              $ref: '#/components/schemas/RestCryptoEnvelope'
       responses:
         '200':
           description: PIN berhasil diperbarui.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EdgeFunctionUpdatePinResponse'
+                $ref: '#/components/schemas/RestCryptoEnvelope'
         '400':
           description: Request body tidak valid (missing fields).
           content:
@@ -767,13 +1087,25 @@ paths:
                   value:
                     error: "Internal server error"
                     detail: "Error description"
+    options:
+      tags:
+        - Edge Functions
+      summary: CORS preflight update PIN
+      security: []
+      responses:
+        '204':
+          description: Preflight diterima; mengizinkan POST dan header enkripsi.
 
   /profiles/{id}/verify-birth-date:
     post:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - Profiles
       summary: Verifikasi tanggal lahir
       description: >-
+        BUKAN endpoint yang tersedia. Aplikasi membaca profil melalui
+        /rest/v1/profiles dan membandingkan tanggal lahir di sisi client.
         Memverifikasi tanggal lahir user untuk keperluan lupa PIN.
         Membandingkan input tanggal lahir dengan yang tersimpan di kolom
         birth_date (format YYYY-MM-DD). Jika tidak cocok, diberlakukan
@@ -814,10 +1146,13 @@ paths:
 
   /profiles/{id}/status:
     patch:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - Profiles
       summary: Update status profil
       description: >-
+        BUKAN endpoint yang tersedia. Gunakan PATCH /rest/v1/profiles?id=eq.<uuid>.
         Memperbarui flag tertentu pada profil pengguna seperti
         is_profile_complete atau last_login_at. Dipanggil setelah login
         berhasil untuk memperbarui timestamp last_login_at.
@@ -870,11 +1205,14 @@ paths:
 
   /profiles/check-status:
     get:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - Profiles
       summary: Cek status akun pengguna
       description: >-
-        Mengecek apakah nomor HP sudah terdaftar, status dormant (>60 hari inaktif),
+        BUKAN endpoint yang tersedia. Aplikasi memakai GET /rest/v1/profiles
+        dengan filter kolom yang sesuai. Mengecek apakah nomor HP sudah terdaftar, status dormant (>60 hari inaktif),
         atau status akun (active, deactivated, recycled).
       parameters:
         - in: query
@@ -899,11 +1237,14 @@ paths:
 
   /profiles/check-phone:
     get:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - Profiles
       summary: Cek apakah nomor HP sudah terdaftar
       description: >-
-        Mengecek apakah nomor HP sudah terdaftar di tabel profiles.
+        BUKAN endpoint yang tersedia. Aplikasi memakai GET /rest/v1/profiles
+        dengan filter phone=in.(...). Mengecek apakah nomor HP sudah terdaftar di tabel profiles.
         Menggunakan multi-variant phone matching (+62xxx, 62xxx, 08xxx, 8xxx).
         Digunakan oleh GoogleProfileCompletionScreen sebelum memproses OTP.
       parameters:
@@ -930,11 +1271,14 @@ paths:
 
   /profiles/check-email:
     get:
+      deprecated: true
+      x-client-flow-only: true
       tags:
         - Profiles
       summary: Cek apakah email sudah terdaftar
       description: >-
-        Mengecek apakah email sudah terdaftar di tabel profiles.
+        BUKAN endpoint yang tersedia. Aplikasi memakai GET /rest/v1/profiles
+        dengan filter email=eq.<email>. Mengecek apakah email sudah terdaftar di tabel profiles.
         Digunakan oleh PhoneProfileCompletionScreen sebelum melanjutkan ke
         pembuatan PIN agar tidak ada duplikat email.
       parameters:
@@ -959,16 +1303,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /appointments:
+  /rest/v1/appointments:
     get:
       tags:
         - Appointments
       operationId: listAppointments
       summary: Ambil appointment milik pengguna
       description: >-
-        Mengambil appointment dari tabel appointments. Client selalu membatasi
-        hasil dengan booker_id pengguna yang sedang login dan dapat mengurutkan
-        berdasarkan appointment_date serta appointment_time.
+        Mengambil appointment dari tabel appointments. Layar Home/Riwayat
+        umumnya memfilter booker_id pengguna dan mengurutkan berdasarkan
+        appointment_date/time. Pemeriksaan slot reservasi juga mengirim query
+        tanggal/jam tanpa booker_id; hasilnya tetap tunduk pada RLS. Migration
+        mendefinisikan trigger yang dimaksudkan mencegah bentrok, tetapi
+        perilakunya lintas-pemilik perlu diuji bersama RLS sebelum dianggap
+        sebagai jaminan produksi.
       parameters:
         - in: query
           name: select
@@ -977,20 +1325,32 @@ paths:
             default: '*'
         - in: query
           name: booker_id
-          required: true
           schema:
             type: string
             example: eq.123e4567-e89b-12d3-a456-426614174000
+          description: Filter pemilik yang dipakai Home/Riwayat; tidak dikirim pada query ketersediaan slot.
+        - in: query
+          name: id
+          schema:
+            type: string
+            example: eq.123e4567-e89b-12d3-a456-426614174000
+          description: Filter appointment berdasarkan UUID.
         - in: query
           name: appointment_status
           schema:
             type: string
             example: eq.upcoming
+          description: Filter PostgREST, misalnya eq.upcoming atau neq.cancelled.
         - in: query
           name: appointment_date
           schema:
             type: string
             example: eq.2026-09-20
+        - in: query
+          name: appointment_time
+          schema:
+            type: string
+            example: eq.10:00:00
         - in: query
           name: service_type
           schema:
@@ -1071,9 +1431,12 @@ paths:
       operationId: updateAppointmentSchedule
       summary: Update tanggal atau waktu appointment
       description: >-
-        Update REST langsung yang digunakan oleh alur reservasi reschedule.
-        Pemeriksaan hak akses dan aturan jendela reschedule utama dilakukan oleh
-        RPC reschedule_appointment.
+        PATCH langsung ke collection ini masih dipakai oleh jalur edit
+        reservasi lama. UI memeriksa jendela waktu di client, tetapi jalur
+        PATCH ini tidak menjalankan seluruh aturan bisnis RPC
+        reschedule_appointment. Utamakan RPC untuk reschedule yang tervalidasi
+        server-side. Migration mendefinisikan trigger yang dimaksudkan mencegah
+        bentrok slot; validasi lintas-pemilik terhadap RLS tetap diperlukan.
       parameters:
         - in: query
           name: id
@@ -1114,7 +1477,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /rpc/expire_overdue_appointments:
+  /rest/v1/rpc/expire_overdue_appointments:
     post:
       tags:
         - RPC
@@ -1142,7 +1505,7 @@ paths:
         '401':
           description: Session tidak valid.
 
-  /rpc/reschedule_appointment:
+  /rest/v1/rpc/reschedule_appointment:
     post:
       tags:
         - RPC
@@ -1178,7 +1541,7 @@ paths:
         '404':
           description: Appointment tidak ditemukan.
 
-  /rpc/settle_appointment_payment:
+  /rest/v1/rpc/settle_appointment_payment:
     post:
       tags:
         - RPC
@@ -1220,25 +1583,21 @@ paths:
         - Observability
       operationId: logClientServerError
       summary: Kirim metadata error HTTP 5xx dari client
+      x-persists-to:
+        table: error_logs
+        fieldMapping:
+          source: source
+          method: method
+          path: path
+          status_code: status_code
+          message: message
+          platform: platform
+          received_at: server-generated timestamp
       description: >-
         Menerima metadata aman dari Dio interceptor ketika client menerima
         status HTTP 500-599. Token, password, dan body request tidak dikirim.
-        Request body dienkripsi otomatis dengan AES-256-CBC oleh RestCryptoInterceptor sebelum dikirim.
-        Response didekripsi otomatis. Header X-Encrypted: 1 dan X-Encryption: AES-256-CBC ditambahkan.
-        HMAC-SHA256 diverifikasi; payload yang terdeteksi diubah direjek oleh interceptor.
-      parameters:
-        - in: header
-          name: X-Encrypted
-          schema:
-            type: string
-            example: "1"
-          description: Ditambahkan otomatis oleh RestCryptoInterceptor. Nilai '1' menandai body terenkripsi AES-256-CBC.
-        - in: header
-          name: X-Encryption
-          schema:
-            type: string
-            example: AES-256-CBC
-          description: Algoritma enkripsi yang digunakan. Ditambahkan otomatis oleh RestCryptoInterceptor.
+        Request berupa JSON biasa melalui HTTPS; endpoint ini tidak memakai
+        envelope enkripsi tambahan.
       requestBody:
         required: true
         content:
@@ -1258,40 +1617,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EdgeFunctionErrorResponse'
+        '500':
+          description: Gagal menyimpan log ke tabel error_logs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionErrorResponse'
         '405':
           description: Method selain POST tidak diizinkan.
-
-  /maps-config:
-    get:
+        '503':
+          description: Penyimpanan log belum dikonfigurasi di Edge Function.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFunctionErrorResponse'
+    options:
       tags:
-        - Maps
-      summary: Konfigurasi sistem peta 3 tier (referensi)
-      description: >
-        Bukan endpoint REST — dokumen ini mendeskripsikan konfigurasi sistem peta
-        cascading fallback yang digunakan di alur reservasi Home Care.
-
-        **Hierarki tile peta:**
-        1. Google Maps tiles (GOOGLE_MAPS_API_KEY) — utama
-        2. Geoapify osm-bright tiles (GEOAPIFY_API_KEY) — sekunder
-        3. OpenStreetMap standard tiles — tersier (selalu tersedia)
-
-        **Hierarki geocoding:**
-        1. Google Maps Geocoding API — forward dan reverse geocoding premium
-        2. Geoapify Geocoding API — 3000 request/hari gratis
-        3. Nominatim OpenStreetMap — gratis unlimited
-
-        **Environment variables yang dibutuhkan di .env client:**
-        - GOOGLE_MAPS_API_KEY: API key Google Maps Platform
-        - GEOAPIFY_API_KEY: API key Geoapify (sudah tersedia di .env)
-
-        **Perilaku fallback:**
-        - Pergantian tier terjadi otomatis saat error atau quota habis
-        - Atribusi di peta berubah sesuai layanan aktif
-        - Debug log mencatat setiap pergantian layanan
-        - User tidak merasakan gangguan saat terjadi fallback
+        - Observability
+      summary: CORS preflight logging error
+      security: []
       responses:
-        '200':
-          description: Referensi konfigurasi (tidak ada server yang melayani path ini).
+        '204':
+          description: Preflight diterima; mengizinkan POST.
 
 components:
   securitySchemes:
@@ -1299,129 +1646,170 @@ components:
       type: apiKey
       in: header
       name: apikey
-      description: Supabase anon key atau service-role key
+      description: Supabase publishable/anon key. Jangan pernah mengekspos service-role key ke aplikasi client.
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Supabase JWT session token atau service-role key
-    restEncryptionKey:
-      type: apiKey
-      in: header
-      name: X-Encrypted
       description: >-
-        Menandai request yang body-nya telah dienkripsi dengan AES-256-CBC.
-        Nilai '1' berarti body adalah envelope {data, iv, sig}.
-        Kunci enkripsi: REST_ENCRYPT_KEY (env var, 64 hex chars / 32 byte).
-        Kunci HMAC: REST_HMAC_KEY (env var, minimal 64 hex chars).
-        Ditambahkan otomatis oleh RestCryptoInterceptor; tidak perlu di-set manual.
-
+        Supabase JWT Bearer token. Umumnya session pengguna; update-pin juga
+        menerima anon-key bearer pada alur tanpa sesi yang belum aman untuk
+        produksi karena belum memverifikasi OTP.
   schemas:
-    SignupRequest:
+    SupabaseSignUpRequest:
       type: object
       required:
-        - phone
-        - pin
-        - full_name
-        - birth_date
-        - gender
+        - email
+        - password
       properties:
-        phone:
-          type: string
-          description: Nomor HP format Indonesia, akan dinormalisasi ke +62xxx
-          example: "081234567890"
-        pin:
-          type: string
-          description: PIN 6-digit (akan di-hash dengan SHA-256)
-          example: "123456"
-        full_name:
-          type: string
-          example: Budi Santoso
         email:
           type: string
           format: email
-          description: >-
-            Email opsional. Jika valid, dipakai sebagai auth identity di Supabase Auth.
-            Jika tidak diisi atau tidak valid, digenerate dari nomor HP ({digits}@kedota.local).
-          example: budi@example.com
-        birth_date:
+          description: Email identity Supabase; pada akun phone dapat berupa email fallback @kedota.local.
+          example: pasien@example.com
+        password:
           type: string
-          format: date
-          example: "1995-08-10"
-        gender:
-          type: string
-          enum:
-            - Laki-laki
-            - Perempuan
-            - Lainnya
-          example: Laki-laki
-        signup_method:
-          type: string
-          enum:
-            - phone
-            - google
-            - apple
-          default: phone
+          description: PIN pengguna yang dipakai sebagai password Auth.
+          example: "123456"
+        data:
+          type: object
+          description: User metadata yang disertakan Supabase Auth.
+          properties:
+            phone:
+              type: string
+              example: "+6281234567890"
+            full_name:
+              type: string
+              example: Budi Santoso
+            signup_method:
+              type: string
+              enum: [phone, google, apple]
 
-    SignInRequest:
+    PasswordGrantRequest:
       type: object
       required:
-        - phone
-        - pin
+        - email
+        - password
       properties:
-        phone:
+        email:
           type: string
-          description: Nomor HP format Indonesia
-          example: "081234567890"
-        pin:
+          format: email
+          example: pasien@example.com
+        password:
           type: string
-          description: PIN 6-digit (akan diverifikasi dengan SHA-256 hash)
+          description: PIN/password Auth yang dikirim melalui HTTPS.
           example: "123456"
+
+    IdTokenGrantRequest:
+      type: object
+      required:
+        - provider
+        - id_token
+      properties:
+        provider:
+          type: string
+          enum: [google, apple]
+        id_token:
+          type: string
+          description: ID token hasil autentikasi SDK provider.
+        access_token:
+          type: string
+          description: Access token provider bila tersedia.
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh token dari AuthResponse.
 
     SendOtpRequest:
       type: object
       required:
-        - phone
+        - email
       properties:
-        phone:
+        email:
           type: string
-          description: Nomor HP format internasional (+62...)
-          example: "+6281234567890"
+          format: email
+          example: pasien@example.com
+        create_user:
+          type: boolean
+          description: Supabase Auth may create a user during OTP; the app uses true for signup email verification and false when changing an existing email.
+          example: true
 
     VerifyOtpRequest:
       type: object
-      required:
-        - phone
-        - token
-        - type
+      required: [email, token, type]
       properties:
-        phone:
+        email:
           type: string
-          example: "+6281234567890"
+          format: email
+          example: pasien@example.com
         token:
           type: string
-          description: 6-digit OTP code
+          description: Kode OTP yang dikirim Supabase Auth.
           example: "123456"
         type:
           type: string
-          enum: [sms]
-          example: "sms"
+          enum: [email]
+
+    UpdateAuthPasswordRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: PIN/password Auth baru untuk session yang sedang aktif.
+          example: "654321"
 
     AuthResponse:
       type: object
+      description: Bentuk ringkas response Supabase Auth; provider dapat menambah field.
       properties:
-        user_id:
-          type: string
-          example: 123e4567-e89b-12d3-a456-426614174000
-        email:
-          type: string
-          example: budi@example.com
         access_token:
           type: string
-          description: JWT session token Supabase
-        message:
+        token_type:
           type: string
-          example: Login berhasil
+          example: bearer
+        expires_in:
+          type: integer
+        refresh_token:
+          type: string
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+            phone:
+              type: string
+      additionalProperties: true
+
+    RestCryptoEnvelope:
+      type: object
+      required: [data, iv, sig]
+      description: >-
+        Wire format khusus update-pin. AES-256-CBC ciphertext base64, IV random
+        base64, dan HMAC-SHA256 hex atas data+iv. Envelope ini tidak berlaku
+        untuk client-error-log atau endpoint Supabase lainnya.
+      properties:
+        data:
+          type: string
+          format: byte
+          description: Ciphertext dalam Base64.
+        iv:
+          type: string
+          format: byte
+          description: IV 16-byte dalam Base64.
+        sig:
+          type: string
+          pattern: '^[0-9a-fA-F]{64}$'
+          description: HMAC-SHA256 dalam heksadesimal.
 
     CreateProfileRequest:
       type: object
@@ -1436,10 +1824,11 @@ components:
         id:
           type: string
           description: UUID dari auth.users
+          format: uuid
           example: 123e4567-e89b-12d3-a456-426614174000
         phone:
           type: string
-          description: Nomor HP format +62xxx (dinormalisasi, tanpa tanda +62 stripped)
+          description: Nomor HP yang dinormalisasi ke format internasional +62xxx.
           example: "+6281234567890"
         full_name:
           type: string
@@ -1451,6 +1840,7 @@ components:
           example: budi@example.com
         auth_email:
           type: string
+          nullable: true
           format: email
           description: Email yang dipakai di Supabase Auth (mungkin berbeda dari email display)
           example: budi@example.com
@@ -1482,15 +1872,19 @@ components:
           example: true
         nik:
           type: string
+          nullable: true
           description: NIK 16 digit (opsional)
           example: "3273012345678901"
         address:
           type: string
+          nullable: true
           description: Alamat lengkap (opsional)
           example: "Jl. Mawar No. 1, Malang"
         medical_code:
           type: string
-          description: Digenerate otomatis oleh server; tidak perlu dikirim oleh client
+          description: >-
+            Opsional. Beberapa alur client mengirim kode yang dibuat aplikasi;
+            profil lama dapat diberi kode kemudian.
           example: "KDT-a3f8c1e20b94"
         email_verified:
           type: boolean
@@ -1520,9 +1914,11 @@ components:
         birth_date:
           type: string
           format: date
+          nullable: true
           example: "1995-08-10"
         gender:
           type: string
+          nullable: true
           enum:
             - Laki-laki
             - Perempuan
@@ -1533,6 +1929,28 @@ components:
           example: "+6281234567890"
         is_profile_complete:
           type: boolean
+          example: true
+        pin_hash:
+          type: string
+          description: Hash SHA-256 PIN baru; digunakan pada PATCH profil saat sesi aktif.
+          example: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
+        profile_photo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL foto profil; penghapusan foto di UI hanya mengosongkan URL, bukan menghapus objek Storage.
+          example: "https://wwmctqhbqpsbkyxkeaqv.supabase.co/storage/v1/object/public/profile-photos/123e4567-e89b-12d3-a456-426614174000/profile.jpg"
+        nik:
+          type: string
+          description: NIK opsional, 16 digit.
+          example: "3273012345678901"
+        address:
+          type: string
+          description: Alamat lengkap opsional.
+          example: "Jl. Mawar No. 1, Malang"
+        email_verified:
+          type: boolean
+          description: Status verifikasi email yang diperbarui setelah OTP email Supabase Auth berhasil.
           example: true
         last_login_at:
           type: string
@@ -1554,6 +1972,11 @@ components:
           nullable: true
           description: Timestamp terakhir email diubah. Null jika belum pernah diubah. Digunakan untuk rate-limit perubahan email (1x/hari).
           example: "2026-08-17T12:00:00Z"
+        medical_code:
+          type: string
+          nullable: true
+          description: Kode pasien yang dapat dibuat aplikasi jika profil lama belum memilikinya.
+          example: "KDT-A1B2C3D4E5F6"
 
     UpdatePinRequest:
       type: object
@@ -1686,34 +2109,51 @@ components:
 
     Profile:
       type: object
+      description: Row kontrak untuk entitas profiles.
+      required:
+        - id
+        - signup_method
+        - status
+        - is_profile_complete
+        - email_verified
+        - created_at
+        - updated_at
       properties:
         id:
           type: string
+          format: uuid
           example: 123e4567-e89b-12d3-a456-426614174000
         phone:
           type: string
+          nullable: true
           description: Format +62xxx. Selalu dinormalisasi ke format internasional +62 menggunakan PhoneValidator.normalizePhoneNumber() sebelum disimpan.
           example: "+6281234567890"
         full_name:
           type: string
+          nullable: true
           example: Budi Santoso
         email:
           type: string
+          nullable: true
           example: budi@example.com
         auth_email:
           type: string
+          nullable: true
           description: Email yang dipakai di Supabase Auth (untuk multi-kandidat sign-in)
           example: budi@example.com
         pin_hash:
           type: string
+          nullable: true
           description: SHA-256 hash dari PIN
           example: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
         birth_date:
           type: string
           format: date
+          nullable: true
           example: "1995-08-10"
         gender:
           type: string
+          nullable: true
           enum:
             - Laki-laki
             - Perempuan
@@ -1740,6 +2180,7 @@ components:
         last_login_at:
           type: string
           format: date-time
+          nullable: true
           example: "2026-08-17T09:00:00Z"
         created_at:
           type: string
@@ -1754,17 +2195,26 @@ components:
           description: Flag apakah email sudah diverifikasi. Default false, true setelah konfirmasi OTP email.
           default: false
           example: false
+        profile_photo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL publik objek di bucket profile-photos; null jika belum ada.
+          example: "https://wwmctqhbqpsbkyxkeaqv.supabase.co/storage/v1/object/public/profile-photos/123e4567-e89b-12d3-a456-426614174000/profile.jpg"
         nik:
           type: string
+          nullable: true
           description: NIK 16 digit (opsional, tidak wajib untuk kelengkapan profil)
           example: "3273012345678901"
         address:
           type: string
+          nullable: true
           description: Alamat lengkap (opsional, tidak wajib untuk kelengkapan profil)
           example: "Jl. Mawar No. 1, Malang"
         medical_code:
           type: string
-          description: Kode medis pasien yang digenerate otomatis. Format KDT- + 12 karakter heksadesimal.
+          nullable: true
+          description: Kode medis pasien format KDT- + 12 karakter heksadesimal; dapat dibuat client saat profil dibuat atau dilengkapi.
           example: "KDT-a3f8c1e20b94"
         phone_changed_at:
           type: string
@@ -1778,18 +2228,66 @@ components:
           nullable: true
           description: Timestamp terakhir email diubah. Null jika belum pernah diubah. Digunakan untuk rate-limit perubahan email (1x/hari).
           example: "2026-08-17T12:00:00Z"
+      x-database:
+        table: profiles
+        schema: public
+        engine: PostgreSQL (current implementation)
+        primaryKey: [id]
+        foreignKeys:
+          - columns: [id]
+            references: auth.users(id)
+            onDelete: cascade
+            rebuildNote: Map to the target system's user identity; auth.users is Supabase-specific.
+        defaults:
+          signup_method: phone
+          status: active
+          is_profile_complete: false
+          email_verified: false
+          created_at: now()
+          updated_at: now()
+        constraints:
+          - signup_method IN (phone, google, apple)
+          - status IN (active, deactivated, recycled)
+          - gender IS NULL OR gender IN (Laki-laki, Perempuan, Lainnya)
+          - medical_code is unique when not null
+        indexes:
+          - unique partial index on medical_code where medical_code IS NOT NULL
+          - index on lower(auth_email) where auth_email IS NOT NULL
+          - index on lower(email) where email IS NOT NULL
+          - index on status
+        notes:
+          - >-
+            All columns except id, signup_method, status, is_profile_complete,
+            email_verified, created_at, and updated_at are nullable in the
+            repository migration.
+          - pin_hash currently stores a client-produced SHA-256 PIN hash. It is
+            sensitive and must never be returned to a normal client.
 
     Appointment:
       type: object
+      description: >-
+        Row kontrak untuk entitas appointments. Informasi pasien, layanan,
+        terapis, jadwal, pembayaran, dan catatan klinis saat ini disimpan
+        bersama dalam satu row; bukan tabel terpisah.
       required:
         - id
         - booker_id
+        - patient_is_self
         - service_type
         - appointment_date
         - appointment_time
+        - session_count
         - appointment_status
         - payment_plan
         - payment_status
+        - base_price
+        - travel_fee
+        - discount_amount
+        - discount_percent
+        - total_amount
+        - amount_due
+        - created_at
+        - updated_at
       properties:
         id:
           type: string
@@ -1797,26 +2295,53 @@ components:
         booker_id:
           type: string
           format: uuid
+        patient_is_self:
+          type: boolean
+          example: true
+        patient_nik:
+          type: string
+          nullable: true
+          example: "3273012345678901"
         patient_full_name:
           type: string
+          nullable: true
+        patient_birth_date:
+          type: string
+          format: date
+          nullable: true
+        patient_phone:
+          type: string
+          nullable: true
+          example: "+6281234567890"
+        patient_gender:
+          type: string
+          nullable: true
+          enum: [Laki-laki, Perempuan, Lainnya]
         patient_medical_code:
           type: string
+          nullable: true
           description: ID pasien dengan format KDT- + 12 karakter heksadesimal.
         patient_complaint:
           type: string
+          nullable: true
         service_type:
           type: string
           enum: [Klinik, Home Care]
         clinic_name:
           type: string
+          nullable: true
         address:
           type: string
+          nullable: true
         therapist_name:
           type: string
+          nullable: true
         therapist_gender_preference:
           type: string
+          nullable: true
         therapist_availability_requested:
           type: string
+          nullable: true
         appointment_date:
           type: string
           format: date
@@ -1855,14 +2380,51 @@ components:
         discount_percent:
           type: integer
           minimum: 0
+          maximum: 100
         total_amount:
           type: integer
           format: int64
         amount_due:
           type: integer
           format: int64
+        clinical_note:
+          type: string
+          nullable: true
+        vas_score:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 10
+        rom_score:
+          type: integer
+          nullable: true
+          description: >-
+            Nilai numerik ROM. Rentang tampilan yang diharapkan 0-120, tetapi
+            migration database saat ini tidak memasang CHECK constraint untuk kolom ini.
+        mmt_score:
+          type: integer
+          nullable: true
+          description: >-
+            Nilai numerik MMT. Rentang tampilan yang diharapkan 0-5, tetapi
+            migration database saat ini tidak memasang CHECK constraint untuk kolom ini.
+        odi_score:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 50
+        therapist_recommendation:
+          type: string
+          nullable: true
+        therapist_sipf:
+          type: string
+          nullable: true
+        therapist_photo_url:
+          type: string
+          format: uri
+          nullable: true
         booking_code:
           type: string
+          nullable: true
           description: Kode booking dengan format EMR-####-########.
         created_at:
           type: string
@@ -1870,6 +2432,119 @@ components:
         updated_at:
           type: string
           format: date-time
+      x-database:
+        table: appointments
+        schema: public
+        engine: PostgreSQL (current implementation)
+        primaryKey: [id]
+        foreignKeys:
+          - columns: [booker_id]
+            references: auth.users(id)
+            onDelete: cascade
+            rebuildNote: Map to the target system's user identity; auth.users is Supabase-specific.
+        defaults:
+          id: gen_random_uuid()
+          patient_is_self: true
+          session_count: 1
+          appointment_status: upcoming
+          payment_plan: full
+          payment_status: pending
+          base_price: 0
+          travel_fee: 0
+          discount_amount: 0
+          discount_percent: 0
+          total_amount: 0
+          amount_due: 0
+          created_at: now()
+          updated_at: now()
+        constraints:
+          - service_type IN (Klinik, Home Care)
+          - appointment_status IN (upcoming, completed, expired, cancelled)
+          - payment_plan IN (full, deposit)
+          - payment_status IN (paid, pending, failed, expired)
+          - session_count IN (1, 3, 6, 9)
+          - discount_percent BETWEEN 0 AND 100
+          - vas_score IS NULL OR vas_score BETWEEN 0 AND 10
+          - odi_score IS NULL OR odi_score BETWEEN 0 AND 50
+          - >-
+            No database CHECK constraint for rom_score or mmt_score is present
+            in the repository migration.
+          - >-
+            A non-cancelled slot is unique by appointment_date, appointment_time,
+            service_type, and coalesced clinic_name; appointment_status=cancelled
+            is excluded. The repository uses a trigger plus an advisory lock.
+          - booking_code is unique when not null and not empty
+        indexes:
+          - (booker_id, appointment_date DESC, appointment_time)
+          - partial (appointment_date, appointment_time, service_type, clinic_name) where appointment_status <> cancelled
+          - unique partial booking_code where booking_code IS NOT NULL AND booking_code <> ''
+        notes:
+          - >-
+            All columns except those listed in required and patient_* optional
+            fields are nullable only where the component property says
+            nullable: true; the repository migration has no NOT NULL on
+            therapist, payment_method, discount_code, clinical, score,
+            recommendation, SIPF, photo, or booking_code fields.
+          - >-
+            Slot conflict validation is intended to cover all bookers, but
+            production behavior must be verified with the target database's
+            transaction and authorization model.
+
+    ErrorLog:
+      type: object
+      description: Row kontrak untuk entitas error_logs; ditulis oleh backend logging, bukan REST client.
+      required:
+        - id
+        - source
+        - method
+        - path
+        - status_code
+        - received_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Identity/autoincrement primary key.
+        source:
+          type: string
+          example: flutter_client
+        method:
+          type: string
+          example: GET
+        path:
+          type: string
+          example: /rest/v1/appointments
+        status_code:
+          type: integer
+          minimum: 500
+          maximum: 599
+        message:
+          type: string
+          nullable: true
+        platform:
+          type: string
+          nullable: true
+        received_at:
+          type: string
+          format: date-time
+      x-database:
+        table: error_logs
+        schema: public
+        engine: PostgreSQL (current implementation)
+        primaryKey: [id]
+        generated: id is generated by default as identity
+        defaults:
+          received_at: now()
+        constraints:
+          - status_code BETWEEN 500 AND 599
+        indexes:
+          - (received_at DESC)
+        access:
+          - >-
+            In the current implementation anon and authenticated roles have
+            no direct table access; the server-side client-error-log function
+            inserts with a privileged credential. Keep privileged credentials
+            on the server in the replacement system.
 
     CreateAppointmentRequest:
       type: object
@@ -1888,23 +2563,49 @@ components:
         booker_id:
           type: string
           format: uuid
+        patient_is_self:
+          type: boolean
         patient_full_name:
           type: string
+          nullable: true
+        patient_nik:
+          type: string
+          nullable: true
+        patient_birth_date:
+          type: string
+          format: date
+          nullable: true
+        patient_phone:
+          type: string
+          nullable: true
+        patient_gender:
+          type: string
+          nullable: true
+          enum: [Laki-laki, Perempuan, Lainnya]
         patient_medical_code:
           type: string
+          nullable: true
         patient_complaint:
           type: string
+          nullable: true
         service_type:
           type: string
           enum: [Klinik, Home Care]
         clinic_name:
           type: string
+          nullable: true
         address:
           type: string
+          nullable: true
+        therapist_name:
+          type: string
+          nullable: true
         therapist_gender_preference:
           type: string
+          nullable: true
         therapist_availability_requested:
           type: string
+          nullable: true
         appointment_date:
           type: string
           format: date
@@ -1919,6 +2620,7 @@ components:
           enum: [full, deposit]
         payment_method:
           type: string
+          nullable: true
         payment_status:
           type: string
           enum: [paid, pending]
@@ -1927,25 +2629,33 @@ components:
           enum: [upcoming]
         base_price:
           type: integer
+          format: int64
         travel_fee:
           type: integer
+          format: int64
         discount_amount:
           type: integer
+          format: int64
         discount_code:
           type: string
           nullable: true
         discount_percent:
           type: integer
+          minimum: 0
+          maximum: 100
         total_amount:
           type: integer
+          format: int64
         amount_due:
           type: integer
+          format: int64
 
     UpdateAppointmentRequest:
       type: object
-      required:
-        - appointment_date
-        - appointment_time
+      description: >-
+        PATCH PostgREST menerima field parsial. appointment_date dan
+        appointment_time dipakai pada edit jadwal; booking_code dipakai untuk
+        backfill kode booking pada data lama.
       properties:
         appointment_date:
           type: string
@@ -1953,6 +2663,10 @@ components:
         appointment_time:
           type: string
           example: "10:00:00"
+        booking_code:
+          type: string
+          nullable: true
+          example: "EMR-1234-ABCDEF12"
 
     RescheduleAppointmentRequest:
       type: object
