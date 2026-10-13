@@ -26,17 +26,17 @@ mudah dipakai saat menjelaskan status ke CEO.
 
 ### Hasil tes otomatis yang pernah dijalankan
 
-Tes terarah terakhir mencatat **25 tes lulus**. Pada satu kali pengujian di
-komputer Windows, hasilnya antara lain:
+Pengujian terakhir mencatat **69 tes lulus** untuk seluruh project. Pada satu
+kali pengujian di komputer Windows, hasilnya antara lain:
 
-- 20.000 tugas hitung sederhana selesai sekitar 141 ms.
+- 20.000 tugas hitung sederhana selesai sekitar 119 ms.
 - Saat tes memakai data sementara sebesar 8 MB, pemakaian memori proses naik
   sekitar 8 MB.
 - Tes kirim dan baca data terenkripsi dengan server tiruan selesai sekitar
-  49 ms.
-- Tes membaca contoh jawaban error server selesai sekitar 7 ms.
-- Membuka dan membaca logo aplikasi selesai sekitar 33 ms.
-- 2.000 tugas enkripsi selesai sekitar 249 ms.
+  34 ms.
+- Tes membaca contoh jawaban error server selesai sekitar 6 ms.
+- Membuka dan membaca logo aplikasi selesai sekitar 23 ms.
+- 2.000 tugas enkripsi selesai sekitar 194 ms.
 
 **Catatan:** angka ini adalah hasil tes di komputer, bukan janji kecepatan
 aplikasi di ponsel atau di internet. Hasil juga bisa berubah tergantung
@@ -60,25 +60,30 @@ HTTPS.
 ### Yang sudah dibuat
 
 - Aplikasi sudah memiliki fungsi untuk membungkus dan membuka data.
-- Jalur **reset PIN melalui Supabase Edge Function** sudah diatur untuk
-  mengirim data dalam bentuk terenkripsi.
+- Jalur **reset PIN tanpa sesi aktif** mengirim data dalam bentuk terenkripsi
+  ke Supabase Edge Function.
+- Jalur **ganti PIN saat pengguna sudah masuk** memakai request Supabase yang
+  dilindungi HTTPS, tetapi belum memakai bungkus enkripsi tambahan yang sama.
 - Server sudah diatur untuk membuka data yang masuk dan membungkus jawaban
   sukses sebelum mengirimkannya kembali.
-- Server menolak request perubahan PIN jika dikirim tanpa bungkus terenkripsi.
+- Server menolak request reset PIN jika dikirim tanpa bungkus terenkripsi.
 - Tes otomatis memeriksa bahwa PIN tidak terlihat pada isi request yang
   dikirim, jawaban sukses bisa dibuka, dan data yang diubah akan terdeteksi.
 
 ### Yang masih perlu diperiksa
 
-- **Belum semua jalur perubahan PIN memakai bungkus enkripsi tambahan ini.**
-  Jalur ketika pengguna sudah masuk ke akun menggunakan cara lain untuk
-  memperbarui PIN.
+- Reset PIN masih perlu diuji dari aplikasi sampai Edge Function yang sudah
+  di-deploy.
+- Layar lupa PIN saat ini menerima beberapa kode OTP contoh yang tetap. Ini
+  bukan verifikasi OTP sungguhan dari server. Sebelum dipakai pengguna
+  sebenarnya, reset PIN harus memakai OTP yang dikirim dan diverifikasi server.
 - **Jawaban error dari server belum dibungkus dengan enkripsi tambahan.**
   Koneksi HTTPS tetap melindungi komunikasi, tetapi perlindungan tambahan pada
-  isi data saat ini hanya diterapkan pada request dan jawaban sukses di jalur
-  reset PIN tersebut.
-- Ada jalur pencatatan error yang juga dikonfigurasi untuk memakai enkripsi.
-  Perlu dipastikan server penerima jalur itu bisa membuka datanya.
+  isi data saat ini hanya diterapkan pada request reset PIN dan jawaban
+  suksesnya.
+- Pengiriman log error tetap memakai JSON biasa melalui HTTPS. Endpoint ini
+  sengaja tidak dimasukkan ke daftar enkripsi karena server penerimanya belum
+  mendukung format tersebut.
 - Kode aplikasi dan server sudah disiapkan, tetapi itu **belum membuktikan
   perubahan server sudah dipasang di lingkungan yang dipakai aplikasi**.
   Pengaturan rahasia di Supabase harus cocok dengan pengaturan aplikasi.
@@ -92,9 +97,9 @@ HTTPS.
 | Bagian | Status |
 | --- | --- |
 | Fungsi enkripsi dan pembuka data di aplikasi | **Sudah ada** |
-| Request reset PIN ke server | **Sudah dibuat terenkripsi di kode; perlu dites setelah server dipasang** |
-| Jawaban sukses dari server | **Sudah dibuat terenkripsi di kode; perlu dites setelah server dipasang** |
-| Semua jalur perubahan PIN | **Belum semuanya memakai cara enkripsi tambahan yang sama** |
+| Request reset PIN ke Edge Function | **Sudah dibuat terenkripsi di kode; perlu dites setelah server dipasang** |
+| Jawaban sukses reset PIN dari server | **Sudah dibuat terenkripsi di kode; perlu dites setelah server dipasang** |
+| Ganti PIN saat pengguna sudah masuk | **Menggunakan HTTPS dan sesi Supabase; belum memakai bungkus enkripsi tambahan** |
 | Jawaban error dari server | **Belum memakai enkripsi tambahan** |
 | Semua komunikasi API aplikasi | **Belum; pengamanan tambahan baru untuk jalur tertentu** |
 
@@ -105,8 +110,8 @@ Versi singkat yang bisa disampaikan:
 > “Kami sudah menambahkan tes performa dasar dan perlindungan tambahan untuk
 > data PIN pada jalur reset PIN. Tes otomatis di komputer sudah lulus.
 > Pengujian baterai dan ponsel lama masih perlu dilakukan langsung di perangkat
-> fisik. Kami juga perlu memastikan pengaturan server sudah aktif dan memeriksa
-> jalur perubahan PIN lainnya sebelum menyatakan semua bagian selesai.”
+> fisik. Kami juga perlu memastikan pengaturan server sudah aktif dan menguji
+> alur PIN dari aplikasi sampai server sebelum menyatakan semuanya selesai.”
 
 Jika ditanya lebih lanjut:
 
@@ -114,8 +119,8 @@ Jika ditanya lebih lanjut:
   “Sudah ada tes dasar untuk waktu kerja aplikasi, memori, jawaban server, dan
   gambar lokal. Baterai dan ponsel lama belum dites langsung.”
 - **Apakah semua data API sudah dienkripsi?**  
-  “Belum semua. Perlindungan tambahan sudah dibuat untuk jalur reset PIN
-  tertentu. Semua komunikasi tetap harus menggunakan HTTPS.”
+  “Belum semua API. Perlindungan tambahan dibuat untuk jalur perubahan/reset
+  PIN. Semua komunikasi tetap harus menggunakan HTTPS.”
 - **Apa langkah berikutnya?**  
   “Pasang dan cocokkan pengaturan rahasia di server, tes reset PIN dari awal
   sampai selesai, lalu ukur aplikasi di ponsel fisik termasuk ponsel lama.”
@@ -125,16 +130,15 @@ Jika ditanya lebih lanjut:
 
 ## 4. Langkah berikutnya
 
-- [ ] Pastikan jalur perubahan PIN saat pengguna sudah masuk ke akun juga sudah
-  ditinjau.
-- [ ] Pastikan server pencatat error bisa membaca data terenkripsi yang
-  dikirim aplikasi.
+- [ ] Ganti OTP contoh di aplikasi dengan OTP sungguhan yang diverifikasi
+  server sebelum mengizinkan reset PIN.
 - [ ] Pasang pengaturan kunci yang cocok di Supabase dan deploy perubahan
   server ke lingkungan tes.
 - [ ] Tes reset PIN dari aplikasi ke server, termasuk jawaban sukses dan
   jawaban error.
+- [ ] Tinjau apakah ganti PIN saat pengguna sudah masuk juga perlu
+  dipindahkan ke endpoint yang mendukung enkripsi isi data.
 - [ ] Ukur pemakaian prosesor, memori, baterai, dan pemuatan gambar internet di
   ponsel sungguhan.
 - [ ] Coba alur utama aplikasi di ponsel lama yang masih didukung dan catat
   hasilnya.
-

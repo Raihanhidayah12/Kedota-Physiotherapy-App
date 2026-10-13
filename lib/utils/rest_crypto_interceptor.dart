@@ -21,7 +21,6 @@ class RestCryptoInterceptor extends Interceptor {
   /// Endpoints that require payload encryption.
   static const _encryptedPaths = <String>[
     '/functions/v1/update-pin',
-    '/functions/v1/client-error-log',
   ];
 
   static bool _shouldEncrypt(String path) =>

@@ -31,7 +31,10 @@ marked complete from unit-test results alone.
 
 ## Release configuration
 
-The `update-pin` Edge Function now requires an encrypted request and returns an
-encrypted success envelope. Set `REST_ENCRYPT_KEY` and `REST_HMAC_KEY` in the
-Edge Function secrets before deploying it, and deploy the matching app version.
-See [Supabase Functions setup](../supabase/functions/README.md).
+PIN resets without an active session use the `update-pin` Edge Function. It
+requires an encrypted request and returns an encrypted success envelope.
+Signed-in PIN changes still use the authenticated Supabase client over HTTPS,
+without the extra payload envelope. Set `REST_ENCRYPT_KEY` and `REST_HMAC_KEY`
+in the Edge Function secrets before deploying it, and deploy the matching app
+version. Error responses remain ordinary JSON over HTTPS. See
+[Supabase Functions setup](../supabase/functions/README.md).

@@ -6,7 +6,7 @@ This directory contains Supabase Edge Functions for the Kedota Physiotherapy App
 
 ### update-pin
 
-**Purpose:** Securely update user PIN from client (forgot PIN flow)
+**Purpose:** Update user PIN through the encrypted Edge Function path
 
 **Path:** `update-pin/index.ts`
 
@@ -32,8 +32,9 @@ The Edge Function rejects plaintext request bodies.
 **Response (Success):**
 ```json
 {
-  "success": true,
-  "profile": { ... }
+  "data": "base64-AES-256-CBC-ciphertext",
+  "iv": "base64-random-16-byte-IV",
+  "sig": "hex-HMAC-SHA256"
 }
 ```
 
@@ -46,10 +47,12 @@ The Edge Function rejects plaintext request bodies.
 ```
 
 **Security:**
-- Validates JWT tokens
-- Prevents users from updating other users' PINs
+- Rejects a valid session token if it belongs to a different user
 - Uses service-role key safely (server-side only)
 - Implements rollback on failure
+- Reset requests without a valid session still rely on the OTP flow. The app
+  currently has demo OTP codes; do not treat that flow as production-ready
+  until OTP is sent and verified by the server.
 
 **Use Cases:**
 1. **Forgot PIN flow** - User resets PIN without active session
@@ -92,6 +95,11 @@ supabase functions serve update-pin
 ```
 
 ### Test Locally
+
+The plaintext curl example below is outdated and is expected to be rejected.
+Use the Flutter app or automated envelope tests to send a valid encrypted
+request; never paste production PINs or encryption keys into shell history.
+
 ```bash
 curl -X POST http://localhost:54321/functions/v1/update-pin \
   -H "Authorization: Bearer YOUR_ANON_KEY" \

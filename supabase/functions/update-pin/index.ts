@@ -61,9 +61,9 @@ Deno.serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    // 4. Verifikasi JWT — jika user punya session, pastikan hanya update miliknya
-    //    Untuk alur lupa PIN: user tidak punya session aktif, userError akan truthy
-    //    tapi kita tetap lanjutkan karena sudah diverifikasi via OTP + TTL di app
+    // 4. If a valid session exists, prevent updates to another user's profile.
+    //    Requests without a valid session currently continue for the OTP reset
+    //    flow; production use requires server-side OTP proof before this step.
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(userJwt);
     const hasActiveSession = !userError && !!userData?.user;
 

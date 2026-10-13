@@ -1275,8 +1275,8 @@ class SupabaseAuthService {
         'updateUserPin: profileId=$profileId currentUser=${currentUser?.id}',
       );
 
-      // Jika user punya session aktif dan itu miliknya sendiri,
-      // update langsung tanpa Edge Function (lebih cepat, tidak perlu network hop)
+      // Keep the signed-in flow on authenticated Supabase requests. The
+      // encrypted Edge Function is used by the PIN-reset flow without a session.
       if (currentUser != null && currentUser.id == profileId) {
         debugPrint('updateUserPin: using current session for direct update');
 
@@ -1301,13 +1301,12 @@ class SupabaseAuthService {
           await client.auth.updateUser(UserAttributes(password: newPin));
           debugPrint('updateUserPin: direct session update successful');
         } catch (authErr) {
-          debugPrint('updateUserPin: auth password sync notice: $authErr');
+          debugPrint('updateUserPin: direct auth password sync notice: $authErr');
           _logSupabaseError(authErr, method: 'PUT', path: '/auth/v1/user');
         }
         return true;
       }
 
-      // Tidak ada session aktif (alur lupa PIN) — delegasikan ke Edge Function
       debugPrint('updateUserPin: no active session, calling Edge Function');
 
       // Token untuk autentikasi ke Edge Function:

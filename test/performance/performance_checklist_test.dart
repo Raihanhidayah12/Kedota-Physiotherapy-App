@@ -154,6 +154,43 @@ void main() {
       );
     });
 
+    test('non-encrypted endpoints remain unchanged', () async {
+      final adapter = _StubAdapter(
+        statusCode: 202,
+        responseData: jsonEncode({'accepted': true}),
+      );
+      final dio = createRestCryptoDio()..httpClientAdapter = adapter;
+      final plainPayload = {'source': 'flutter_client', 'status_code': 503};
+
+      await dio.post<Map<String, dynamic>>(
+        'https://example.test/functions/v1/client-error-log',
+        data: plainPayload,
+      );
+
+      expect(adapter.requestData, plainPayload);
+    });
+
+    test('tampered encrypted response is rejected', () async {
+      final encryptedResponse = RestCrypto.encryptPayload({'success': true});
+      encryptedResponse['sig'] = '0' * 64;
+      final adapter = _StubAdapter(
+        statusCode: 200,
+        responseData: jsonEncode(encryptedResponse),
+        headers: const {
+          'X-Encrypted': ['1'],
+        },
+      );
+      final dio = createRestCryptoDio()..httpClientAdapter = adapter;
+
+      await expectLater(
+        dio.post<Map<String, dynamic>>(
+          'https://example.test/functions/v1/update-pin',
+          data: {'profile_id': 'test-profile', 'new_pin': '123456'},
+        ),
+        throwsA(isA<DioException>()),
+      );
+    });
+
     test('bundled image load and decode stays within the CI budget', () async {
       final stopwatch = Stopwatch()..start();
       final asset = await rootBundle.load('assets/image/Logo.jpeg');
