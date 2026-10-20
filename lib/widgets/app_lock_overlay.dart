@@ -214,29 +214,36 @@ class _AppLockScreenState extends State<AppLockScreen>
     final h = size.height;
 
     final iconSize = (w * 0.18).clamp(56.0, 80.0);
-    final dotSize = (w * 0.034).clamp(10.0, 16.0);
     final titleSize = (w * 0.055).clamp(17.0, 22.0);
     final subtitleSize = (w * 0.035).clamp(11.0, 14.0);
     final sp2 = (h * 0.025).clamp(14.0, 28.0);
 
-    // Formula baru: fixed btn 72px, hGap 16px, vGap 16px
-    const btnSize = 100.0;
-    const hGap = 16.0;
-    const vGap = 16.0;
+    final hGap = (w * 0.045).clamp(10.0, 18.0);
+    final vGap = (h * 0.016).clamp(8.0, 16.0);
+    final maxByWidth = (w - 48 - (hGap * 2)) / 3;
+    final maxByHeight = h * 0.092;
+    final btnSize = maxByWidth.clamp(54.0, 78.0).clamp(54.0, maxByHeight);
     final totalW = btnSize * 3 + hGap * 2;
-    final hPad = (w - totalW) / 2;
+    final hPad = ((w - totalW) / 2).clamp(0.0, w / 2);
 
     return PopScope(
       canPop: false,
       child: Scaffold(
         backgroundColor: const Color(0xFFF7F9F9),
         body: SafeArea(
-          child: Column(
-            children: [
-              // ── Atas: icon + title + dots ──────────────────────────────
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      children: [
+                        // ── Atas: icon + title + dots ──────────────────────────────
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
                       width: iconSize,
@@ -368,6 +375,11 @@ class _AppLockScreenState extends State<AppLockScreen>
         ),
       ),
     );
+  },
+),
+),
+),
+);
   }
 
   Widget _numpadBtn(String digit, double size) => SizedBox(

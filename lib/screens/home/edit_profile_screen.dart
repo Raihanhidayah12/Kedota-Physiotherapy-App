@@ -926,11 +926,22 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                             value: _displayPhone,
                             showChevron: true,
                             onTap: () async {
+                              if (_email == null || _email!.isEmpty || !_emailVerified) {
+                                CustomBottomSheet.show(
+                                  context,
+                                  type: BottomSheetType.info,
+                                  title: t(context, 'emailNotVerified'),
+                                  subtitle: t(context, 'emailRequiredToChangePhone'),
+                                  singleButtonText: t(context, 'closeBtn'),
+                                );
+                                return;
+                              }
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) => ChangeContactScreen(
                                     mode: ChangeContactMode.phone,
-                                    currentValue: _phone,
+                                    currentPhone: _phone,
+                                    currentEmail: _email,
                                   ),
                                 ),
                               );
@@ -959,13 +970,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                             value: _maskEmail(_email),
                             showChevron: true,
                             onTap: () async {
-                              // Block jika email belum diverifikasi
-                              if (!_emailVerified) {
+                              if (_phone == null || _phone!.isEmpty) {
                                 CustomBottomSheet.show(
                                   context,
                                   type: BottomSheetType.info,
-                                  title: t(context, 'emailNotVerified'),
-                                  subtitle: t(context, 'emailMustVerifyFirst'),
+                                  title: t(context, 'phoneLabel'),
+                                  subtitle: t(context, 'phoneRequiredToChangeEmail'),
                                   singleButtonText: t(context, 'closeBtn'),
                                 );
                                 return;
@@ -974,7 +984,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                                 MaterialPageRoute(
                                   builder: (_) => ChangeContactScreen(
                                     mode: ChangeContactMode.email,
-                                    currentValue: _email,
+                                    currentPhone: _phone,
+                                    currentEmail: _email,
                                   ),
                                 ),
                               );

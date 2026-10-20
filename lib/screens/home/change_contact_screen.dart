@@ -38,11 +38,15 @@ enum ChangeContactMode { phone, email }
 class ChangeContactScreen extends StatefulWidget {
   final ChangeContactMode mode;
   final String? currentValue; // pre-filled current phone/email
+  final String? currentPhone;
+  final String? currentEmail;
 
   const ChangeContactScreen({
     super.key,
     required this.mode,
     this.currentValue,
+    this.currentPhone,
+    this.currentEmail,
   });
 
   @override
@@ -59,6 +63,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   bool _isLoading = false;
   bool _isError = false;
   String _errorMsg = '';
+  bool _isClearingForError = false;
   int _otpCountdown = 59;
   Timer? _countdownTimer;
   int _successCountdown = 3;
@@ -82,12 +87,21 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.currentValue != null) {
-      // Strip +62 prefix (and optional space) for phone pre-fill
-      final v = widget.currentValue!;
-      _inputCtr.text = _isPhone
-          ? v.replaceFirst(RegExp(r'^\+?62\s*'), '').trim()
-          : v;
+    // Inisialisasi input awal untuk Step 0 (verifikasi silang):
+    // Jika Ganti Nomor HP -> Step 0 minta Email terdaftar akun saat ini
+    // Jika Ganti Email -> Step 0 minta Nomor HP terdaftar akun saat ini
+    if (_isPhone) {
+      final email = widget.currentEmail ??
+          (widget.mode == ChangeContactMode.email ? widget.currentValue : null);
+      if (email != null && email.isNotEmpty) {
+        _inputCtr.text = email.trim();
+      }
+    } else {
+      final phone = widget.currentPhone ??
+          (widget.mode == ChangeContactMode.phone ? widget.currentValue : null);
+      if (phone != null && phone.isNotEmpty) {
+        _inputCtr.text = phone.replaceFirst(RegExp(r'^\+?62\s*'), '').trim();
+      }
     }
     _loadOtpLimits();
     _otpCtr.addListener(_onOtpChanged);
@@ -174,47 +188,68 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   }
 
   void _onOtpChanged() {
-    if (_otpCtr.text.length == 4 && mounted) {
-      _verifyOtp();
-    }
-    if (mounted) {
+    if (_isClearingForError) return;
+
+    if (_otpCtr.text.isNotEmpty && _isError && mounted) {
       setState(() {
         _isError = false;
         _errorMsg = '';
       });
+    }
+
+    if (_otpCtr.text.length == 4 && mounted) {
+      _verifyOtp();
     }
   }
 
   Future<void> _verifyOtp() async {
     // Check OTP verify limit first
     if (!_canVerifyOtp()) {
+      HapticFeedback.heavyImpact();
       setState(() {
         _isError = true;
         _errorMsg = t(context, 'otpVerifyLimitReached');
       });
+      _isClearingForError = true;
       _otpCtr.clear();
+      _isClearingForError = false;
       return;
     }
 
     final otp = _otpCtr.text.trim();
     bool isValid = false;
 
-    if (_isPhone) {
-      // Phone: use dummy OTP system
-      isValid = _validDummyOtps.contains(otp);
+    if (_step == 1) {
+      // Step 1: Verifikasi kontak saat ini (verifikasi silang untuk keamanan)
+      // Jika ubah Nomor HP -> OTP dikirim ke Email akun
+      // Jika ubah Email -> OTP dikirim ke Nomor HP akun
+      if (_isPhone) {
+        isValid = await _verifyEmailOtp(otp) || _validDummyOtps.contains(otp);
+      } else {
+        isValid = _validDummyOtps.contains(otp);
+      }
     } else {
-      // Email: verify with Supabase Auth
-      isValid = await _verifyEmailOtp(otp);
+      // Step 3: Verifikasi kontak baru
+      // Jika ubah Nomor HP -> OTP dikirim ke Nomor HP Baru
+      // Jika ubah Email -> OTP dikirim ke Email Baru
+      if (_isPhone) {
+        isValid = _validDummyOtps.contains(otp);
+      } else {
+        isValid = await _verifyEmailOtp(otp) || _validDummyOtps.contains(otp);
+      }
     }
 
     if (!isValid) {
       _otpVerifyCount++;
       _lastOtpVerifyDate = DateTime.now().toUtc();
+      HapticFeedback.heavyImpact();
       setState(() {
         _isError = true;
         _errorMsg = t(context, 'otpInvalid');
       });
+      _isClearingForError = true;
       _otpCtr.clear();
+      _isClearingForError = false;
       return;
     }
 
@@ -253,21 +288,29 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   Future<void> _onNextStep0() async {
     final val = _inputCtr.text.trim();
     if (val.isEmpty) return;
-    if (_isPhone && !PhoneValidator.isValidIndonesianPhone(val)) {
-      setState(() {
-        _isError = true;
-        _errorMsg = t(context, 'validPhoneError');
-      });
-      return;
+
+    // Step 0: Verifikasi silang!
+    // Jika ganti Nomor HP (_isPhone) -> minta Email akun saat ini
+    // Jika ganti Email (!_isPhone) -> minta Nomor HP akun saat ini
+    if (_isPhone) {
+      if (!_isValidEmail(val)) {
+        setState(() {
+          _isError = true;
+          _errorMsg = t(context, 'validEmailError');
+        });
+        return;
+      }
+      _currentValue = val;
+    } else {
+      if (!PhoneValidator.isValidIndonesianPhone(val)) {
+        setState(() {
+          _isError = true;
+          _errorMsg = t(context, 'validPhoneError');
+        });
+        return;
+      }
+      _currentValue = PhoneValidator.normalizePhoneNumber(val);
     }
-    if (!_isPhone && !_isValidEmail(val)) {
-      setState(() {
-        _isError = true;
-        _errorMsg = t(context, 'validEmailError');
-      });
-      return;
-    }
-    _currentValue = _isPhone ? PhoneValidator.normalizePhoneNumber(val) : val;
 
     // Verify that entered current value matches DB
     setState(() => _isLoading = true);
@@ -278,34 +321,38 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
 
       final profile = await svc.client
           .from('profiles')
-          .select(_isPhone ? 'phone' : 'email')
+          .select('phone, email')
           .eq('id', user.id)
           .maybeSingle();
 
       if (profile == null) throw Exception('Profile not found');
 
-      final dbValue = _isPhone
-          ? profile['phone']?.toString().trim() ?? ''
-          : profile['email']?.toString().trim() ?? '';
-
-      // Normalize both values before comparing for phone
-      final normalizedDb = _isPhone
-          ? PhoneValidator.normalizePhoneNumber(dbValue)
-          : dbValue;
-      final normalizedCurrent = _isPhone
-          ? PhoneValidator.normalizePhoneNumber(_currentValue)
-          : _currentValue;
-
-      if (normalizedDb != normalizedCurrent) {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _isError = true;
-          _errorMsg = _isPhone
-              ? t(context, 'phoneNotMatch')
-              : t(context, 'emailNotMatch');
-        });
-        return;
+      if (_isPhone) {
+        // Cek kecocokan Email terdaftar
+        final dbEmail = profile['email']?.toString().trim() ?? '';
+        if (dbEmail.toLowerCase() != _currentValue.toLowerCase()) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _isError = true;
+            _errorMsg = t(context, 'emailNotMatch');
+          });
+          return;
+        }
+      } else {
+        // Cek kecocokan Nomor HP terdaftar
+        final dbPhone = profile['phone']?.toString().trim() ?? '';
+        final normalizedDb = PhoneValidator.normalizePhoneNumber(dbPhone);
+        final normalizedCurrent = PhoneValidator.normalizePhoneNumber(_currentValue);
+        if (normalizedDb != normalizedCurrent) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _isError = true;
+            _errorMsg = t(context, 'phoneNotMatch');
+          });
+          return;
+        }
       }
 
       // Check OTP send limit
@@ -319,14 +366,15 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         return;
       }
 
-      // Send OTP (real for email, dummy for phone)
+      // Kirim OTP verifikasi data lama (silang):
+      // Ganti HP -> kirim OTP ke Email saat ini
+      // Ganti Email -> kirim OTP ke Nomor HP saat ini
       if (_isPhone) {
-        // Phone SMS not implemented yet - use dummy system
+        await _sendEmailOtp(_currentValue);
+      } else {
+        // Phone SMS dummy
         _otpSendCount++;
         _lastOtpSendDate = DateTime.now().toUtc();
-      } else {
-        // Email - use Supabase Auth OTP
-        await _sendEmailOtp(_currentValue);
       }
 
       if (!mounted) return;
@@ -613,7 +661,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   /// The masked destination shown in OTP screen subtitle.
   String get _otpTarget {
     if (_step == 1) {
-      return _isPhone ? _maskPhone(_currentValue) : _maskEmail(_currentValue);
+      return _isPhone ? _maskEmail(_currentValue) : _maskPhone(_currentValue);
     }
     return _isPhone ? _maskPhone(_newValue) : _maskEmail(_newValue);
   }
@@ -644,11 +692,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     final isNewValue = _step == 2;
     final title = _isPhone ? t(context, 'changePhone') : t(context, 'changeEmail');
     final sectionLabel = _isPhone
-        ? (isNewValue ? t(context, 'newPhoneLabel') : t(context, 'currentPhoneLabel'))
-        : (isNewValue ? t(context, 'newEmailLabel') : t(context, 'currentEmailLabel'));
+        ? (isNewValue ? t(context, 'newPhoneLabel') : t(context, 'currentEmailLabel'))
+        : (isNewValue ? t(context, 'newEmailLabel') : t(context, 'currentPhoneLabel'));
     final warning = _isPhone
-        ? t(context, 'contactChangeWarning')
-        : t(context, 'emailChangeWarning');
+        ? (isNewValue ? t(context, 'contactChangeWarning') : t(context, 'changePhoneSecurityNotice'))
+        : (isNewValue ? t(context, 'emailChangeWarning') : t(context, 'changeEmailSecurityNotice'));
 
     return Scaffold(
       backgroundColor: _bg,
@@ -765,10 +813,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   }
 
   Widget _buildInputField() {
-    if (_isPhone) {
-      return _buildPhoneField();
+    if (_step == 0) {
+      return _isPhone ? _buildEmailField() : _buildPhoneField();
+    } else {
+      return _isPhone ? _buildPhoneField() : _buildEmailField();
     }
-    return _buildEmailField();
   }
 
   Widget _buildPhoneField() {
@@ -903,9 +952,10 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   // ── OTP step (1 & 3) ─────────────────────────────────────────────────────
 
   Widget _buildOtpStep() {
-    final subtitle = _isPhone
-        ? t(context, 'otpSentToPhone').replaceFirst('{phone}', _otpTarget)
-        : t(context, 'otpSentToEmail').replaceFirst('{email}', _otpTarget);
+    final isEmailTarget = (_step == 1 && _isPhone) || (_step == 3 && !_isPhone);
+    final subtitle = isEmailTarget
+        ? t(context, 'otpSentToEmail').replaceFirst('{email}', _otpTarget)
+        : t(context, 'otpSentToPhone').replaceFirst('{phone}', _otpTarget);
 
     return Scaffold(
       backgroundColor: _bg,
@@ -972,12 +1022,12 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                         });
                         return;
                       }
-                      if (_isPhone) {
-                        _otpSendCount++;
-                        _lastOtpSendDate = DateTime.now().toUtc();
-                      } else {
+                      final isEmailTarget =
+                          (_step == 1 && _isPhone) || (_step == 3 && !_isPhone);
+                      if (isEmailTarget) {
                         // Resend email OTP
-                        final email = _step == 1 ? _currentValue : _newValue;
+                        final email =
+                            (_step == 1 && _isPhone) ? _currentValue : _newValue;
                         try {
                           await _sendEmailOtp(email);
                         } catch (e) {
@@ -987,6 +1037,9 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                           });
                           return;
                         }
+                      } else {
+                        _otpSendCount++;
+                        _lastOtpSendDate = DateTime.now().toUtc();
                       }
                       _otpCtr.clear();
                       setState(() {

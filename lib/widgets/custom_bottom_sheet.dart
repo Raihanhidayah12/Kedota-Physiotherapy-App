@@ -42,12 +42,14 @@ class CustomBottomSheet extends StatelessWidget {
     String? singleButtonText,
     VoidCallback? onSinglePressed,
     bool isDismissible = true,
+    bool enableDrag = true,
   }) {
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       isDismissible: isDismissible,
+      enableDrag: enableDrag,
       builder: (context) => CustomBottomSheet(
         type: type,
         title: title,

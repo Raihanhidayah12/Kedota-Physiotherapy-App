@@ -230,7 +230,15 @@ const _translations = {
     'registrationSuccessDesc':
         'Your account has been created. You will be redirected to the Sign In page.',
     'goToSignIn': 'Go to Sign In',
-    'otpInvalid': 'The OTP you entered is invalid. Please try again.',
+    'otpInvalid': 'Incorrect OTP code. Please try again.',
+    'registerAccountTitle': 'Register Account',
+    'registerAccountDesc':
+        'Make sure the information below matches your official identity.',
+    'cancelRegistrationTitle': 'Cancel Registration?',
+    'cancelRegistrationDesc':
+        'Are you sure you want to exit? The information you entered will not be saved.',
+    'continueRegistration': 'Continue',
+    'exitRegistration': 'Exit',
     'pinCreated': 'PIN created: {pin}',
     'verifyEmailTitle': 'Verify Your Email',
     'didntReceiveOtp': 'Didn\'t receive the OTP?',
@@ -271,6 +279,9 @@ const _translations = {
     'signedInSuccessfully': 'Signed in successfully',
     'noInternetTitle': 'No Internet Connection',
     'noInternetSubtitle': 'Please check your internet connection',
+    'checkingConnection': 'Checking connection...',
+    'checkConnectionTip':
+        'Make sure Wi-Fi or cellular data is active and Airplane Mode is off.',
     'otpLimitTitle': 'OTP Request Limit!',
     'otpLimitSubtitle':
         'Please wait {seconds} seconds before requesting another OTP code.',
@@ -420,7 +431,7 @@ const _translations = {
     'terapisLabel': 'Therapist:',
     'lihatDetail': 'View Detail',
     'noHistoryLabel': 'No appointment history.',
-    'reservationTitle': 'Kedota Reservation',
+    'reservationTitle': 'Kedota Appointment',
     'reservationStagePatient': 'Patient Data',
     'reservationStageSchedule': 'Choose Schedule and Service',
     'reservationStageSession': 'Choose Session',
@@ -504,8 +515,20 @@ const _translations = {
     'reservationAvailabilityRequired':
         'Please confirm therapist availability before continuing.',
     'locationServiceDisabled': 'Please enable location services first.',
+    'locationServiceDisabledTitle': 'Location Services Off',
+    'locationServiceDisabledDesc':
+        'Please turn on GPS/Location services on your device to automatically find your current location.',
+    'locationPermissionTitle': 'Location Permission Required',
+    'locationPermissionDesc':
+        'Kedota requires location permission to accurately locate your home physiotherapy visit.',
     'locationPermissionDenied': 'Location permission is required to use GPS.',
+    'enableGpsBtn': 'Turn On GPS',
+    'allowLocationBtn': 'Allow Location',
+    'locationPermissionDeniedForeverDesc':
+        'Location permission is permanently disabled. Please enable location permission in App Settings.',
     'locationUnavailable': 'Current location is unavailable.',
+    'locationBatterySaverWarning':
+        'Unable to acquire location. Please ensure GPS is enabled and turn off Battery Saver mode if active, or tap directly on the map to set your location.',
     'reservationTherapistGender': 'Therapist Gender Preference',
     'reservationAnyGender': 'Any',
     'reservationFemale': 'Female',
@@ -775,6 +798,14 @@ const _translations = {
     'emailChangedTodayLimit': 'Email can only be changed once per day. Try again tomorrow.',
     'phoneChangedTodayLimit': 'Phone number can only be changed once per day. Try again tomorrow.',
     'phoneBlockedEmailChangedToday': 'Cannot change phone number today because your email was already changed today.',
+    'changePhoneSecurityNotice':
+        'For security, a verification OTP code will be sent to the email registered with this account.',
+    'changeEmailSecurityNotice':
+        'For security, a verification OTP code will be sent to the phone number registered with this account.',
+    'emailRequiredToChangePhone':
+        'Your account must have a verified email before you can change your phone number.',
+    'phoneRequiredToChangeEmail':
+        'Your account must have a registered phone number before you can change your email.',
     'otpSentToPhone': 'Enter the 6-digit OTP code sent to {phone}',
     'otpSentToEmail': 'Enter the 6-digit OTP code sent to {email}',
     'resendOtpIn': 'Resend in {time}',
@@ -1116,7 +1147,15 @@ Device information, application activity logs, and usage data for security and s
     'registrationSuccessDesc':
         'Akun Anda telah dibuat. Anda akan diarahkan ke halaman Masuk.',
     'goToSignIn': 'Ke Halaman Masuk',
-    'otpInvalid': 'OTP yang Anda masukkan tidak valid. Silakan coba lagi.',
+    'otpInvalid': 'Kode OTP tidak sesuai silakan coba lagi.',
+    'registerAccountTitle': 'Daftar Akun',
+    'registerAccountDesc':
+        'Pastikan informasi dibawah ini sesuai dengan identitas resmi Anda.',
+    'cancelRegistrationTitle': 'Batalkan Pendaftaran?',
+    'cancelRegistrationDesc':
+        'Apakah Anda yakin ingin keluar? Data yang telah diisi tidak akan tersimpan.',
+    'continueRegistration': 'Lanjutkan',
+    'exitRegistration': 'Keluar',
     'pinCreated': 'PIN dibuat: {pin}',
     'verifyEmailTitle': 'Verifikasi Email Anda',
     'didntReceiveOtp': 'Tidak menerima OTP?',
@@ -1160,6 +1199,9 @@ Device information, application activity logs, and usage data for security and s
     'signedInSuccessfully': 'Berhasil masuk',
     'noInternetTitle': 'Tidak Ada Koneksi Internet',
     'noInternetSubtitle': 'Tolong Periksa Koneksi Internet Anda',
+    'checkingConnection': 'Memeriksa koneksi...',
+    'checkConnectionTip':
+        'Pastikan Wi-Fi atau data seluler Anda aktif dan Mode Pesawat mati.',
     'otpLimitTitle': 'Batas Permintaan OTP!',
     'otpLimitSubtitle':
         'Mohon tunggu {seconds} detik sebelum meminta kode OTP kembali.',
@@ -1314,7 +1356,7 @@ Device information, application activity logs, and usage data for security and s
     'terapisLabel': 'Terapis:',
     'lihatDetail': 'Lihat Detail',
     'noHistoryLabel': 'Tidak ada riwayat janji temu.',
-    'reservationTitle': 'Reservasi Kedota',
+    'reservationTitle': 'Janji Temu Kedota',
     'reservationStagePatient': 'Data Diri Pasien',
     'reservationStageSchedule': 'Pilih Jadwal dan Layanan',
     'reservationStageSession': 'Pilih Sesi',
@@ -1400,8 +1442,20 @@ Device information, application activity logs, and usage data for security and s
     'reservationAvailabilityRequired':
         'Centang ketersediaan terapis sebelum melanjutkan.',
     'locationServiceDisabled': 'Aktifkan layanan lokasi terlebih dahulu.',
+    'locationServiceDisabledTitle': 'Layanan Lokasi Nonaktif',
+    'locationServiceDisabledDesc':
+        'Silakan aktifkan GPS / Lokasi di perangkat Anda untuk menemukan lokasi terkini secara otomatis.',
+    'locationPermissionTitle': 'Izin Lokasi Dibutuhkan',
+    'locationPermissionDesc':
+        'Kedota membutuhkan izin lokasi untuk menentukan titik kunjungan fisioterapi di rumah Anda.',
     'locationPermissionDenied': 'Izin lokasi diperlukan untuk menggunakan GPS.',
+    'enableGpsBtn': 'Nyalakan GPS',
+    'allowLocationBtn': 'Izinkan Lokasi',
+    'locationPermissionDeniedForeverDesc':
+        'Izin lokasi dinonaktifkan secara permanen. Silakan aktifkan izin lokasi melalui Pengaturan Aplikasi.',
     'locationUnavailable': 'Lokasi terkini tidak tersedia.',
+    'locationBatterySaverWarning':
+        'Gagal mendapatkan lokasi. Pastikan GPS aktif dan matikan mode Penghemat Baterai jika sedang aktif, atau pilih titik langsung di peta.',
     'reservationTherapistGender': 'Preferensi Jenis Kelamin Terapis',
     'reservationAnyGender': 'Bebas',
     'reservationFemale': 'Perempuan',
@@ -1667,6 +1721,14 @@ Device information, application activity logs, and usage data for security and s
     'emailChangedTodayLimit': 'Email hanya bisa diubah 1x sehari. Coba lagi besok.',
     'phoneChangedTodayLimit': 'Nomor telepon hanya bisa diubah 1x sehari. Coba lagi besok.',
     'phoneBlockedEmailChangedToday': 'Tidak dapat mengubah nomor telepon hari ini karena email sudah diubah hari ini.',
+    'changePhoneSecurityNotice':
+        'Untuk keamanan akun, kode OTP verifikasi akan dikirimkan ke email yang terdaftar pada akun ini.',
+    'changeEmailSecurityNotice':
+        'Untuk keamanan akun, kode OTP verifikasi akan dikirimkan ke nomor telepon yang terdaftar pada akun ini.',
+    'emailRequiredToChangePhone':
+        'Akun Anda harus memiliki email yang terverifikasi untuk dapat mengubah nomor telepon.',
+    'phoneRequiredToChangeEmail':
+        'Akun Anda harus memiliki nomor telepon yang terdaftar untuk dapat mengubah email.',
     'otpSentToPhone': 'Masukkan 6 digit kode OTP yang telah dikirimkan ke nomor {phone}',
     'otpSentToEmail': 'Masukkan 6 digit kode OTP yang telah dikirimkan ke email {email}',
     'resendOtpIn': 'Kirim Ulang Dalam {time}',

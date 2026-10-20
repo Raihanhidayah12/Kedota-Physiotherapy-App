@@ -10,7 +10,6 @@ import '../../services/supabase_auth_service.dart';
 import '../../utils/phone_validator.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/google_logo_icon.dart';
-import 'email_verification_dialog.dart';
 import 'google_profile_completion_screen.dart';
 import 'otp_verification_screen.dart';
 import 'pin_verification_screen.dart';
@@ -176,16 +175,6 @@ class _SignInScreenState extends State<SignInScreen> {
     final phone = _phoneController.text.trim();
     if (phone.isEmpty || !PhoneValidator.isValidIndonesianPhone(phone)) {
       setState(() => _isPhoneError = true);
-      CustomBottomSheet.show(
-        context,
-        type: BottomSheetType.error,
-        title: t(context, 'infoTitle'),
-        subtitle: phone.isEmpty
-            ? t(context, 'enterPhoneError')
-            : t(context, 'validPhoneError'),
-        singleButtonText: t(context, 'closeBtn'),
-        onSinglePressed: () => Navigator.of(context).pop(),
-      );
       return;
     }
     setState(() => _isPhoneError = false);
@@ -237,58 +226,37 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  /// Check if email needs verification for Google Sign-In
-  /// Only verify if:
-  /// 1. Email is new (tidak ada di DB sebelumnya)
-  /// 2. Email belum di-verify sebelumnya
-  /// Cek email verification hanya untuk user yang sudah punya profil di DB
-  /// (daftar via nomor HP) tapi belum verified emailnya.
-  /// User baru via Google → skip, Google sudah jamin email valid.
+  /// Auto-verify email untuk Google Sign-In:
+  /// Email dari Google sudah terjamin valid dan terverifikasi oleh Google.
+  /// Jika email ini sebelumnya sudah ada di DB (misal dari signup nomor HP) tapi belum verified,
+  /// langsung auto-verify di database (update email_verified = true) tanpa perlu minta OTP/dialog.
   Future<bool> _checkAndVerifyEmailIfNeeded(String email) async {
     if (email.isEmpty) return true;
-    
+
     try {
       final service = SupabaseAuthService();
-      
-      // Cek apakah email sudah ada di DB (dari registrasi nomor HP sebelumnya)
+
+      // Cek apakah email sudah ada di DB
       final existingProfile = await service.client
           .from('profiles')
-          .select('id, email_verified, signup_method')
+          .select('id, email_verified')
           .eq('email', email)
           .maybeSingle();
 
-      // Email tidak ada di DB → user baru Google, skip verifikasi
-      // Google sendiri sudah memverifikasi email mereka
-      if (existingProfile == null) return true;
-
-      // Email ada tapi dari signup nomor HP dan belum verified → perlu verifikasi
-      final signupMethod = existingProfile['signup_method']?.toString() ?? '';
-      final isVerified = existingProfile['email_verified'] == true;
-
-      if (signupMethod == 'phone' && !isVerified) {
-        // Hanya user phone signup yang emailnya belum verified yang perlu verifikasi
-        if (!mounted) return false;
-        return await _showEmailVerificationDialog(email) ?? false;
+      // Jika profil ditemukan dan belum verified, langsung update jadi true
+      if (existingProfile != null && existingProfile['email_verified'] != true) {
+        await service.client
+            .from('profiles')
+            .update({'email_verified': true})
+            .eq('id', existingProfile['id']);
+        debugPrint('Email $email auto-verified via Google Sign-In');
       }
 
-      // Sudah verified atau signup method bukan phone → izinkan login
       return true;
     } catch (e) {
-      // Silent fallback - allow login
+      // Silent fallback - tetap izinkan login
       return true;
     }
-  }
-
-  Future<bool?> _showEmailVerificationDialog(String email) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => EmailVerificationDialog(
-        email: email,
-        onVerified: () => Navigator.pop(context, true),
-        onCancelled: () => Navigator.pop(context, false),
-      ),
-    );
   }
 
   Widget _buildIndonesianFlag() {
@@ -426,28 +394,47 @@ class _SignInScreenState extends State<SignInScreen> {
                               ),
                             ),
                             const SizedBox(height: 28),
-                            // Label nomor telepon dengan tanda *
-                            Text.rich(
-                              TextSpan(
-                                children: [
+                            // Label nomor telepon dengan tanda * dan pesan error inline
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_isPhoneError)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: Text(
+                                      _phoneController.text.trim().isEmpty
+                                          ? 'Isi Terlebih Dahulu'
+                                          : t(context, 'validPhoneError'),
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFFEF4444),
+                                      ),
+                                    ),
+                                  ),
+                                Text.rich(
                                   TextSpan(
-                                    text: t(context, 'phoneLabel'),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1E293B),
-                                    ),
+                                    children: [
+                                      TextSpan(
+                                        text: t(context, 'phoneLabel'),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                      const TextSpan(
+                                        text: ' *',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFFEF4444),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const TextSpan(
-                                    text: ' *',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFFEF4444),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 8),
                             // Field telepon dengan 3 state: normal / focused / error

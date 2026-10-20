@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_saver/file_saver.dart';
@@ -1169,30 +1168,117 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
   Future<void> _useCurrentLocation() async {
     setState(() => _locating = true);
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        if (!mounted) return;
-        _showMessage(t(context, 'locationServiceDisabled'));
-        return;
-      }
+      // 1. Langsung minta izin ke OS — memunculkan dialog native "Izinkan akses lokasi?"
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+
+      // Jika pengguna menolak dialog izin sistem OS
+      if (permission == LocationPermission.denied) {
         if (!mounted) return;
-        _showMessage(t(context, 'locationPermissionDenied'));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(t(context, 'locationPermissionDenied')),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         return;
       }
-      // Pakai akurasi tertinggi supaya koordinat presisi
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-          timeLimit: Duration(seconds: 15),
-        ),
-      );
-      final point = LatLng(position.latitude, position.longitude);
-      await _setMapLocation(point);
+
+      // Hanya jika pengguna memilih "Jangan tanya lagi" (permanen) di OS
+      if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        await CustomBottomSheet.show(
+          context,
+          type: BottomSheetType.info,
+          title: t(context, 'locationPermissionTitle'),
+          subtitle: t(context, 'locationPermissionDeniedForeverDesc'),
+          primaryButtonText: t(context, 'openSettings'),
+          onPrimaryPressed: () async {
+            Navigator.of(context).pop();
+            await Geolocator.openAppSettings();
+          },
+          secondaryButtonText: t(context, 'cancel'),
+          onSecondaryPressed: () => Navigator.of(context).pop(),
+        );
+        return;
+      }
+
+      // 2. Cek apakah GPS perangkat aktif
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        await CustomBottomSheet.show(
+          context,
+          type: BottomSheetType.info,
+          title: t(context, 'locationServiceDisabledTitle'),
+          subtitle: t(context, 'locationServiceDisabledDesc'),
+          primaryButtonText: t(context, 'enableGpsBtn'),
+          onPrimaryPressed: () async {
+            Navigator.of(context).pop();
+            await Geolocator.openLocationSettings();
+          },
+          secondaryButtonText: t(context, 'cancel'),
+          onSecondaryPressed: () => Navigator.of(context).pop(),
+        );
+        return;
+      }
+
+      Position? position;
+
+      // 1. Coba akurasi tinggi (timeout 7 detik)
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 7),
+          ),
+        );
+      } catch (e) {
+        debugPrint('High accuracy location failed/timeout (battery saver may be on): $e');
+      }
+
+      // 2. Fallback: jika mode penghemat baterai aktif atau GPS satelit lambat, gunakan medium (fused wifi/seluler)
+      if (position == null) {
+        try {
+          position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 5),
+            ),
+          );
+        } catch (e) {
+          debugPrint('Medium accuracy fallback failed: $e');
+        }
+      }
+
+      // 3. Fallback: gunakan posisi terakhir yang tercatat di sistem perangkat
+      if (position == null) {
+        try {
+          position = await Geolocator.getLastKnownPosition();
+        } catch (_) {}
+      }
+
+      if (position != null) {
+        final point = LatLng(position.latitude, position.longitude);
+        await _setMapLocation(point);
+      } else {
+        if (!mounted) return;
+        await CustomBottomSheet.show(
+          context,
+          type: BottomSheetType.error,
+          title: t(context, 'infoTitle'),
+          subtitle: t(context, 'locationBatterySaverWarning'),
+          primaryButtonText: t(context, 'openSettings'),
+          onPrimaryPressed: () async {
+            Navigator.of(context).pop();
+            await Geolocator.openLocationSettings();
+          },
+          secondaryButtonText: t(context, 'closeBtn'),
+          onSecondaryPressed: () => Navigator.of(context).pop(),
+        );
+      }
     } catch (error) {
       debugPrint('Current location failed: $error');
       if (!mounted) return;
@@ -2204,104 +2290,161 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     required IconData icon,
     required List<String> items,
     required ValueChanged<String?>? onChanged,
-  }) => Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: value != null ? _teal : const Color(0xFFDDE4E3),
-        width: value != null ? 1.4 : 1,
+  }) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final fontSize = (screenWidth * 0.034).clamp(12.0, 13.5);
+    final iconSize = (screenWidth * 0.046).clamp(16.0, 19.0);
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: value != null ? _teal : const Color(0xFFE1E9E8),
+          width: value != null ? 1.4 : 1,
+        ),
       ),
-    ),
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        value: value,
-        hint: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Text(
-            hint,
-            style: const TextStyle(color: _muted, fontSize: 13),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(14),
+          icon: const Padding(
+            padding: EdgeInsets.only(right: 14),
+            child: Icon(Icons.keyboard_arrow_down_rounded, color: _teal),
           ),
-        ),
-        icon: const Padding(
-          padding: EdgeInsets.only(right: 14),
-          child: Icon(Icons.keyboard_arrow_down_rounded, color: _teal),
-        ),
-        isExpanded: true,
-        borderRadius: BorderRadius.circular(12),
-        items: items
-            .map(
-              (item) => DropdownMenuItem(
-                value: item,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
-                    children: [
-                      Icon(icon, color: _teal, size: 17),
-                      const SizedBox(width: 10),
-                      Text(
-                        item,
-                        style: const TextStyle(fontSize: 13, color: _ink),
-                      ),
-                    ],
+          hint: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Icon(icon, color: _muted, size: iconSize),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    hint,
+                    style: TextStyle(color: _muted, fontSize: fontSize),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+              ],
+            ),
+          ),
+          selectedItemBuilder: (context) => items.map((item) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  Icon(icon, color: _teal, size: iconSize),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        color: _ink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-            )
-            .toList(),
-        onChanged: onChanged,
+            );
+          }).toList(),
+          items: items
+              .map(
+                (item) => DropdownMenuItem(
+                  value: item,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Row(
+                      children: [
+                        Icon(icon, color: _teal, size: iconSize),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            item,
+                            style: TextStyle(fontSize: fontSize, color: _ink),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: onChanged,
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   /// Field terkunci (belum bisa dipilih) — tampil abu dengan ikon lock
-  Widget _lockedField(String hint) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF0F5F4),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFDDE4E3)),
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.lock_outline_rounded, color: _muted, size: 16),
-        const SizedBox(width: 10),
-        Text(
-          hint,
-          style: const TextStyle(color: _muted, fontSize: 13),
-        ),
-      ],
-    ),
-  );
+  Widget _lockedField(String hint) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final fontSize = (screenWidth * 0.034).clamp(12.0, 13.5);
+
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F5F4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE1E9E8)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_outline_rounded, color: _muted, size: 17),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              hint,
+              style: TextStyle(color: _muted, fontSize: fontSize),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// Chip read-only untuk layanan yang tidak bisa diubah (non-Malang = Home Care)
-  Widget _readonlyServiceChip(String label, IconData icon, Color color) =>
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 17),
-            const SizedBox(width: 10),
-            Text(
+  Widget _readonlyServiceChip(String label, IconData icon, Color color) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final fontSize = (screenWidth * 0.034).clamp(12.0, 13.5);
+
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 17),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
               label,
               style: TextStyle(
                 color: color,
-                fontSize: 13,
+                fontSize: fontSize,
                 fontWeight: FontWeight.w700,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
-            const Spacer(),
-            Icon(Icons.check_circle_rounded, color: color, size: 18),
-          ],
-        ),
-      );
+          ),
+          Icon(Icons.check_circle_rounded, color: color, size: 18),
+        ],
+      ),
+    );
+  }
 
   Widget _buildMapPreview({double height = 142, MapController? controller}) =>
       Stack(
@@ -2486,12 +2629,15 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                       color: _tealDark,
                     ),
               const SizedBox(width: 7),
-              Text(
-                t(context, 'reservationUseCurrentLocation'),
-                style: const TextStyle(
-                  color: _tealDark,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: Text(
+                  t(context, 'reservationUseCurrentLocation'),
+                  style: const TextStyle(
+                    color: _tealDark,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

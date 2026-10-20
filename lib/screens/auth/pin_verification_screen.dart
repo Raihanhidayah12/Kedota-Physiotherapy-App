@@ -262,13 +262,13 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
 
     final iconSize = (screenHeight * 0.075).clamp(42.0, 64.0);
     final fontSubtitle = (screenWidth * 0.034).clamp(11.0, 16.0);
-    final pinDotSize = (screenWidth * 0.04).clamp(14.0, 22.0);
-    final pinDotMargin = (screenWidth * 0.013).clamp(4.0, 7.0);
-    const numpadBtnSize = 100.0;
-    const numpadHGap = 16.0;
-    const numpadVGap = 16.0;
+    final numpadHGap = (screenWidth * 0.045).clamp(10.0, 18.0);
+    final numpadVGap = (screenHeight * 0.016).clamp(8.0, 16.0);
+    final maxByWidth = (screenWidth - 48 - (numpadHGap * 2)) / 3;
+    final maxByHeight = screenHeight * 0.092;
+    final numpadBtnSize = maxByWidth.clamp(54.0, 78.0).clamp(54.0, maxByHeight);
     final numpadTotalWidth = numpadBtnSize * 3 + numpadHGap * 2;
-    final numpadHPad = (screenWidth - numpadTotalWidth) / 2;
+    final numpadHPad = ((screenWidth - numpadTotalWidth) / 2).clamp(0.0, screenWidth / 2);
 
     final sp1 = (screenHeight * 0.018).clamp(8.0, 14.0);
     final sp2 = (screenHeight * 0.024).clamp(12.0, 18.0);
@@ -277,12 +277,19 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9F9),
       body: SafeArea(
-        child: Column(
-          children: [
-            // ── Atas: icon + subtitle + dots ────────────────────────────
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      // ── Atas: icon + subtitle + dots ────────────────────────────
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // ── Lock icon ─────────────────────────────────────────
                   Icon(
@@ -449,6 +456,11 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+},
+),
+),
+);
+}
 }

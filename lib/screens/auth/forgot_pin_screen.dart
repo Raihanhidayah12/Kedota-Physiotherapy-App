@@ -169,6 +169,7 @@ class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen>
   Timer? _timer;
   int _secondsRemaining = 59;
   bool _isError = false;
+  bool _isClearingForError = false;
 
   static const _validDummyOtps = {'1234', '5555', '0000', '9999'};
 
@@ -217,15 +218,17 @@ class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen>
   }
 
   void _checkOtpComplete() {
+    if (_isClearingForError) return;
+
     if (_otpController.text.isNotEmpty) {
       HapticFeedback.selectionClick();
+      if (_isError) setState(() => _isError = false);
     }
+
     if (_otpController.text.length == 4) {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted) _verifyOtp();
       });
-    } else {
-      if (_isError) setState(() => _isError = false);
     }
   }
 
@@ -236,10 +239,14 @@ class _ForgotPinOtpScreenState extends State<ForgotPinOtpScreen>
       return;
     }
 
+    HapticFeedback.heavyImpact();
     setState(() {
       _isError = true;
-      _otpController.clear();
     });
+
+    _isClearingForError = true;
+    _otpController.clear();
+    _isClearingForError = false;
   }
 
   @override
@@ -833,6 +840,7 @@ class _BirthDateVerificationScreenState
   DateTime? _selectedBirthDate;
   bool _isLoading = false;
   bool _isDobError = false;
+  String? _dobErrorMessage;
   int _cooldownSeconds = 0;
   int _failedVerificationAttempts = 0;
   Timer? _cooldownTimer;
@@ -842,7 +850,10 @@ class _BirthDateVerificationScreenState
     super.initState();
     _dobController.addListener(() {
       if (_isDobError && _dobController.text.isNotEmpty) {
-        setState(() => _isDobError = false);
+        setState(() {
+          _isDobError = false;
+          _dobErrorMessage = null;
+        });
       }
       _parseTypedDate(_dobController.text);
     });
@@ -918,14 +929,17 @@ class _BirthDateVerificationScreenState
         _dobController.text =
             '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
         _isDobError = false;
+        _dobErrorMessage = null;
       });
     }
   }
 
   Future<void> _verifyBirthDate() async {
     if (_selectedBirthDate == null) {
-      setState(() => _isDobError = true);
-      _showNotificationSheet(t(context, 'selectBirthDateError'), isError: true);
+      setState(() {
+        _isDobError = true;
+        _dobErrorMessage = 'Isi Terlebih Dahulu';
+      });
       return;
     }
 
@@ -946,7 +960,10 @@ class _BirthDateVerificationScreenState
           ),
         );
       } else {
-        setState(() => _isDobError = true);
+        setState(() {
+          _isDobError = true;
+          _dobErrorMessage = t(context, 'birthDateMismatchError');
+        });
         _failedVerificationAttempts++;
         if (_failedVerificationAttempts >= 3) {
           _startCooldownTimer(seconds: 30);
@@ -956,10 +973,6 @@ class _BirthDateVerificationScreenState
             ),
           );
         } else {
-          _showNotificationSheet(
-            t(context, 'birthDateMismatchError'),
-            isError: true,
-          );
           _startCooldownTimer();
         }
       }
@@ -1002,6 +1015,18 @@ class _BirthDateVerificationScreenState
                 ),
               ),
               const SizedBox(height: 28),
+              if (_isDobError && _dobErrorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    _dobErrorMessage!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                ),
               const Text(
                 'Tanggal Lahir',
                 style: TextStyle(
@@ -1060,16 +1085,6 @@ class _BirthDateVerificationScreenState
                   ],
                 ),
               ),
-              if (_isDobError) ...[
-                const SizedBox(height: 6),
-                Text(
-                  t(context, 'selectBirthDateError'),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFEF4444),
-                  ),
-                ),
-              ],
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -1396,125 +1411,140 @@ class _ResetPinFormScreenState extends State<ResetPinFormScreen>
         },
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            // ── Atas: title + subtitle + dots ────────────────────────────
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Title
-                  Text(
-                    _isConfirming
-                        ? t(context, 'confirmPin')
-                        : t(context, 'createNewPin'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      // ── Atas: title + subtitle + dots ────────────────────────────
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Title
+                            Text(
+                              _isConfirming
+                                  ? t(context, 'confirmPin')
+                                  : t(context, 'createNewPin'),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
 
-                  // Subtitle
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      _isConfirming
-                          ? t(context, 'confirmPinDesc')
-                          : t(context, 'createNewPinDesc'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
-                        height: 1.45,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                            // Subtitle
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 32),
+                              child: Text(
+                                _isConfirming
+                                    ? t(context, 'confirmPinDesc')
+                                    : t(context, 'createNewPinDesc'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF64748B),
+                                  height: 1.45,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
 
-                  // Error teks
-                  if (_isPinError)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        _isSameAsOldPin
-                            ? t(context, 'sameAsOldPinError')
-                            : t(context, 'confirmPinMismatchError'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFEF4444),
+                            // Error teks
+                            if (_isPinError)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  _isSameAsOldPin
+                                      ? t(context, 'sameAsOldPinError')
+                                      : t(context, 'confirmPinMismatchError'),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFFEF4444),
+                                  ),
+                                ),
+                              ),
+
+                            // 6 PIN dots
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(6, (index) {
+                                final isFilled = index < currentPin.length;
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _isPinError
+                                        ? (isFilled
+                                              ? const Color(0xFFEF4444)
+                                              : Colors.transparent)
+                                        : (isFilled
+                                              ? const Color(0xFF00A79D)
+                                              : Colors.transparent),
+                                    border: Border.all(
+                                      color: _isPinError
+                                          ? const Color(0xFFEF4444)
+                                          : isFilled
+                                          ? const Color(0xFF00A79D)
+                                          : const Color(0xFFCBD5E1),
+                                      width: 2,
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
 
-                  // 6 PIN dots
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(6, (index) {
-                      final isFilled = index < currentPin.length;
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 8),
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _isPinError
-                              ? (isFilled
-                                    ? const Color(0xFFEF4444)
-                                    : Colors.transparent)
-                              : (isFilled
-                                    ? const Color(0xFF00A79D)
-                                    : Colors.transparent),
-                          border: Border.all(
-                            color: _isPinError
-                                ? const Color(0xFFEF4444)
-                                : isFilled
-                                ? const Color(0xFF00A79D)
-                                : const Color(0xFFCBD5E1),
-                            width: 2,
-                          ),
-                        ),
-                      );
-                    }),
+                      // ── Bawah: numpad ─────────────────────────────────────────────
+                      Builder(
+                        builder: (context) {
+                          final w = MediaQuery.sizeOf(context).width;
+                          final h = MediaQuery.sizeOf(context).height;
+                          final hGap = (w * 0.045).clamp(10.0, 18.0);
+                          final vGap = (h * 0.016).clamp(8.0, 16.0);
+                          final maxByWidth = (w - 48 - (hGap * 2)) / 3;
+                          final maxByHeight = h * 0.092;
+                          final btnSize = maxByWidth.clamp(54.0, 78.0).clamp(54.0, maxByHeight);
+                          final totalW = btnSize * 3 + hGap * 2;
+                          final hPad = ((w - totalW) / 2).clamp(0.0, w / 2);
+                          return Padding(
+                            padding: EdgeInsets.symmetric(horizontal: hPad),
+                            child: SizedBox(
+                              width: totalW,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildNumpadRow(['1', '2', '3'], btnSize, hGap),
+                                  SizedBox(height: vGap),
+                                  _buildNumpadRow(['4', '5', '6'], btnSize, hGap),
+                                  SizedBox(height: vGap),
+                                  _buildNumpadRow(['7', '8', '9'], btnSize, hGap),
+                                  SizedBox(height: vGap),
+                                  _buildNumpadRow(['', '0', 'back'], btnSize, hGap),
+                                  const SizedBox(height: 24),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-
-            // ── Bawah: numpad ─────────────────────────────────────────────
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final screenWidth = MediaQuery.sizeOf(context).width;
-                const btnSize = 100.0;
-                const hGap = 16.0;
-                const vGap = 16.0;
-                final totalW = btnSize * 3 + hGap * 2;
-                final hPad = (screenWidth - totalW) / 2;
-                return Padding(
-                  padding: EdgeInsets.symmetric(horizontal: hPad),
-                  child: SizedBox(
-                    width: totalW,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildNumpadRow(['1', '2', '3'], btnSize, hGap),
-                        const SizedBox(height: vGap),
-                        _buildNumpadRow(['4', '5', '6'], btnSize, hGap),
-                        const SizedBox(height: vGap),
-                        _buildNumpadRow(['7', '8', '9'], btnSize, hGap),
-                        const SizedBox(height: vGap),
-                        _buildNumpadRow(['', '0', 'back'], btnSize, hGap),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
+            );
+          },
         ),
       ),
     );

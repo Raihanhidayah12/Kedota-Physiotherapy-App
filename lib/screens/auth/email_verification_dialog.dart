@@ -77,6 +77,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   }
 
   void _recordFailedAttempt() {
+    HapticFeedback.heavyImpact();
     setState(() => _failedAttempts++);
     if (_failedAttempts >= _maxAttempts) {
       setState(() {
@@ -433,13 +434,18 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: isFilled ? _c700 : const Color(0xFFE6EEEE),
+                color: _isError
+                    ? const Color(0xFFEF4444)
+                    : (isFilled ? _c700 : const Color(0xFFE6EEEE)),
                 width: 2,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: _c700, width: 2),
+              borderSide: BorderSide(
+                color: _isError ? const Color(0xFFEF4444) : _c700,
+                width: 2,
+              ),
             ),
             disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

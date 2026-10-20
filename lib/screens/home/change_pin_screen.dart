@@ -551,7 +551,7 @@ class _ChangePinScreenState extends State<ChangePinScreen>
 
           // Numpad at bottom
           Padding(
-            padding: const EdgeInsets.only(top: 60),
+            padding: const EdgeInsets.only(top: 28),
             child: _buildNumpad(),
           ),
         ],
@@ -657,11 +657,14 @@ class _ChangePinScreenState extends State<ChangePinScreen>
   Widget _buildNumpad() => LayoutBuilder(
     builder: (context, constraints) {
       final w = MediaQuery.sizeOf(context).width;
-      const btnSz = 100.0;
-      const hGap = 16.0;
-      const vGap = 16.0;
+      final h = MediaQuery.sizeOf(context).height;
+      final hGap = (w * 0.045).clamp(10.0, 18.0);
+      final vGap = (h * 0.016).clamp(8.0, 16.0);
+      final maxByWidth = (w - 48 - (hGap * 2)) / 3;
+      final maxByHeight = h * 0.092;
+      final btnSz = maxByWidth.clamp(54.0, 78.0).clamp(54.0, maxByHeight);
       final totalW = btnSz * 3 + hGap * 2;
-      final hPad = (w - totalW) / 2;
+      final hPad = ((w - totalW) / 2).clamp(0.0, w / 2);
       return Padding(
         padding: EdgeInsets.symmetric(horizontal: hPad),
         child: SizedBox(

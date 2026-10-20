@@ -53,6 +53,7 @@ class _PhoneProfileCompletionScreenState
 
   bool _isNameError = false;
   bool _isEmailError = false;
+  String? _emailCustomError;
   bool _isDobError = false;
   bool _isGenderError = false;
 
@@ -66,7 +67,10 @@ class _PhoneProfileCompletionScreenState
     });
     _emailController.addListener(() {
       if (_isEmailError && _emailController.text.isNotEmpty) {
-        setState(() => _isEmailError = false);
+        setState(() {
+          _isEmailError = false;
+          _emailCustomError = null;
+        });
       }
     });
     _dobController.addListener(() {
@@ -137,6 +141,9 @@ class _PhoneProfileCompletionScreenState
     setState(() {
       _isNameError = name.isEmpty;
       _isEmailError = email.isEmpty || !_isValidEmail(email);
+      _emailCustomError = email.isEmpty
+          ? null
+          : (!_isValidEmail(email) ? 'Format email tidak valid' : null);
       _isDobError = _selectedBirthDate == null;
       _isGenderError = _gender == null;
     });
@@ -154,19 +161,12 @@ class _PhoneProfileCompletionScreenState
         setState(() {
           _isLoading = false;
           _isEmailError = true;
+          _emailCustomError = t(context, 'emailAlreadyRegistered');
         });
-        CustomBottomSheet.show(
-          context,
-          type: BottomSheetType.error,
-          title: t(context, 'infoTitle'),
-          subtitle: t(context, 'emailAlreadyRegistered'),
-          singleButtonText: t(context, 'closeBtn'),
-          onSinglePressed: () => Navigator.of(context).pop(),
-        );
         return;
       }
 
-      Navigator.of(context).pushReplacement(
+      await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PhoneCreatePinScreen(
             phone: widget.phoneNumber,
@@ -200,17 +200,18 @@ class _PhoneProfileCompletionScreenState
   Widget _buildFieldLabel(
     String labelText, {
     bool isError = false,
+    String? errorMessage,
     bool required = true,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (isError)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 2),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
             child: Text(
-              'Isi Terlebih Dahulu',
-              style: TextStyle(
+              errorMessage ?? 'Isi Terlebih Dahulu',
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFFEF4444),
@@ -244,9 +245,34 @@ class _PhoneProfileCompletionScreenState
     );
   }
 
+  Future<void> _handleBack() async {
+    final shouldExit = await CustomBottomSheet.show<bool>(
+      context,
+      type: BottomSheetType.info,
+      title: t(context, 'cancelRegistrationTitle'),
+      subtitle: t(context, 'cancelRegistrationDesc'),
+      secondaryButtonText: t(context, 'exitRegistration'),
+      onSecondaryPressed: () => Navigator.of(context).pop(true),
+      primaryButtonText: t(context, 'continueRegistration'),
+      onPrimaryPressed: () => Navigator.of(context).pop(false),
+      isDismissible: false,
+      enableDrag: false,
+    );
+
+    if (shouldExit == true && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBack();
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFFF5F8F8),
       body: SafeArea(
         child: Column(
@@ -257,18 +283,18 @@ class _PhoneProfileCompletionScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Lengkapi Data Diri',
-                      style: TextStyle(
+                    Text(
+                      t(context, 'registerAccountTitle'),
+                      style: const TextStyle(
                         color: Color(0xFF00A79D),
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Text(
-                      'Pastikan informasi dibawah ini sesuai dengan identitas resmi Anda.',
-                      style: TextStyle(
+                    Text(
+                      t(context, 'registerAccountDesc'),
+                      style: const TextStyle(
                         color: Color(0xFF667579),
                         fontSize: 12,
                         height: 1.35,
@@ -398,6 +424,7 @@ class _PhoneProfileCompletionScreenState
                     _buildFieldLabel(
                       'Email',
                       isError: _isEmailError,
+                      errorMessage: _emailCustomError,
                       required: false,
                     ),
                     const SizedBox(height: 6),
@@ -450,7 +477,7 @@ class _PhoneProfileCompletionScreenState
                     width: double.infinity,
                     height: 44,
                     child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).maybePop(),
+                      onPressed: _handleBack,
                       style: OutlinedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: const Color(0xFF182526),
@@ -474,7 +501,8 @@ class _PhoneProfileCompletionScreenState
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _signupTextInput({

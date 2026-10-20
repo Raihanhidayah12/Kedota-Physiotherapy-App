@@ -137,7 +137,7 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen>
         type: BottomSheetType.error,
         title: 'Error',
         subtitle: errorMessage,
-        singleButtonText: t(context, 'close') ?? 'Tutup',
+        singleButtonText: t(context, 'close'),
         onSinglePressed: () => Navigator.of(context).pop(),
       );
 
@@ -201,7 +201,21 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen>
     final currentPin = _isConfirming ? _confirmPin : _firstPin;
     final minH = MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top;
 
-    return Scaffold(
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_isConfirming) {
+          setState(() {
+            _isConfirming = false;
+            _confirmPin = '';
+            _firstPin = '';
+          });
+        } else {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFFF7F9F9),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -299,11 +313,15 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen>
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final w = MediaQuery.sizeOf(context).width;
-                    const bs = 100.0;
-                    const hGap = 16.0;
-                    const vGap = 16.0;
+                    final h = MediaQuery.sizeOf(context).height;
+                    final hGap = (w * 0.045).clamp(10.0, 18.0);
+                    final vGap = (h * 0.016).clamp(8.0, 16.0);
+                    final maxByWidth = (w - 48 - (hGap * 2)) / 3;
+                    final maxByHeight = h * 0.092;
+                    final bs = maxByWidth.clamp(54.0, 78.0).clamp(54.0, maxByHeight);
                     final totalW = bs * 3 + hGap * 2;
-                    final hPad = (w - totalW) / 2;
+                    final hPad = ((w - totalW) / 2).clamp(0.0, w / 2);
+
                     return Padding(
                       padding: EdgeInsets.symmetric(horizontal: hPad),
                       child: SizedBox(
@@ -315,17 +333,17 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen>
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: ['1','2','3'].map((v) => _buildNumpadButton(v, bs)).toList(),
                             ),
-                            const SizedBox(height: vGap),
+                            SizedBox(height: vGap),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: ['4','5','6'].map((v) => _buildNumpadButton(v, bs)).toList(),
                             ),
-                            const SizedBox(height: vGap),
+                            SizedBox(height: vGap),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: ['7','8','9'].map((v) => _buildNumpadButton(v, bs)).toList(),
                             ),
-                            const SizedBox(height: vGap),
+                            SizedBox(height: vGap),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: ['','0','backspace'].map((v) => _buildNumpadButton(v, bs)).toList(),
@@ -343,6 +361,7 @@ class _PhoneCreatePinScreenState extends State<PhoneCreatePinScreen>
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

@@ -82,6 +82,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   int _secondsRemaining = 59;
   bool _isError = false;
   int _failedAttempts = 0;
+  bool _isClearingForError = false;
 
   static const _validDummyOtps = {'1234', '5555', '0000', '9999'};
 
@@ -114,19 +115,21 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   void _checkOtpComplete() {
+    if (_isClearingForError) return;
+
     if (_otpController.text.isNotEmpty) {
       HapticFeedback.selectionClick();
+      if (_isError) {
+        setState(() => _isError = false);
+      }
     }
+
     if (_otpController.text.length == 4) {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted) {
           _verifyOtp();
         }
       });
-    } else {
-      if (_isError) {
-        setState(() => _isError = false);
-      }
     }
   }
 
@@ -272,11 +275,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       return;
     }
 
+    HapticFeedback.heavyImpact();
     setState(() {
       _isError = true;
       _failedAttempts++;
-      _otpController.clear();
     });
+
+    _isClearingForError = true;
+    _otpController.clear();
+    _isClearingForError = false;
 
     if (_failedAttempts >= 3) {
       Navigator.of(context).pushReplacement(
@@ -386,12 +393,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               const SizedBox(height: 16),
                               // Teks error inline jika OTP salah
                               if (_isError)
-                                const Padding(
-                                  padding: EdgeInsets.only(bottom: 12),
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
                                   child: Text(
-                                    'Kode OTP tidak sesuai silakan coba lagi.',
+                                    t(context, 'otpInvalid'),
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                       color: Color(0xFFEF4444),
