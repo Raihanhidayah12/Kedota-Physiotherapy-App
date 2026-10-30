@@ -970,6 +970,16 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                             value: _maskEmail(_email),
                             showChevron: true,
                             onTap: () async {
+                              if (_email == null || _email!.isEmpty || !_emailVerified) {
+                                CustomBottomSheet.show(
+                                  context,
+                                  type: BottomSheetType.info,
+                                  title: t(context, 'emailNotVerified'),
+                                  subtitle: t(context, 'emailMustVerifyFirst'),
+                                  singleButtonText: t(context, 'closeBtn'),
+                                );
+                                return;
+                              }
                               if (_phone == null || _phone!.isEmpty) {
                                 CustomBottomSheet.show(
                                   context,

@@ -23,29 +23,29 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 🌐 Multi-Language (ID / EN) | 🟢 Tersedia | Bahasa Indonesia dan English tersedia melalui kamus terpusat; cakupan perlu dijaga saat menambah UI |
 | 🧪 Auth Flow Tests | 🟢 Tersedia | Test auth, onboarding, sign-up, PIN, validasi nomor, dan booking code; hasil tergantung versi kode saat dijalankan |
 | 🚀 Onboarding Screen | 🟢 Selesai | Tampil sekali saat pertama buka, 3 slide interaktif (`SharedPreferences`) |
-| 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP → PIN → Home Screen |
-| 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil → Buat PIN → Account Created Screen |
-| 🌐 Google Sign-In | 🟢 Selesai | OAuth Google → Picker Akun → Lengkapi Profil / Direct PIN → Home |
+| 🔑 Sign In via Nomor HP | 🟢 Selesai | OTP (Auto-copy & clipboard paste) → PIN → Home Screen |
+| 📝 Registrasi via Nomor HP | 🟢 Selesai | OTP → Lengkapi Profil (Form ringkas tanpa field email + Checkbox S&K) → Buat PIN → Account Created Screen |
+| 🌐 Google Sign-In | 🟢 Selesai | OAuth Google → Picker Akun → Lengkapi Profil (Form ringkas tanpa field HP + Checkbox S&K) / Direct PIN → Home |
 | 🍎 Apple Sign-In | 🟡 Perlu konfigurasi provider | OAuth melalui Supabase; perlu credential dan konfigurasi Apple Developer untuk production |
-| 📩 OTP Verifikasi | 🟡 Mode demo | OTP lokal 4 digit: `1234`, `5555`, `0000`, `9999`; belum memakai penyedia SMS production |
+| 📩 OTP Verifikasi | 🟡 Mode demo | OTP lokal 4 digit: `1234`, `5555`, `0000`, `9999`; dukungan auto-copy & copy-paste clipboard |
 | 📡 OTP Production (Plan) | 🔵 Siap Migrasi | Endpoint `/auth/otp` & `/auth/verify` disiapkan di Swagger |
 | 🔓 Lupa PIN | 🟢 Selesai | OTP → Verifikasi Tanggal Lahir → PIN Baru → PIN Reset Success |
 | 🔑 Ganti PIN (Settings) | 🟢 Selesai | Verifikasi PIN Lama → Input PIN Baru → Konfirmasi PIN Baru (Rate limit 3x) |
 | 👤 Edit Profil | 🟢 Selesai | Ubah Nama, TTL, Gender, Upload/Hapus Foto Profil Supabase Storage |
 | 👁️ Privasi Nomor HP | 🟢 Selesai | Default hidden (`+628••••9436`) + Eye Icon toggle di Settings & Edit Profile |
-| 🔔 Preferensi Notifikasi | 🟢 Selesai | Push notif, reminder, notifikasi DP/expired, dan deep-link ke detail atau pelunasan |
+| 🔔 Preferensi & Push Notifikasi | 🟢 Selesai | 13 trigger push notifikasi komprehensif (jadwal, pembayaran, pelacakan terapis, ulasan, keamanan akun, follow-up, tips) + deep-link |
 | 🕒 Urutan & Waktu Notifikasi | 🟢 Selesai | Notifikasi terbaru tampil paling atas dengan waktu relatif |
 | ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan profil, preferensi, keamanan, dukungan, dan logout |
-| 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit, OTP salah 3x → cooldown 30 detik |
-| 📴 Deteksi Internet & Error Screen | 🟢 Selesai | Status koneksi device dan akses internet diverifikasi; screen offline dan limit memakai hitung mundur |
+| 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit + push alert keamanan, OTP salah 3x → cooldown 30 detik |
+| 📴 Deteksi Internet & Server Down | 🟢 Selesai | Dual-probe cerdas membedakan offline jaringan (`NoInternetScreen`) vs backend mati (`ServerDownScreen`); pelaporan 5xx instan |
 | 🕶️ Privasi App Switcher | 🟢 Selesai | Konten aplikasi ditutup saat masuk app switcher pada Android dan iOS |
 | 💤 Dormant Account | 🟢 Selesai | Deteksi akun >60 hari tidak aktif → verifikasi via email |
-| 🎨 UI & Layout Stability | 🟢 Diimplementasikan | Layout responsif; tetap verifikasi pada ukuran layar dan platform target |
+| 🎨 UI & Layout Stability | 🟢 Diimplementasikan | Layout responsif; header beranda seamless modern, navbar back gesture terintegrasi |
 | ⚡ Edge Functions | 🟢 Selesai | Update PIN via server-side function (`update-pin` Deno runtime) |
 | 📊 HTTP 5xx Error Logging | 🟢 Teruji | Log uji 5xx berhasil masuk ke tabel `error_logs` pada Supabase |
 | 📑 Legal Documents UI | 🟢 Selesai | Syarat & Ketentuan dan Kebijakan Privasi menggunakan accordion |
-| 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil |
-| 📅 Reservasi Step-by-Step | 🟢 Selesai | 6 tahap dari data pasien hingga instruksi pembayaran, termasuk pilihan lokasi dan jadwal |
+| 🏠 Home & Main Navigation | 🟢 Selesai | Main Screen dengan 4 tab: Beranda, Progress, Janji Temu, dan Profil; header beranda modern tanpa border kaku |
+| 📅 Reservasi Step-by-Step | 🟢 Selesai | 6 tahap reservasi dengan auto-save draft ke local storage (`SharedPreferences`) dan navigasi step yang aman |
 | 🗺️ Peta Interaktif (Home Care) | 🟢 Selesai | `flutter_map` + sistem 3 tier Google Maps → Geoapify → OpenStreetMap; Google: `region=ID`, `language=id`, `components=country:ID`; Geoapify: `filter=countrycode:id`; tile dan reverse/forward geocoding dengan fallback otomatis |
 | 🔄 Ubah Kontak (HP/Email) | 🟢 Selesai | Ubah nomor HP atau email via OTP, masing-masing maks 1x/hari; tidak bisa mengubah keduanya di hari yang sama; email wajib terverifikasi sebelum bisa diubah |
 | 📧 Email Verification | 🟢 Selesai | Verifikasi email ditampilkan sebagai peringatan di profil; pengiriman OTP via Gmail SMTP produksi |
@@ -76,7 +76,7 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 **Alur nomor sudah terdaftar:**
 ```
 Sign In → Input Nomor HP
-  → OTP Verification (1234 / 5555 / 0000 / 9999 — mode demo lokal)
+  → OTP Verification (1234 / 5555 / 0000 / 9999 — mendukung auto-copy WhatsApp & paste clipboard)
   → PIN Verification (6-digit)
   → Home Screen
 ```
@@ -85,11 +85,13 @@ Sign In → Input Nomor HP
 ```
 Sign In → Input Nomor HP
   → OTP Verification
-  → Lengkapi Profil (Nama, Email, Tanggal Lahir, Gender)
+  → Lengkapi Profil (Nama Lengkap, Tanggal Lahir, Gender + Checkbox Syarat & Ketentuan)
   → Buat PIN (6-digit) → Konfirmasi PIN
   → Account Created Screen (animasi ✓ + countdown 5 detik)
   → Home Screen
 ```
+
+> **Catatan Registrasi Ringkas:** Field email pada form kelengkapan profil nomor HP ditiadakan agar proses sign up cepat dan mulus. Email dapat ditambahkan dan diverifikasi kemudian melalui menu Edit Profil.
 
 **Validasi nomor HP Indonesia:**
 
@@ -107,8 +109,12 @@ Sign In → Input Nomor HP
 ```
 Sign In → Continue with Google
   → Dialog Pilih Akun Google (always prompt)
-  → Lengkapi Profil → OTP Verification → Buat PIN → Home Screen
+  → Lengkapi Profil (Nama, Tanggal Lahir, Gender + Checkbox Syarat & Ketentuan — tanpa field HP)
+  → Buat PIN (6-digit) → Konfirmasi PIN
+  → Home Screen
 ```
+
+> **Catatan Registrasi Google:** Field nomor HP tidak diwajibkan saat pendaftaran akun via Google Auth, memberikan kemudahan akses langsung ke aplikasi bagi pengguna akun Google.
 
 **Alur akun terdaftar:**
 ```
@@ -121,14 +127,14 @@ Sign In → Continue with Google → PIN Verification → Home Screen
 
 - **Edit Profil**: Nama, TTL, Gender, Upload/Hapus Foto ke Supabase Storage.
 - **Privasi Nomor HP**: Toggle hide/show nomor HP di Settings & Edit Profile.
-- **Ganti PIN**: Verifikasi lama → PIN baru → Konfirmasi.
+- **Ganti PIN**: Verifikasi lama → PIN baru → Konfirmasi (Rate limit 3x).
 - **Preferensi Notifikasi**: Push, reminder jadwal, promo, berita email.
 - **Logout dan biometric**: Preferensi biometric dan PIN lokal akun yang logout dihapus dari device. Penguncian ketika aplikasi masuk background tidak menghapus preferensi.
 - **Hapus akun**: Tidak tersedia sebagai fitur/menu di versi aplikasi saat ini.
 
 ### 4a. 🏠 Beranda & Pengingat Kelengkapan Profil
 
-- Bagian atas Beranda menampilkan banner promo gradasi teal dengan ilustrasi fisioterapi, teks diskon 30% untuk pengguna baru, dan tombol notifikasi.
+- Bagian atas Beranda mengusung desain **header seamless modern** berwarna gradasi teal alami tanpa border kartu putih yang kaku, menyatu dengan layout Beranda, dilengkapi teks diskon 30% untuk pengguna baru dan tombol lonceng notifikasi.
 - Teks banner mengikuti bahasa aplikasi (Bahasa Indonesia atau English).
 - Pengingat melengkapi profil muncul untuk akun yang belum memiliki NIK dan alamat lengkap.
 - Tombol silang menyimpan status dismiss per akun di device, sehingga pengingat tidak muncul lagi setelah ditutup.
@@ -165,6 +171,8 @@ Sign In → Continue with Google → PIN Verification → Home Screen
 - Konten tiap tahap masuk dengan animasi fade dan geser ringan; bagian di dalam tahap muncul bertahap.
 - Posisi konten tahap tetap dimulai dari atas saat berpindah tahap, termasuk ketika isi tahap pendek.
 - Indikator progres tetap di luar area transisi konten sehingga tidak ikut bergeser saat tahap berubah.
+- **Auto-Save Draft ke Local Storage**: Progres pembuatan janji temu disimpan secara lokal di `SharedPreferences`. Jika pengguna keluar aplikasi atau tidak sengaja berpindah halaman, isian formulir tidak hilang.
+- **Navigasi Tombol Back Cerdas**: Tombol back sistem bawaan smartphone diselaraskan untuk kembali ke tahapan reservasi sebelumnya alih-alih langsung menutup layar.
 
 Flow reservasi terdiri dari enam tahap:
 
@@ -173,7 +181,7 @@ Flow reservasi terdiri dari enam tahap:
 2. Data pasien (NIK, kode medis, nama, tanggal lahir, nomor telepon, gender, keluhan)
 3. Kota, layanan, jadwal, jam, alamat/lokasi
 4. Jumlah sesi dan jenis pembayaran (lunas atau DP)
-5. Metode pembayaran
+5. Metode pembayaran (Tampilan card modern bersih tanpa radio button kaku)
 6. Instruksi pembayaran atau formulir kartu
 ```
 
@@ -181,7 +189,7 @@ Tahap pasien memvalidasi NIK 16 digit, nomor HP, serta keluhan wajib. Data ident
 
 **Khusus Malang:** tersedia pilihan Klinik **dan** Home Care. Kota lain hanya Home Care.
 
-Untuk Klinik, peta hanya menunjukkan titik tetap Klinik Kedota dan tidak menggunakan geocoding Geoapify. Home Care menggunakan peta yang dapat dipilih, pencarian alamat, dan lokasi terkini.
+Untuk Klinik, peta hanya menunjukkan titik tetap Klinik Kedota dan tidak menggunakan geocoding Geoapify. Home Care menggunakan peta yang dapat dipilih, pencarian alamat, dan lokasi terkini (dialog error izin/layanan GPS didesain bersih dan informatif).
 
 Tahap pembayaran mendukung QRIS, OVO, GoPay, ShopeePay, transfer BCA/BNI/BRI/Permata/Mandiri, dan kartu kredit/debit. Harga dan nomor rekening dapat disalin; QRIS dapat diunduh. Formulir kartu memvalidasi nomor kartu berdasarkan panjang jaringan dan checksum Luhn, masa berlaku yang belum lewat, serta CVV 3 atau 4 digit sesuai jaringan. Kolom wajib ditandai saat validasi gagal.
 
@@ -193,13 +201,24 @@ Batas pembayaran berlaku 10 menit sejak metode dipilih atau pengguna masuk ke in
 - Form kartu kredit/debit hanya memvalidasi input (nomor kartu memakai panjang jaringan dan checksum Luhn, masa berlaku, CVV). Ini bukan pemroses kartu bersertifikasi atau koneksi acquiring bank; jangan masukkan data kartu asli.
 - Pelunasan memakai RPC `settle_appointment_payment`, tetapi verifikasi pembayaran eksternal memerlukan gateway dan webhook production.
 
-### 7. 📴 Koneksi Internet & Screen Error
+### 7. 📴 Koneksi Internet & Layar Gangguan Server
 
-- `NetworkStatusGuard` aktif di seluruh aplikasi. Pemeriksaan memakai status konektivitas device dan probe endpoint health Supabase, bukan data database saja.
-- Koneksi diperiksa ketika status jaringan berubah, saat aplikasi kembali aktif, dan berkala setiap 5 detik. Tombol coba lagi menjalankan pemeriksaan ulang.
-- Ketika tidak ada akses internet, screen Poor Network Connection menutupi layar aktif sampai koneksi pulih.
-- Screen limit OTP, PIN, dan verifikasi tanggal lahir memakai ilustrasi error bersama dan hitung mundur 30 detik. Tombol kembali dan navigasi keluar terkunci sampai waktu habis.
-- Error screen bersama dirender melalui `ErrorStateScreen`; teks screen tersedia dalam Bahasa Indonesia dan English.
+Aplikasi memisahkan penanganan gangguan menjadi dua kondisi berbeda secara cerdas melalui `NetworkStatusGuard` dan `NetworkStatusService`:
+
+1. **Layar Tidak Ada Koneksi Internet (`NoInternetScreen`)**
+   - Menggunakan ilustrasi `assets/image/Poor Network Connection.png` dengan animasi floating.
+   - Ditampilkan saat smartphone pengguna tidak memiliki koneksi data seluler / Wi-Fi (`ConnectivityResult.none`) atau saat kedua jaringan publik dan backend tidak dapat dijangkau.
+   - Dilengkapi tombol coba lagi dengan animasi progress spinner.
+
+2. **Layar Gangguan Server (`ServerDownScreen`)**
+   - Menggunakan ilustrasi `assets/image/eror.png` dengan animasi floating dan tips penanganan.
+   - Ditampilkan saat koneksi internet pengguna aktif (misal ping publik `clients3.google.com` berhasil) tetapi server Supabase / backend mengembalikan status HTTP $5\text{xx}$ atau tidak dapat dijangkau (maintenance/outage).
+   - Dilengkapi deteksi instan: `ClientErrorLogService` langsung melaporkan status server down secara real-time saat terjadi error $5\text{xx}$ pada panggilan API/RPC tanpa perlu menunggu siklus polling.
+
+**Mekanisme Dual-Probe:**
+Pemeriksaan koneksi tidak hanya mengandalkan plugin platform connectivity, melainkan melakukan probe HTTP ke Supabase `/auth/v1/health` dan fallback ke endpoint publik 204. Koneksi diperiksa setiap perubahan status, saat app resume, dan berkala setiap 6 detik.
+
+Screen limit OTP, PIN, dan verifikasi tanggal lahir memakai ilustrasi error bersama dan hitung mundur 30 detik. Tombol kembali dan navigasi keluar terkunci sampai waktu habis. Teks error tersedia lengkap dalam Bahasa Indonesia dan English.
 
 ### 8. 🕶️ Privasi di App Switcher
 
@@ -307,11 +326,37 @@ Kolom-kolom di atas sudah dicantumkan pada migration baseline repository. Isinya
 
 ---
 
-### 12. 🔔 Notifikasi In-App
+### 12. 🔔 Sistem Notifikasi (Push Notification & In-App)
 
-- Terbaru tampil paling atas berdasarkan `created_at`.
-- Waktu relatif: `Baru saja`, `2 menit yang lalu`, `3 jam yang lalu`, `Kemarin`.
-- Label tersedia dalam ID & EN.
+Aplikasi memiliki sistem notifikasi lokal dan push yang komprehensif (`NotificationService`), dirancang untuk memberikan informasi penting secara tepat waktu dengan tautan langsung (deep-link):
+
+#### A. Notifikasi In-App
+- Tampil berurutan dari yang paling baru berdasarkan `created_at`.
+- Format waktu relatif: *Baru saja*, *2 menit yang lalu*, *3 jam yang lalu*, *Kemarin*.
+- Indikator unread disinkronkan otomatis dengan interaksi pengguna.
+- Tersedia dalam Bahasa Indonesia dan English.
+
+#### B. 13 Skenario Push Notification ke Smartphone Pengguna
+Dikelola oleh `NotificationService` dan didukung alarm background exact/inexact serta deep-link routing langsung:
+
+| No | Tipe Notifikasi | Kapan Dikirim | Payload / Deep-link |
+|:---:|---|---|---|
+| 1 | **Selamat Datang & Promo Baru** | Registrasi akun baru selesai di `AccountCreatedScreen` | `welcome_new_patient_promo` → Beranda |
+| 2 | **Konfirmasi Reservasi** | Pasca pemesanan jadwal berhasil di `ReservationFlowScreen` | `appointment:<id>` → Detail Janji Temu |
+| 3 | **Pengingat Jadwal Terapi** | Terjadwal otomatis **1 jam sebelum** jam janji temu dimulai | `appointment:<id>` → Detail Janji Temu |
+| 4 | **Tagihan DP Tertunda** | Pemesanan dilakukan dengan opsi pembayaran DP / Deposit | `deposit:<id>` → Layar Pelunasan (`SettlePaymentScreen`) |
+| 5 | **Pelunasan Berhasil** | Pelunasan tagihan selesai diproses | `appointment:<id>` → Detail Janji Temu |
+| 6 | **Jadwal Diperbarui (Reschedule)** | Pengajuan ubah tanggal/jam disetujui di `RescheduleAppointmentScreen` | `appointment:<id>` → Detail Janji Temu |
+| 7 | **Batas Waktu / DP Hangus** | Janji temu melewati 15 menit tanpa kehadiran pasien | `expired:<id>` atau `dp_forfeited:<id>` → Detail Janji Temu |
+| 8 | **Rating & Ulasan Sesi Selesai** | Status janji temu berubah menjadi `completed` | `review:<id>` → Form Ulasan & Detail |
+| 9 | **Terapis Dalam Perjalanan** | Status Home Care berubah menjadi `on_the_way` | `therapist:<id>` → Detail & Live Tracking |
+| 10 | **Terapis Telah Tiba** | Status Home Care berubah menjadi `arrived` di alamat pasien | `therapist:<id>` → Detail Janji Temu |
+| 11 | **Panduan Latihan Pemulihan** | Terapis mengunggah panduan latihan mandiri pasca terapi | `exercise:<id>` → Catatan Klinis |
+| 12 | **Pengingat Kontrol Lanjutan** | 3–14 hari setelah sesi selesai tanpa ada jadwal aktif berikutnya | `follow_up:` → Buka Alur Reservasi |
+| 13 | **Peringatan Keamanan Akun** | Terdeteksi 3x salah PIN (rate limit) atau kontak (HP/Email) diubah | `security:` → Layar Keamanan / Akun |
+| 14 | **Tips Postur Tubuh Berkala** | Terjadwal berkala jam 14.00 WIB untuk edukasi peregangan leher/bahu | `health_tip:` → Informasi Edukasi |
+
+> **Pengaturan Pengguna:** Seluruh push notifikasi dapat diaktifkan atau dinonaktifkan sesuai preferensi pengguna melalui menu **Pengaturan Notifikasi** (`Notifikasi Push`, `Pengingat Terapi`, `Promo & Penawaran`, dan `Berita Email`).
 
 ### 13. 📑 Syarat, Ketentuan & Kebijakan Privasi
 
@@ -614,7 +659,7 @@ Build iOS hanya dapat dibuat di macOS/Xcode. Android release saat ini menggunaka
 | `lib/main.dart` | Bootstrap, dotenv, Supabase, global error handler, tema, dan lock wrapper |
 | `lib/screens/onboarding/` | Slide onboarding |
 | `lib/screens/auth/` | Sign-in, OTP demo, PIN, pendaftaran, dan pemulihan PIN |
-| `lib/screens/errors/` | Offline dan rate limit OTP/PIN/verifikasi |
+| `lib/screens/errors/` | Layar no-internet, server down/gangguan server, dan rate limit OTP/PIN/verifikasi |
 | `lib/screens/home/` | Home, reservasi, janji, riwayat, profil, settings, pembayaran, dan notifikasi |
 | `lib/services/supabase_auth_service.dart` | Auth, operasi Supabase, REST client, booking/profile logic |
 | `lib/services/network_status_service.dart` | Status jaringan device dan probe koneksi Supabase |
@@ -652,6 +697,7 @@ lib/
 │   │   └── sign_in_screen.dart
 │   ├── errors/
 │   │   ├── no_internet_screen.dart
+│   │   ├── server_down_screen.dart          # Layar khusus gangguan server / 5xx maintenance
 │   │   ├── otp_rate_limit_screen.dart
 │   │   ├── pin_rate_limit_screen.dart
 │   │   └── verification_rate_limit_screen.dart

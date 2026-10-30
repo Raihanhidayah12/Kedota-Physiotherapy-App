@@ -529,7 +529,9 @@ class SupabaseAuthService {
         throw Exception('No active social session found.');
       }
 
-      final normalizedPhone = PhoneValidator.normalizePhoneNumber(phone);
+      final normalizedPhone = phone.trim().isNotEmpty
+          ? PhoneValidator.normalizePhoneNumber(phone)
+          : null;
 
       // Attempt to update the user's password if allowed for this provider session
       try {
@@ -732,7 +734,7 @@ class SupabaseAuthService {
     // Fall back to generated email only if user didn't provide a valid one.
     final hasRealEmail = email.trim().isNotEmpty && _isValidEmail(email.trim());
     final authEmail = hasRealEmail ? email.trim() : buildEmailFromPhone(phone);
-    final displayEmail = authEmail;
+    final displayEmail = hasRealEmail ? email.trim() : null;
 
     // --- Step 1: try to sign in — the user may already have a partial auth record ---
     try {
@@ -890,7 +892,7 @@ class SupabaseAuthService {
   Future<void> _upsertPhoneProfile({
     required String userId,
     required String authEmail,
-    required String displayEmail,
+    required String? displayEmail,
     required String normalizedPhone,
     required String fullName,
     required DateTime birthDate,

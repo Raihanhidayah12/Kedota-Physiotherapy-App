@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +7,7 @@ import '../../utils/app_snackbar.dart';
 import '../../services/app_lock_service.dart';
 import '../../services/screen_security_service.dart';
 import '../../services/supabase_auth_service.dart';
+import '../../services/notification_service.dart';
 import '../errors/pin_rate_limit_screen.dart';
 import '../home/main_screen.dart';
 import 'forgot_pin_screen.dart';
@@ -106,6 +107,12 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
       });
 
       if (_failedAttempts >= 3) {
+        if (mounted) {
+          NotificationService().showSecurityAlertNotification(
+            title: t(context, 'securityAlertPinFailedTitle'),
+            body: t(context, 'securityAlertPinFailedBody'),
+          );
+        }
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => PinRateLimitScreen(phoneNumber: widget.phoneNumber),
@@ -261,12 +268,14 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
     final screenWidth = screenSize.width;
 
     final iconSize = (screenHeight * 0.075).clamp(42.0, 64.0);
-    final fontSubtitle = (screenWidth * 0.034).clamp(11.0, 16.0);
+    final fontSubtitle = (screenWidth * 0.040).clamp(15.0, 16.5);
+    final dotSize = (screenWidth * 0.065).clamp(18.0, 26.0);
+    final dotMargin = (screenWidth * 0.02).clamp(4.0, 8.0);
     final numpadHGap = (screenWidth * 0.045).clamp(10.0, 18.0);
     final numpadVGap = (screenHeight * 0.016).clamp(8.0, 16.0);
     final maxByWidth = (screenWidth - 48 - (numpadHGap * 2)) / 3;
     final maxByHeight = screenHeight * 0.092;
-    final numpadBtnSize = maxByWidth.clamp(54.0, 78.0).clamp(54.0, maxByHeight);
+    final numpadBtnSize = maxByWidth.clamp(50.0, 78.0).clamp(50.0, maxByHeight);
     final numpadTotalWidth = numpadBtnSize * 3 + numpadHGap * 2;
     final numpadHPad = ((screenWidth - numpadTotalWidth) / 2).clamp(0.0, screenWidth / 2);
 
@@ -302,13 +311,14 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
                   // ── Subtitle ──────────────────────────────────────────
                   Padding(
                     padding: EdgeInsets.symmetric(
-                      horizontal: screenWidth * 0.1,
+                      horizontal: screenWidth * 0.08,
                     ),
                     child: Text(
                       t(context, 'enterPinDesc'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: fontSubtitle,
+                        fontWeight: FontWeight.w500,
                         color: const Color(0xFF334155),
                         height: 1.45,
                       ),
@@ -323,7 +333,7 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
                       child: Text(
                         t(context, 'wrongPinOrSignInFailed'),
                         style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFFEF4444),
                         ),
@@ -336,9 +346,9 @@ class _PinVerificationScreenState extends State<PinVerificationScreen>
                     children: List.generate(6, (index) {
                       final isFilled = index < _pin.length;
                       return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 8),
-                        width: 28,
-                        height: 28,
+                        margin: EdgeInsets.symmetric(horizontal: dotMargin),
+                        width: dotSize,
+                        height: dotSize,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: _isError

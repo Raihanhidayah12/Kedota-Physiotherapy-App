@@ -15,6 +15,7 @@ import 'upcoming_appointment_card.dart';
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _c700 = Color(0xFF007F78);
 const _c500 = Color(0xFF00A79D);
+const _c300 = Color(0xFF5ECFC9);
 const _c100 = Color(0xFFD4F5F3);
 const _bg = Color(0xFFF0F7F7);
 const _ink = Color(0xFF0E2C2F);
@@ -30,10 +31,16 @@ class HomeBody extends StatefulWidget {
 }
 
 class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
+  String _fullName = '';
   String? _profileImageUrl;
   // header expand animation
   late AnimationController _headerCtrl;
   late Animation<double> _headerExpand; // height expand from top-to-bottom
+  // header sub-element animations
+  late Animation<double> _greetFade;
+  late Animation<Offset> _greetSlide;
+  late Animation<double> _avatarFade;
+  late Animation<Offset> _avatarSlide;
   // staggered section animations
   late AnimationController _staggerCtrl;
   late List<Animation<double>> _sectionFades;
@@ -49,8 +56,8 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
   final Set<int> _completedTasks = {0};
 
   // number of staggered sections:
-  // 0=promo, 1=appointment, 2=services, 3=progress, 4=tips
-  static const _kSections = 5;
+  // 0=appointment, 1=services/tasks, 2=progress, 3=tips
+  static const _kSections = 4;
 
   @override
   void initState() {
@@ -65,6 +72,31 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(parent: _headerCtrl, curve: Curves.easeOutCubic));
+
+    _greetFade = CurvedAnimation(
+      parent: _headerCtrl,
+      curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
+    );
+    _greetSlide = Tween<Offset>(begin: const Offset(-0.25, 0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _headerCtrl,
+            curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
+          ),
+        );
+
+    // avatar + notif: slides in from right, starts at 100ms (0.11), ends at 600ms
+    _avatarFade = CurvedAnimation(
+      parent: _headerCtrl,
+      curve: const Interval(0.11, 0.66, curve: Curves.easeOut),
+    );
+    _avatarSlide = Tween<Offset>(begin: const Offset(0.3, 0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _headerCtrl,
+            curve: const Interval(0.11, 0.66, curve: Curves.easeOutCubic),
+          ),
+        );
 
     // stagger: total 900 ms, each section 300 ms window, offset 120 ms
     _staggerCtrl = AnimationController(
@@ -198,6 +230,10 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       final user = service.client.auth.currentUser;
       final profile = await service.checkUserProfileExists();
       final metadata = user?.userMetadata ?? <String, dynamic>{};
+      final profileName = profile?['full_name']?.toString().trim() ?? '';
+      final metadataName = (metadata['full_name'] ?? metadata['name'])
+          ?.toString()
+          .trim();
       final persistedImageUrl = profile?['profile_photo_url']
           ?.toString()
           .trim();
@@ -216,10 +252,24 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
             metadata['photo_url'],
           ]);
       if (!mounted) return;
-      setState(() => _profileImageUrl = imageUrl);
+      setState(() {
+        _fullName = profileName.isNotEmpty
+            ? profileName
+            : (metadataName?.isNotEmpty == true
+                  ? metadataName!
+                  : t(context, 'patientName'));
+        _profileImageUrl = imageUrl;
+      });
     } catch (e) {
       debugPrint('Home profile load failed: $e');
     }
+  }
+
+  void _handleProfileImageError() {
+    if (!mounted || _profileImageUrl == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _profileImageUrl = null);
+    });
   }
 
   Future<void> _loadUpcomingAppointment() async {
@@ -294,9 +344,9 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 16),
                       _fadeSlide(
-                        1,
+                        0,
                         _buildSectionRow(
                           t(context, 'upcomingAppointment'),
                           t(context, 'seeAll'),
@@ -311,18 +361,18 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _fadeSlide(1, _buildAppointmentCard()),
+                      _fadeSlide(0, _buildAppointmentCard()),
                       const SizedBox(height: 28),
                       _fadeSlide(
-                        2,
+                        1,
                         _buildSectionRow(t(context, 'independentTasks'), null),
                       ),
                       const SizedBox(height: 14),
-                      _fadeSlide(2, _buildTasksCard()),
+                      _fadeSlide(1, _buildTasksCard()),
                       const SizedBox(height: 28),
-                      _fadeSlide(3, _buildProgressCard()),
+                      _fadeSlide(2, _buildProgressCard()),
                       const SizedBox(height: 28),
-                      _fadeSlide(4, _buildTipsCard()),
+                      _fadeSlide(3, _buildTipsCard()),
                     ]),
                   ),
                 ),
@@ -354,79 +404,84 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
             child: child,
           );
         },
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-          height: 108,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFD9F4F0), Color(0xFF83D8CF)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: _ink.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            MediaQuery.of(context).padding.top + 16,
+            20,
+            10,
           ),
-          child: Stack(
+          child: Row(
             children: [
-              Positioned(
-                right: -4,
-                bottom: -12,
-                child: Image.asset(
-                  'assets/image/Boarding/image 18.png',
-                  width: 142,
-                  height: 126,
-                  fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
+              FadeTransition(
+                opacity: _avatarFade,
+                child: SlideTransition(
+                  position: _avatarSlide,
+                  child: _buildAvatar(),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 96, 0),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        t(context, 'promoNewPatientTitle'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _c500,
-                          fontSize: 21,
-                          height: 1.1,
-                          fontWeight: FontWeight.w800,
+              const SizedBox(width: 14),
+              Expanded(
+                child: FadeTransition(
+                  opacity: _greetFade,
+                  child: SlideTransition(
+                    position: _greetSlide,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t(context, 'welcome'),
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        t(context, 'promoNewPatientSubtitle'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontSize: 12,
-                          height: 1.2,
-                          fontWeight: FontWeight.w500,
+                        const SizedBox(height: 3),
+                        Text(
+                          _fullName.isNotEmpty
+                              ? _fullName
+                              : t(context, 'patientName'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _ink3,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-              Positioned(top: 10, right: 10, child: _buildNotifButton()),
+              const SizedBox(width: 10),
+              FadeTransition(
+                opacity: _avatarFade,
+                child: SlideTransition(
+                  position: _avatarSlide,
+                  child: _buildNotifButton(),
+                ),
+              ),
             ],
           ),
         ),
       ),
     ),
+  );
+
+  Widget _buildAvatar() => CircleAvatar(
+    radius: 22,
+    backgroundColor: _c300,
+    backgroundImage: _profileImageUrl == null
+        ? null
+        : NetworkImage(_profileImageUrl!),
+    onBackgroundImageError: _profileImageUrl == null
+        ? null
+        : (_, _) => _handleProfileImageError(),
+    child: _profileImageUrl == null
+        ? const Icon(Icons.person, color: Colors.white, size: 24)
+        : null,
   );
 
   Widget _buildNotifButton() => GestureDetector(
@@ -436,33 +491,24 @@ class _HomeBodyState extends State<HomeBody> with TickerProviderStateMixin {
       );
       if (mounted) _loadNotificationReadState();
     },
-    child: Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: _c100,
-        shape: BoxShape.circle,
-        border: Border.all(color: _c500.withValues(alpha: 0.2)),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          const Icon(Icons.notifications_outlined, color: _c700, size: 20),
-          if (_hasUnreadNotifications)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                width: 7,
-                height: 7,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF6B6B),
-                  shape: BoxShape.circle,
-                ),
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.notifications_rounded, color: _c700, size: 26),
+        if (_hasUnreadNotifications)
+          Positioned(
+            top: 1,
+            right: 1,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFF6B6B),
+                shape: BoxShape.circle,
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     ),
   );
 

@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -108,6 +108,16 @@ class _MainScreenState extends State<MainScreen> {
       final expiredBody = t(context, 'expiredAppointmentBody');
       final dpForfeitedTitle = t(context, 'depositForfeitedTitle');
       final dpForfeitedBody = t(context, 'depositForfeitedNotifBody');
+      final reviewTitle = t(context, 'reviewPromptTitle');
+      final reviewBodyTemplate = t(context, 'reviewPromptBody');
+      final otwTitle = t(context, 'therapistOnTheWayTitle');
+      final otwBodyTemplate = t(context, 'therapistOnTheWayBody');
+      final arrivedTitle = t(context, 'therapistArrivedTitle');
+      final arrivedBodyTemplate = t(context, 'therapistArrivedBody');
+      final followUpTitle = t(context, 'followUpReminderTitle');
+      final followUpBody = t(context, 'followUpReminderBody');
+      final weeklyTipTitle = t(context, 'weeklyHealthTipTitle');
+      final weeklyTipBody = t(context, 'weeklyHealthTipBody');
       final now = DateTime.now();
       final rowsBeforeExpire = await service.client
           .from('appointments')
@@ -200,6 +210,95 @@ class _MainScreenState extends State<MainScreen> {
           body: expiredBody,
         );
       }
+
+      // 1. Sync notifikasi review / rating untuk sesi completed
+      final completedRows = await service.client
+          .from('appointments')
+          .select('id, therapist_name, appointment_date, appointment_status')
+          .eq('booker_id', user.id)
+          .eq('appointment_status', 'completed')
+          .order('appointment_date', ascending: false)
+          .limit(5);
+
+      final notifiedReviews =
+          prefs.getStringList('review_notifications_sent')?.toSet() ?? {};
+
+      for (final row in (completedRows as List).cast<Map<String, dynamic>>()) {
+        final id = row['id']?.toString() ?? '';
+        if (id.isEmpty || notifiedReviews.contains(id)) continue;
+        final therapist = row['therapist_name']?.toString() ?? 'Terapis Kedota';
+        await NotificationService().showReviewPromptNotification(
+          appointmentId: id,
+          therapistName: therapist,
+          title: reviewTitle,
+          body: reviewBodyTemplate.replaceFirst('{therapist}', therapist),
+        );
+        notifiedReviews.add(id);
+      }
+      await prefs.setStringList('review_notifications_sent', notifiedReviews.toList());
+
+      // 2. Tracking Terapis Home Care (on_the_way & arrived)
+      final activeTrackingRows = await service.client
+          .from('appointments')
+          .select('id, therapist_name, appointment_status')
+          .eq('booker_id', user.id)
+          .inFilter('appointment_status', ['on_the_way', 'arrived']);
+
+      final notifiedTracking =
+          prefs.getStringList('therapist_tracking_sent')?.toSet() ?? {};
+
+      for (final row in (activeTrackingRows as List).cast<Map<String, dynamic>>()) {
+        final id = row['id']?.toString() ?? '';
+        final status = row['appointment_status']?.toString();
+        final therapist = row['therapist_name']?.toString() ?? 'Terapis Kedota';
+        if (id.isEmpty) continue;
+
+        if (status == 'on_the_way' && !notifiedTracking.contains('$id:otw')) {
+          await NotificationService().showTherapistOnTheWayNotification(
+            appointmentId: id,
+            therapistName: therapist,
+            title: otwTitle,
+            body: otwBodyTemplate.replaceFirst('{therapist}', therapist),
+          );
+          notifiedTracking.add('$id:otw');
+        } else if (status == 'arrived' && !notifiedTracking.contains('$id:arrived')) {
+          await NotificationService().showTherapistArrivedNotification(
+            appointmentId: id,
+            therapistName: therapist,
+            title: arrivedTitle,
+            body: arrivedBodyTemplate.replaceFirst('{therapist}', therapist),
+          );
+          notifiedTracking.add('$id:arrived');
+        }
+      }
+      await prefs.setStringList('therapist_tracking_sent', notifiedTracking.toList());
+
+      // 3. Follow-up reminder jika tidak ada appointment upcoming aktif
+      if ((rows as List).isEmpty && (completedRows as List).isNotEmpty) {
+        final latest = (completedRows as List).first as Map<String, dynamic>;
+        final latestDateStr = latest['appointment_date']?.toString();
+        final latestId = latest['id']?.toString() ?? '';
+        if (latestDateStr != null && latestId.isNotEmpty) {
+          final lastDate = DateTime.tryParse(latestDateStr);
+          if (lastDate != null) {
+            final daysPassed = DateTime.now().difference(lastDate).inDays;
+            final followUpSent = prefs.getBool('followup_sent_$latestId') ?? false;
+            if (daysPassed >= 3 && daysPassed <= 14 && !followUpSent) {
+              await NotificationService().showFollowUpReminderNotification(
+                title: followUpTitle,
+                body: followUpBody,
+              );
+              await prefs.setBool('followup_sent_$latestId', true);
+            }
+          }
+        }
+      }
+
+      // 4. Jadwalkan Tips Edukasi Fisioterapi Mingguan
+      await NotificationService().scheduleWeeklyHealthTip(
+        title: weeklyTipTitle,
+        body: weeklyTipBody,
+      );
     } catch (error, stackTrace) {
       debugPrint('Startup appointment reminder sync failed: $error');
       debugPrintStack(

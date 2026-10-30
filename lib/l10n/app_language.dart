@@ -282,6 +282,35 @@ const _translations = {
     'checkingConnection': 'Checking connection...',
     'checkConnectionTip':
         'Make sure Wi-Fi or cellular data is active and Airplane Mode is off.',
+    'serverDownTitle': 'Server Under Maintenance',
+    'serverDownSubtitle':
+        'Our servers are currently experiencing issues or undergoing maintenance.',
+    'serverDownTip':
+        'We are working to resolve this as soon as possible. Please try again in a moment.',
+    'reviewPromptTitle': 'How was your therapy session?',
+    'reviewPromptBody':
+        'Rate and review your session with {therapist} to help us maintain quality care.',
+    'therapistOnTheWayTitle': 'Therapist On The Way',
+    'therapistOnTheWayBody':
+        'Physiotherapist {therapist} is heading to your location for your Home Care session.',
+    'therapistArrivedTitle': 'Therapist Has Arrived',
+    'therapistArrivedBody':
+        'Physiotherapist {therapist} has arrived at your address.',
+    'exerciseNotesTitle': 'New Recovery Guidance',
+    'exerciseNotesBody':
+        '{therapist} has provided home exercise instructions for your recovery.',
+    'followUpReminderTitle': 'Continue Your Recovery',
+    'followUpReminderBody':
+        'Keep your recovery progress optimal! Schedule your next therapy session today.',
+    'securityAlertPinFailedTitle': 'Account Security Alert',
+    'securityAlertPinFailedBody':
+        'Too many failed PIN attempts detected. Your account has been temporarily locked for security.',
+    'securityAlertContactChangedTitle': 'Account Contact Updated',
+    'securityAlertContactChangedBody':
+        'Your registered contact details have been successfully updated.',
+    'weeklyHealthTipTitle': 'Kedota Care: Posture Check',
+    'weeklyHealthTipBody':
+        'Taking a break? Do a 3-minute neck and shoulder stretch to prevent stiffness and strain.',
     'otpLimitTitle': 'OTP Request Limit!',
     'otpLimitSubtitle':
         'Please wait {seconds} seconds before requesting another OTP code.',
@@ -806,7 +835,7 @@ const _translations = {
         'Your account must have a verified email before you can change your phone number.',
     'phoneRequiredToChangeEmail':
         'Your account must have a registered phone number before you can change your email.',
-    'otpSentToPhone': 'Enter the 6-digit OTP code sent to {phone}',
+    'otpSentToPhone': 'Enter the 4-digit OTP code sent to {phone}',
     'otpSentToEmail': 'Enter the 6-digit OTP code sent to {email}',
     'resendOtpIn': 'Resend in {time}',
     'phoneNotMatch': 'Phone number does not match your account.',
@@ -1202,6 +1231,35 @@ Device information, application activity logs, and usage data for security and s
     'checkingConnection': 'Memeriksa koneksi...',
     'checkConnectionTip':
         'Pastikan Wi-Fi atau data seluler Anda aktif dan Mode Pesawat mati.',
+    'serverDownTitle': 'Server Sedang Gangguan',
+    'serverDownSubtitle':
+        'Server kami sedang mengalami kendala teknis atau dalam pemeliharaan.',
+    'serverDownTip':
+        'Kami sedang berupaya memperbaikinya secepat mungkin. Silakan coba beberapa saat lagi.',
+    'reviewPromptTitle': 'Bagaimana Sesi Terapi Anda?',
+    'reviewPromptBody':
+        'Beri nilai dan ulasan sesi bersama {therapist} untuk membantu kami menjaga kualitas layanan.',
+    'therapistOnTheWayTitle': 'Terapis Menuju ke Lokasi',
+    'therapistOnTheWayBody':
+        'Fisioterapis {therapist} sedang dalam perjalanan ke lokasi Anda untuk sesi Home Care.',
+    'therapistArrivedTitle': 'Terapis Telah Tiba',
+    'therapistArrivedBody':
+        'Fisioterapis {therapist} sudah sampai di alamat Anda.',
+    'exerciseNotesTitle': 'Panduan Pemulihan Baru',
+    'exerciseNotesBody':
+        '{therapist} telah menambahkan panduan latihan mandiri untuk pemulihan Anda.',
+    'followUpReminderTitle': 'Lanjutkan Pemulihan Anda',
+    'followUpReminderBody':
+        'Jaga perkembangan terapi tetap optimal! Yuk jadwalkan sesi fisioterapi lanjutan Anda.',
+    'securityAlertPinFailedTitle': 'Peringatan Keamanan Akun',
+    'securityAlertPinFailedBody':
+        'Terdeteksi kegagalan PIN berulang kali. Akun Anda telah dikunci sementara demi keamanan.',
+    'securityAlertContactChangedTitle': 'Kontak Akun Berhasil Diperbarui',
+    'securityAlertContactChangedBody':
+        'Kontak terdaftar pada akun Anda baru saja berhasil diperbarui.',
+    'weeklyHealthTipTitle': 'Kedota Care: Cek Postur Tubuh',
+    'weeklyHealthTipBody':
+        'Sudah duduk lama? Lakukan peregangan leher dan bahu selama 3 menit untuk cegah kram dan pegal.',
     'otpLimitTitle': 'Batas Permintaan OTP!',
     'otpLimitSubtitle':
         'Mohon tunggu {seconds} detik sebelum meminta kode OTP kembali.',
@@ -1729,7 +1787,7 @@ Device information, application activity logs, and usage data for security and s
         'Akun Anda harus memiliki email yang terverifikasi untuk dapat mengubah nomor telepon.',
     'phoneRequiredToChangeEmail':
         'Akun Anda harus memiliki nomor telepon yang terdaftar untuk dapat mengubah email.',
-    'otpSentToPhone': 'Masukkan 6 digit kode OTP yang telah dikirimkan ke nomor {phone}',
+    'otpSentToPhone': 'Masukkan 4 digit kode OTP yang telah dikirimkan ke nomor {phone}',
     'otpSentToEmail': 'Masukkan 6 digit kode OTP yang telah dikirimkan ke email {email}',
     'resendOtpIn': 'Kirim Ulang Dalam {time}',
     'phoneNotMatch': 'Nomor telepon tidak cocok dengan akun Anda.',

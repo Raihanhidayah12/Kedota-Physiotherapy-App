@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
 import 'dart:developer' as developer;
 
@@ -11,6 +12,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../screens/home/history_screen.dart';
 import '../screens/home/appointment_detail_screen.dart';
+import '../screens/home/reservation_flow_screen.dart';
 import '../screens/home/settle_payment_screen.dart';
 import 'supabase_auth_service.dart';
 import '../widgets/app_lock_overlay.dart';
@@ -29,6 +31,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
+    if (kIsWeb) return;
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
 
@@ -61,6 +64,14 @@ class NotificationService {
           _openAppointmentDetail(payload.substring('expired:'.length));
         } else if (payload != null && payload.startsWith('appointment:')) {
           _openAppointmentDetail(payload.substring('appointment:'.length));
+        } else if (payload != null && payload.startsWith('review:')) {
+          _openAppointmentDetail(payload.substring('review:'.length));
+        } else if (payload != null && payload.startsWith('therapist:')) {
+          _openAppointmentDetail(payload.substring('therapist:'.length));
+        } else if (payload != null && payload.startsWith('exercise:')) {
+          _openAppointmentDetail(payload.substring('exercise:'.length));
+        } else if (payload != null && payload.startsWith('follow_up:')) {
+          _openReservation();
         }
       },
     );
@@ -159,6 +170,7 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    if (kIsWeb) return;
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool('pref_notif_push') ?? true) || appointmentId.isEmpty) {
       return;
@@ -259,15 +271,18 @@ class NotificationService {
     );
   }
 
-  Future<void> cancelAppointmentReminder(String appointmentId) {
+  Future<void> cancelAppointmentReminder(String appointmentId) async {
+    if (kIsWeb) return;
     return _flutterLocalNotificationsPlugin.cancel(
       _notificationId(appointmentId),
     );
   }
 
   Future<void> cancelAllAppointmentReminders() async {
-    final pending = await _flutterLocalNotificationsPlugin
-        .pendingNotificationRequests();
+    if (kIsWeb) return;
+    try {
+      final pending = await _flutterLocalNotificationsPlugin
+          .pendingNotificationRequests();
     for (final notification in pending) {
       if (notification.payload?.startsWith('appointment:') ?? false) {
         await _flutterLocalNotificationsPlugin.cancel(notification.id);
@@ -276,6 +291,7 @@ class NotificationService {
         await _flutterLocalNotificationsPlugin.cancel(notification.id);
       }
     }
+    } catch (_) {}
   }
 
   int _notificationId(String appointmentId) {
@@ -296,6 +312,7 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
+    if (kIsWeb) return;
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
           'kedota_main_channel',
@@ -370,6 +387,168 @@ class NotificationService {
     } catch (error) {
       developer.log('Expired appointment deep link failed: $error');
     }
+  }
+
+  void _openReservation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      appNavigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => const ReservationFlowScreen(),
+        ),
+      );
+    });
+  }
+
+  Future<void> showReviewPromptNotification({
+    required String appointmentId,
+    required String therapistName,
+    required String title,
+    required String body,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('pref_notif_push') ?? true)) return;
+    await showNotification(
+      id: _notificationId('review:$appointmentId'),
+      title: title,
+      body: body,
+      payload: 'review:$appointmentId',
+    );
+  }
+
+  Future<void> showTherapistOnTheWayNotification({
+    required String appointmentId,
+    required String therapistName,
+    required String title,
+    required String body,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('pref_notif_push') ?? true)) return;
+    await showNotification(
+      id: _notificationId('therapist_otw:$appointmentId'),
+      title: title,
+      body: body,
+      payload: 'therapist:$appointmentId',
+    );
+  }
+
+  Future<void> showTherapistArrivedNotification({
+    required String appointmentId,
+    required String therapistName,
+    required String title,
+    required String body,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('pref_notif_push') ?? true)) return;
+    await showNotification(
+      id: _notificationId('therapist_arrived:$appointmentId'),
+      title: title,
+      body: body,
+      payload: 'therapist:$appointmentId',
+    );
+  }
+
+  Future<void> showExerciseNotesNotification({
+    required String appointmentId,
+    required String therapistName,
+    required String title,
+    required String body,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('pref_notif_push') ?? true)) return;
+    await showNotification(
+      id: _notificationId('exercise:$appointmentId'),
+      title: title,
+      body: body,
+      payload: 'exercise:$appointmentId',
+    );
+  }
+
+  Future<void> showFollowUpReminderNotification({
+    required String title,
+    required String body,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('pref_notif_push') ?? true) ||
+        !(prefs.getBool('pref_notif_reminder') ?? true)) {
+      return;
+    }
+    await showNotification(
+      id: 300,
+      title: title,
+      body: body,
+      payload: 'follow_up:',
+    );
+  }
+
+  Future<void> showSecurityAlertNotification({
+    required String title,
+    required String body,
+  }) async {
+    await showNotification(
+      id: 400 + DateTime.now().second,
+      title: title,
+      body: body,
+      payload: 'security:',
+    );
+  }
+
+  Future<void> scheduleWeeklyHealthTip({
+    required String title,
+    required String body,
+  }) async {
+    if (kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('pref_notif_push') ?? true) ||
+        !(prefs.getBool('pref_notif_promo') ?? true)) {
+      return;
+    }
+
+    final lastScheduled = prefs.getString('last_weekly_tip_scheduled');
+    final now = DateTime.now();
+    if (lastScheduled != null) {
+      final lastDate = DateTime.tryParse(lastScheduled);
+      if (lastDate != null && now.difference(lastDate).inDays < 4) {
+        return;
+      }
+    }
+
+    final targetDate = now.add(const Duration(days: 3));
+    final scheduledDate = tz.TZDateTime(
+      tz.local,
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      14,
+      0,
+    );
+
+    const androidDetails = AndroidNotificationDetails(
+      'kedota_health_tips',
+      'Tips Kesehatan & Edukasi',
+      channelDescription: 'Edukasi dan tips fisioterapi berkala Kedota',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      icon: '@mipmap/ic_launcher',
+    );
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
+
+    try {
+      await _flutterLocalNotificationsPlugin.zonedSchedule(
+        999,
+        title,
+        body,
+        scheduledDate,
+        notificationDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: 'health_tip:',
+      );
+      await prefs.setString('last_weekly_tip_scheduled', now.toIso8601String());
+    } catch (_) {}
   }
 
   AppointmentItem _appointmentFromRow(

@@ -75,7 +75,8 @@ class OtpVerificationScreen extends StatefulWidget {
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
 }
 
-class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
+class _OtpVerificationScreenState extends State<OtpVerificationScreen>
+    with WidgetsBindingObserver {
   final _otpController = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _timer;
@@ -107,11 +108,47 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startTimer();
     _otpController.addListener(_checkOtpComplete);
     _focusNode.addListener(() {
       if (mounted) setState(() {});
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkClipboardForOtp());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkClipboardForOtp();
+    }
+  }
+
+  Future<void> _checkClipboardForOtp() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) return;
+
+      // Extract 4 digit OTP from text (e.g. from WA message or plain number)
+      final match = RegExp(r'\b\d{4}\b').firstMatch(text);
+      if (match != null) {
+        final code = match.group(0)!;
+        if (_otpController.text != code) {
+          if (!mounted) return;
+          setState(() {
+            _otpController.text = code;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('OTP $code terinput otomatis dari clipboard'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   void _checkOtpComplete() {
@@ -135,6 +172,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _otpController.removeListener(_checkOtpComplete);
     _otpController.dispose();
@@ -533,7 +571,31 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 14),
+                              // Tombol Tempel OTP
+                              InkWell(
+                                onTap: _checkClipboardForOtp,
+                                borderRadius: BorderRadius.circular(20),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.content_paste_rounded, size: 16, color: Color(0xFF00A79D)),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Tempel OTP',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF00A79D),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
                               Wrap(
                                 alignment: WrapAlignment.center,
                                 crossAxisAlignment: WrapCrossAlignment.center,

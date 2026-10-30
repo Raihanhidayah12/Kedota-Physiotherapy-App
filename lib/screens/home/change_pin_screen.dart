@@ -483,7 +483,7 @@ class _ChangePinScreenState extends State<ChangePinScreen>
                     _stepDesc,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 15.5,
                       color: _ink3,
                       height: 1.5,
                       fontWeight: FontWeight.w500,

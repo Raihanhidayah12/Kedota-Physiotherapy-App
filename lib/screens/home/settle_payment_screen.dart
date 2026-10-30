@@ -555,14 +555,6 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: 10),
-            Icon(
-              selected
-                  ? Icons.radio_button_checked_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: selected ? _teal : const Color(0xFFBFCFCF),
-              size: 20,
-            ),
           ],
         ),
       ),
@@ -621,14 +613,6 @@ class _SettlePaymentScreenState extends State<SettlePaymentScreen>
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
-            ),
-            const SizedBox(width: 10),
-            Icon(
-              selected
-                  ? Icons.radio_button_checked_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: selected ? _teal : const Color(0xFFBFCFCF),
-              size: 20,
             ),
           ],
         ),

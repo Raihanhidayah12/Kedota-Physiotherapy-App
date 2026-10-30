@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/app_language.dart';
-import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
 import 'phone_create_pin_screen.dart';
@@ -44,16 +43,14 @@ class PhoneProfileCompletionScreen extends StatefulWidget {
 class _PhoneProfileCompletionScreenState
     extends State<PhoneProfileCompletionScreen> {
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
   final _dobController = TextEditingController();
 
   DateTime? _selectedBirthDate;
   String? _gender;
+  bool _agreeTerms = false;
   bool _isLoading = false;
 
   bool _isNameError = false;
-  bool _isEmailError = false;
-  String? _emailCustomError;
   bool _isDobError = false;
   bool _isGenderError = false;
 
@@ -63,14 +60,6 @@ class _PhoneProfileCompletionScreenState
     _nameController.addListener(() {
       if (_isNameError && _nameController.text.isNotEmpty) {
         setState(() => _isNameError = false);
-      }
-    });
-    _emailController.addListener(() {
-      if (_isEmailError && _emailController.text.isNotEmpty) {
-        setState(() {
-          _isEmailError = false;
-          _emailCustomError = null;
-        });
       }
     });
     _dobController.addListener(() {
@@ -104,13 +93,8 @@ class _PhoneProfileCompletionScreenState
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
     _dobController.dispose();
     super.dispose();
-  }
-
-  bool _isValidEmail(String email) {
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
   }
 
   Future<void> _pickDate() async {
@@ -136,42 +120,36 @@ class _PhoneProfileCompletionScreenState
 
   Future<void> _submitProfile() async {
     final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
 
     setState(() {
       _isNameError = name.isEmpty;
-      _isEmailError = email.isEmpty || !_isValidEmail(email);
-      _emailCustomError = email.isEmpty
-          ? null
-          : (!_isValidEmail(email) ? 'Format email tidak valid' : null);
       _isDobError = _selectedBirthDate == null;
       _isGenderError = _gender == null;
     });
 
-    if (_isNameError || _isEmailError || _isDobError || _isGenderError) return;
+    if (_isNameError || _isDobError || _isGenderError) return;
+
+    if (!_agreeTerms) {
+      CustomBottomSheet.show(
+        context,
+        type: BottomSheetType.error,
+        title: t(context, 'infoTitle'),
+        subtitle: t(context, 'termsRequired'),
+        singleButtonText: t(context, 'closeBtn'),
+        onSinglePressed: () => Navigator.of(context).pop(),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
-      final emailExists = await SupabaseAuthService().checkEmailExists(email);
-
-      if (!mounted) return;
-
-      if (emailExists) {
-        setState(() {
-          _isLoading = false;
-          _isEmailError = true;
-          _emailCustomError = t(context, 'emailAlreadyRegistered');
-        });
-        return;
-      }
-
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PhoneCreatePinScreen(
             phone: widget.phoneNumber,
             fullName: name,
-            email: email,
+            email: '',
             birthDate: _selectedBirthDate!,
             gender: _gender!,
           ),
@@ -421,18 +399,39 @@ class _PhoneProfileCompletionScreenState
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _buildFieldLabel(
-                      'Email',
-                      isError: _isEmailError,
-                      errorMessage: _emailCustomError,
-                      required: false,
-                    ),
-                    const SizedBox(height: 6),
-                    _signupTextInput(
-                      controller: _emailController,
-                      hint: 'email@gmail.com',
-                      hasError: _isEmailError,
-                      keyboardType: TextInputType.emailAddress,
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _agreeTerms,
+                            activeColor: const Color(0xFF00A79D),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            side: const BorderSide(
+                              color: Color(0xFFCBD5E1),
+                              width: 1.5,
+                            ),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _agreeTerms = val);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Saya setuju dengan syarat dan ketentuan yang berlaku.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

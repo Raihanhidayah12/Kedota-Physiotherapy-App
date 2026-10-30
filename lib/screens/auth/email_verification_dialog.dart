@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,8 +8,48 @@ import '../../services/supabase_auth_service.dart';
 
 const _c700 = Color(0xFF007F78);
 const _c500 = Color(0xFF00A79D);
-const _c100 = Color(0xFFD4F5F3);
-const _ink = Color(0xFF0E2C2F);
+
+class _BlinkingCursor extends StatefulWidget {
+  const _BlinkingCursor();
+
+  @override
+  State<_BlinkingCursor> createState() => _BlinkingCursorState();
+}
+
+class _BlinkingCursorState extends State<_BlinkingCursor>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: Container(
+        width: 2,
+        height: 22,
+        decoration: BoxDecoration(
+          color: _c500,
+          borderRadius: BorderRadius.circular(1),
+        ),
+      ),
+    );
+  }
+}
 
 class EmailVerificationDialog extends StatefulWidget {
   final String email;
@@ -27,47 +68,84 @@ class EmailVerificationDialog extends StatefulWidget {
       _EmailVerificationDialogState();
 }
 
-class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
-  // 6 controllers + focus nodes, one per digit
-  final List<TextEditingController> _controllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+class _EmailVerificationDialogState extends State<EmailVerificationDialog>
+    with WidgetsBindingObserver {
+  final _otpController = TextEditingController();
+  final _focusNode = FocusNode();
 
   bool _isLoading = false;
   bool _isError = false;
   String _errorMsg = '';
   int _countdown = 59;
+  Timer? _countdownTimer;
   bool _canResend = false;
   int _failedAttempts = 0;
   bool _isLockedOut = false;
   DateTime? _lockoutUntil;
+  bool _isClearingForError = false;
 
   static const _maxAttempts = 3;
-
-  String get _otpValue =>
-      _controllers.map((c) => c.text).join();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _otpController.addListener(_checkOtpComplete);
+    _focusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
     _sendOtp();
     _checkLockout();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkClipboardForOtp());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkClipboardForOtp();
+    }
+  }
+
+  Future<void> _checkClipboardForOtp() async {
+    if (_isLockedOut) return;
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) return;
+
+      // Match 6-digit OTP code (Supabase email OTP is 6 digits)
+      final match = RegExp(r'\b\d{6}\b').firstMatch(text);
+      if (match != null) {
+        final code = match.group(0)!;
+        if (_otpController.text != code) {
+          if (!mounted) return;
+          setState(() {
+            _otpController.text = code;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('OTP $code terinput otomatis dari clipboard'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
-    for (final c in _controllers) {
-      c.dispose();
-    }
-    for (final f in _focusNodes) {
-      f.dispose();
-    }
+    WidgetsBinding.instance.removeObserver(this);
+    _countdownTimer?.cancel();
+    _otpController.removeListener(_checkOtpComplete);
+    _otpController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   void _checkLockout() {
-    if (_lockoutUntil != null &&
-        DateTime.now().isBefore(_lockoutUntil!)) {
+    if (_lockoutUntil != null && DateTime.now().isBefore(_lockoutUntil!)) {
       setState(() {
         _isLockedOut = true;
         _isError = true;
@@ -92,11 +170,33 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   }
 
   void _clearBoxes() {
-    for (final c in _controllers) {
-      c.clear();
-    }
+    _isClearingForError = true;
+    _otpController.clear();
+    _isClearingForError = false;
     if (!_isLockedOut) {
-      _focusNodes[0].requestFocus();
+      _focusNode.requestFocus();
+    }
+  }
+
+  void _checkOtpComplete() {
+    if (_isClearingForError) return;
+
+    if (_otpController.text.isNotEmpty) {
+      HapticFeedback.selectionClick();
+      if (_isError) {
+        setState(() {
+          _isError = false;
+          _errorMsg = '';
+        });
+      }
+    }
+
+    if (_otpController.text.length == 6) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          _verifyOtp();
+        }
+      });
     }
   }
 
@@ -106,7 +206,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       final svc = SupabaseAuthService();
       await svc.client.auth.signInWithOtp(
         email: widget.email,
-        shouldCreateUser: true, // needed so Supabase can verify OTP
+        shouldCreateUser: true,
       );
       setState(() {
         _isLoading = false;
@@ -116,9 +216,8 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         _canResend = false;
       });
       _startCountdown();
-      // Auto-focus first box after OTP sent
       Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) _focusNodes[0].requestFocus();
+        if (mounted) _focusNode.requestFocus();
       });
     } catch (e) {
       if (!mounted) return;
@@ -131,53 +230,26 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   }
 
   void _startCountdown() {
-    Future.delayed(const Duration(seconds: 1), () {
+    _countdownTimer?.cancel();
+    _countdown = 59;
+    _canResend = false;
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
-      setState(() => _countdown--);
-      if (_countdown > 0) {
-        _startCountdown();
-      } else {
-        setState(() => _canResend = true);
-      }
+      setState(() {
+        if (_countdown > 0) {
+          _countdown--;
+        } else {
+          _canResend = true;
+          timer.cancel();
+        }
+      });
     });
   }
 
-  void _onDigitChanged(int index, String value) {
-    if (_isLockedOut) return;
-
-    // Clear error on typing
-    if (_isError) {
-      setState(() {
-        _isError = false;
-        _errorMsg = '';
-      });
-    }
-
-    if (value.length == 1) {
-      if (index < 5) {
-        _focusNodes[index + 1].requestFocus();
-      } else {
-        _focusNodes[index].unfocus();
-        _verifyOtp();
-      }
-    }
-  }
-
-  void _onKeyEvent(int index, KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.backspace &&
-        _controllers[index].text.isEmpty &&
-        index > 0) {
-      // Go back to previous box on backspace
-      _focusNodes[index - 1].requestFocus();
-      _controllers[index - 1].clear();
-    }
-  }
-
   Future<void> _verifyOtp() async {
-    if (_isLockedOut) return;
+    if (_isLockedOut || _isLoading) return;
 
-    final otp = _otpValue;
+    final otp = _otpController.text.trim();
     if (otp.length != 6) {
       setState(() {
         _isError = true;
@@ -192,7 +264,6 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       final svc = SupabaseAuthService();
 
       try {
-        // Try real Supabase OTP
         final response = await svc.client.auth.verifyOTP(
           email: widget.email,
           token: otp,
@@ -200,7 +271,6 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         );
 
         if (response.session != null || response.user != null) {
-          // Mark email as verified in profiles - use upsert-safe update
           final user = svc.client.auth.currentUser;
           if (user != null) {
             try {
@@ -210,7 +280,6 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                   .eq('id', user.id);
             } catch (dbErr) {
               debugPrint('DB update email_verified failed: $dbErr');
-              // Column might not exist yet, but OTP was valid - still mark as verified
             }
           }
           if (!mounted) return;
@@ -221,7 +290,6 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       } catch (e) {
         debugPrint('Supabase OTP failed: $e');
         final errMsg = e.toString().toLowerCase();
-        // If OTP is actually expired or invalid, show error immediately
         if (errMsg.contains('expired') || errMsg.contains('invalid')) {
           _recordFailedAttempt();
           if (mounted) {
@@ -238,7 +306,6 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         }
       }
 
-      // OTP wrong - no fallback, real OTP only
       _recordFailedAttempt();
       if (mounted) {
         setState(() {
@@ -264,199 +331,289 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      insetPadding: const EdgeInsets.all(16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // Badge Icon matching brand
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCF4F1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.mark_email_read_outlined,
+                  size: 30,
+                  color: _c500,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title matching UI OTP No. Telp
               Text(
-                t(context, 'verifyEmailTitle'),
+                t(context, 'verifyOtp'),
                 style: const TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: _ink,
+                  fontWeight: FontWeight.w800,
+                  color: _c500,
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                'OTP dikirim ke ${widget.email}',
-                style: const TextStyle(fontSize: 13, color: Color(0xFF8AA8AC)),
-              ),
-              const SizedBox(height: 24),
 
-                  // 6 OTP boxes
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (i) => _buildOtpBox(i)),
-              ),
+              // Subtitle
+              Builder(
+                builder: (context) {
+                  final template = t(context, 'otpSentToEmail');
+                  final parts = template.split('{email}');
+                  final prefix = parts.isNotEmpty ? parts[0] : '';
+                  final suffix = parts.length > 1 ? parts[1] : '';
 
-              // Error message
-              if (_isError) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _errorMsg,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFD94F45),
-                    fontWeight: FontWeight.w500,
+                  return RichText(
+                    textAlign: TextAlign.center,
+                    text: TextSpan(
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF475569),
+                        height: 1.45,
+                      ),
+                      children: [
+                        TextSpan(text: prefix),
+                        TextSpan(
+                          text: widget.email,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        if (suffix.isNotEmpty) TextSpan(text: suffix),
+                        if (!suffix.endsWith('.')) const TextSpan(text: '.'),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // Error inline text
+              if (_isError)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    _errorMsg.isNotEmpty ? _errorMsg : t(context, 'otpInvalid'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFEF4444),
+                    ),
                   ),
                 ),
-              ],
 
-              const SizedBox(height: 24),
+              // 6 OTP boxes matching Phone OTP UI with LayoutBuilder & full paste support
+              GestureDetector(
+                onTap: () => _focusNode.requestFocus(),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // 6 boxes with 5 gaps of 8px
+                    final availableWidth = constraints.maxWidth;
+                    final boxSize = ((availableWidth - (5 * 8)) / 6).clamp(38.0, 52.0);
 
-              // Resend row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    t(context, 'didntReceiveOtp'),
-                    style: const TextStyle(fontSize: 13, color: _ink),
-                  ),
-                  const SizedBox(width: 6),
-                  _canResend
-                      ? GestureDetector(
-                          onTap: _sendOtp,
-                          child: Text(
-                            t(context, 'resendOtp'),
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: _c500,
-                              fontWeight: FontWeight.w600,
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(6, (index) {
+                        final isActive = index == _otpController.text.length;
+                        final char = _otpController.text.length > index
+                            ? _otpController.text[index]
+                            : '';
+
+                        return Container(
+                          margin: EdgeInsets.only(right: index == 5 ? 0 : 8),
+                          width: boxSize,
+                          height: boxSize * 1.15,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _isError
+                                  ? const Color(0xFFEF4444)
+                                  : (isActive && _focusNode.hasFocus
+                                      ? _c500
+                                      : (char.isNotEmpty
+                                          ? _c700
+                                          : const Color(0xFFE2E8F0))),
+                              width: _isError || (isActive && _focusNode.hasFocus)
+                                  ? 1.8
+                                  : 1.2,
                             ),
                           ),
-                        )
-                      : Text(
-                          '${t(context, 'resendOtpIn').replaceFirst('{time}', _countdown.toString())}s',
-                          style: const TextStyle(fontSize: 13, color: _c500),
-                        ),
-                ],
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              if (char.isNotEmpty)
+                                Text(
+                                  char,
+                                  style: TextStyle(
+                                    fontSize: boxSize * 0.45,
+                                    fontWeight: FontWeight.bold,
+                                    color: _isError
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFF1E293B),
+                                  ),
+                                )
+                              else if (isActive && _focusNode.hasFocus)
+                                const _BlinkingCursor(),
+                              Positioned(
+                                bottom: 8,
+                                child: Container(
+                                  width: boxSize * 0.35,
+                                  height: 2,
+                                  decoration: BoxDecoration(
+                                    color: _isError
+                                        ? const Color(0xFFEF4444)
+                                        : (char.isNotEmpty ||
+                                                (isActive && _focusNode.hasFocus)
+                                            ? _c500
+                                            : const Color(0xFFCBD5E1)),
+                                    borderRadius: BorderRadius.circular(1),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    );
+                  },
+                ),
               ),
 
-              const SizedBox(height: 24),
+              // Hidden TextField that accepts typing & paste
+              SizedBox(
+                width: 1,
+                height: 1,
+                child: Opacity(
+                  opacity: 0,
+                  child: TextField(
+                    controller: _otpController,
+                    focusNode: _focusNode,
+                    enabled: !_isLockedOut,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ),
 
-              // Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed:
-                          _isLoading ? null : widget.onCancelled,
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: _c500),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 14),
+
+              // Tombol Tempel OTP
+              InkWell(
+                onTap: _checkClipboardForOtp,
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.content_paste_rounded, size: 16, color: _c500),
+                      SizedBox(width: 6),
+                      Text(
+                        'Tempel OTP',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _c500,
                         ),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                          t(context, 'skipBtn'),
-                          style: const TextStyle(color: _c500),
-                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // Resend timer matching Phone OTP UI
+              if (_isLoading)
+                const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: _c500),
+                )
+              else if (!_canResend && _countdown > 0)
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  children: [
+                    Text(
+                      t(context, 'resendIn'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ||
-                              _otpValue.length < 6 ||
-                              _isLockedOut
-                          ? null
-                          : _verifyOtp,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _c700,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor:
-                                      AlwaysStoppedAnimation(_c500),
-                                ),
-                              )
-                            : Text(
-                                t(context, 'verify'),
-                                style: const TextStyle(color: Colors.white),
-                              ),
+                    Text(
+                      '00:${_countdown.toString().padLeft(2, '0')}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _c500,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ],
+                )
+              else
+                TextButton(
+                  onPressed: _sendOtp,
+                  child: Text(
+                    t(context, 'resendOtp'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: _c500,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
-                ],
+                ),
+
+              const SizedBox(height: 20),
+
+              // Action buttons: Batal
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: widget.onCancelled,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF64748B),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    t(context, 'cancel'),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOtpBox(int index) {
-    final isFilled = _controllers[index].text.isNotEmpty;
-
-    return SizedBox(
-      width: 44,
-      height: 54,
-      child: KeyboardListener(
-        focusNode: FocusNode(),
-        onKeyEvent: (e) => _onKeyEvent(index, e),
-        child: TextField(
-          controller: _controllers[index],
-          focusNode: _focusNodes[index],
-          enabled: !_isLockedOut,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.center,
-          maxLength: 1,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: _c700,
-          ),
-          decoration: InputDecoration(
-            counterText: '',
-            contentPadding: EdgeInsets.zero,
-            filled: true,
-            fillColor: isFilled ? _c100 : Colors.white,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: _isError
-                    ? const Color(0xFFEF4444)
-                    : (isFilled ? _c700 : const Color(0xFFE6EEEE)),
-                width: 2,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: _isError ? const Color(0xFFEF4444) : _c700,
-                width: 2,
-              ),
-            ),
-            disabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFE6EEEE), width: 2),
-            ),
-          ),
-          onChanged: (v) {
-            setState(() {});
-            _onDigitChanged(index, v);
-          },
         ),
       ),
     );

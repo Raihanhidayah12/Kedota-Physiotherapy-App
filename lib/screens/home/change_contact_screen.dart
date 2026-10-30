@@ -1,18 +1,16 @@
-import 'dart:async';
-
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../l10n/app_language.dart';
 import '../../services/supabase_auth_service.dart';
-import '../../utils/app_snackbar.dart';
+import '../../services/notification_service.dart';
 import '../../utils/phone_validator.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const _c700 = Color(0xFF007F78);
 const _c500 = Color(0xFF00A79D);
-const _c100 = Color(0xFFD4F5F3);
 const _bg = Color(0xFFF0F7F7);
 const _ink = Color(0xFF0E2C2F);
 const _ink2 = Color(0xFF3D6065);
@@ -20,21 +18,23 @@ const _ink3 = Color(0xFF8AA8AC);
 
 enum ChangeContactMode { phone, email }
 
-/// 5-step flow for changing phone number or email.
+/// 5-step flow for changing phone number or email according to design:
 ///
-/// Phone flow:
-///   Step 0 — Input current phone (verify identity)
-///   Step 1 — OTP to the entered CURRENT phone number
-///   Step 2 — Input new phone number
-///   Step 3 — OTP to the NEW phone number
-///   Step 4 — Success screen → redirect to login
+/// Change Phone Number Flow:
+///   Step 0 — Ubah No. Telepon: displays "Nomor Telepon Sebelumnya" with country code & input.
+///            Notice: Verification OTP will be sent to the registered email.
+///   Step 1 — Verifikasi OTP: 6 boxes, subtitle "Masukkan 6-digit kode OTP yang telah dikirimkan ke email p*****a@gmail.com".
+///   Step 2 — Ubah No. Telepon: displays "Nomor Telepon Baru".
+///   Step 3 — Verifikasi OTP: 4 boxes, subtitle "Masukkan 4-digit kode OTP yang telah dikirimkan ke nomor 0857****123".
+///   Step 4 — Success screen: "Nomor Telepon Berhasil Diubah", countdown redirect to login.
 ///
-/// Email flow:
-///   Step 0 — Input current email (verify identity)
-///   Step 1 — OTP to the entered CURRENT email
-///   Step 2 — Input new email
-///   Step 3 — OTP to the NEW email
-///   Step 4 — Success screen → redirect to login
+/// Change Email Flow:
+///   Step 0 — Ubah Email: displays "Email Sebelumnya".
+///            Notice: Verification OTP will be sent to the registered phone number.
+///   Step 1 — Verifikasi OTP: 4 boxes, subtitle "Masukkan 4-digit kode OTP yang telah dikirimkan ke nomor 0857****123".
+///   Step 2 — Ubah Email: displays "Email Baru".
+///   Step 3 — Verifikasi OTP: 6 boxes, subtitle "Masukkan 6-digit kode OTP yang telah dikirimkan ke email p*****a@gmail.com".
+///   Step 4 — Success screen: "Email Berhasil Diubah", countdown redirect to login.
 class ChangeContactScreen extends StatefulWidget {
   final ChangeContactMode mode;
   final String? currentValue; // pre-filled current phone/email
@@ -53,7 +53,8 @@ class ChangeContactScreen extends StatefulWidget {
   State<ChangeContactScreen> createState() => _ChangeContactScreenState();
 }
 
-class _ChangeContactScreenState extends State<ChangeContactScreen> {
+class _ChangeContactScreenState extends State<ChangeContactScreen>
+    with WidgetsBindingObserver {
   final _inputCtr = TextEditingController();
   final _otpCtr = TextEditingController();
   final _inputFocus = FocusNode();
@@ -75,34 +76,63 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   DateTime? _lastOtpSendDate;
   DateTime? _lastOtpVerifyDate;
 
-  // The value the user typed in step 0 (current) and step 2 (new)
+  // Values
   String _currentValue = '';
   String _newValue = '';
+  String? _verifiedEmail; // email target for OTP when changing phone
+  String? _verifiedPhone; // phone target for OTP when changing email
 
-  // Dummy valid OTPs for phone verification (since SMS not implemented yet)
-  static const _validDummyOtps = {'1234', '5555', '0000', '9999'};
+  // Dummy valid OTPs for phone & email verification
+  static const _validDummyOtps = {
+    '1234',
+    '5555',
+    '0000',
+    '9999',
+    '123456',
+    '000000',
+    '999999',
+  };
 
   bool get _isPhone => widget.mode == ChangeContactMode.phone;
+
+  // Target OTP destination type:
+  // Step 1:
+  //   - If changing phone: OTP sent to existing email (6 digits)
+  //   - If changing email: OTP sent to existing phone (4 digits)
+  // Step 3:
+  //   - If changing phone: OTP sent to new phone (4 digits)
+  //   - If changing email: OTP sent to new email (6 digits)
+  bool get _isCurrentOtpEmail =>
+      (_step == 1 && _isPhone) || (_step == 3 && !_isPhone);
+
+  int get _expectedOtpLength => _isCurrentOtpEmail ? 6 : 4;
 
   @override
   void initState() {
     super.initState();
-    // Inisialisasi input awal untuk Step 0 (verifikasi silang):
-    // Jika Ganti Nomor HP -> Step 0 minta Email terdaftar akun saat ini
-    // Jika Ganti Email -> Step 0 minta Nomor HP terdaftar akun saat ini
+    WidgetsBinding.instance.addObserver(this);
+
+    // Initial pre-fill for Step 0:
+    // If Change Phone: prefill with current phone number
+    // If Change Email: prefill with current email
     if (_isPhone) {
-      final email = widget.currentEmail ??
-          (widget.mode == ChangeContactMode.email ? widget.currentValue : null);
-      if (email != null && email.isNotEmpty) {
-        _inputCtr.text = email.trim();
-      }
-    } else {
-      final phone = widget.currentPhone ??
+      final phone =
+          widget.currentPhone ??
           (widget.mode == ChangeContactMode.phone ? widget.currentValue : null);
       if (phone != null && phone.isNotEmpty) {
         _inputCtr.text = phone.replaceFirst(RegExp(r'^\+?62\s*'), '').trim();
       }
+      _verifiedEmail = widget.currentEmail;
+    } else {
+      final email =
+          widget.currentEmail ??
+          (widget.mode == ChangeContactMode.email ? widget.currentValue : null);
+      if (email != null && email.isNotEmpty) {
+        _inputCtr.text = email.trim();
+      }
+      _verifiedPhone = widget.currentPhone;
     }
+
     _loadOtpLimits();
     _otpCtr.addListener(_onOtpChanged);
     _inputFocus.addListener(() {
@@ -111,11 +141,46 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     _otpFocus.addListener(() {
       if (mounted) setState(() {});
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkClipboardForOtp());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkClipboardForOtp();
+    }
+  }
+
+  Future<void> _checkClipboardForOtp() async {
+    if (_step != 1 && _step != 3) return;
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) return;
+
+      final match = RegExp(
+        r'\b\d{' + _expectedOtpLength.toString() + r'}\b',
+      ).firstMatch(text);
+      if (match != null) {
+        final code = match.group(0)!;
+        if (_otpCtr.text != code) {
+          if (!mounted) return;
+          setState(() {
+            _otpCtr.text = code;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('OTP $code terinput otomatis dari clipboard'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadOtpLimits() async {
-    // Load from SharedPreferences or DB
-    // For now, reset daily (simplified)
     final today = DateTime.now().toUtc();
     _lastOtpSendDate = today;
     _lastOtpVerifyDate = today;
@@ -125,11 +190,14 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     final now = DateTime.now().toUtc();
     final today = DateTime(now.year, now.month, now.day);
     final lastSend = _lastOtpSendDate != null
-        ? DateTime(_lastOtpSendDate!.year, _lastOtpSendDate!.month, _lastOtpSendDate!.day)
+        ? DateTime(
+            _lastOtpSendDate!.year,
+            _lastOtpSendDate!.month,
+            _lastOtpSendDate!.day,
+          )
         : null;
 
     if (lastSend == null || lastSend.isBefore(today)) {
-      // New day — reset counter
       _otpSendCount = 0;
       _lastOtpSendDate = now;
     }
@@ -140,7 +208,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     final now = DateTime.now().toUtc();
     final today = DateTime(now.year, now.month, now.day);
     final lastVerify = _lastOtpVerifyDate != null
-        ? DateTime(_lastOtpVerifyDate!.year, _lastOtpVerifyDate!.month, _lastOtpVerifyDate!.day)
+        ? DateTime(
+            _lastOtpVerifyDate!.year,
+            _lastOtpVerifyDate!.month,
+            _lastOtpVerifyDate!.day,
+          )
         : null;
 
     if (lastVerify == null || lastVerify.isBefore(today)) {
@@ -152,6 +224,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _inputCtr.dispose();
     _otpCtr.dispose();
     _inputFocus.dispose();
@@ -197,13 +270,12 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
       });
     }
 
-    if (_otpCtr.text.length == 4 && mounted) {
+    if (_otpCtr.text.length == _expectedOtpLength && mounted) {
       _verifyOtp();
     }
   }
 
   Future<void> _verifyOtp() async {
-    // Check OTP verify limit first
     if (!_canVerifyOtp()) {
       HapticFeedback.heavyImpact();
       setState(() {
@@ -217,24 +289,23 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     }
 
     final otp = _otpCtr.text.trim();
+    if (otp.length != _expectedOtpLength) return;
     bool isValid = false;
 
     if (_step == 1) {
-      // Step 1: Verifikasi kontak saat ini (verifikasi silang untuk keamanan)
-      // Jika ubah Nomor HP -> OTP dikirim ke Email akun
-      // Jika ubah Email -> OTP dikirim ke Nomor HP akun
       if (_isPhone) {
+        // Step 1 ganti phone: OTP 6 digit dikirim ke email akun
         isValid = await _verifyEmailOtp(otp) || _validDummyOtps.contains(otp);
       } else {
+        // Step 1 ganti email: OTP 4 digit dikirim ke phone akun
         isValid = _validDummyOtps.contains(otp);
       }
     } else {
-      // Step 3: Verifikasi kontak baru
-      // Jika ubah Nomor HP -> OTP dikirim ke Nomor HP Baru
-      // Jika ubah Email -> OTP dikirim ke Email Baru
       if (_isPhone) {
+        // Step 3 ganti phone: OTP 4 digit dikirim ke phone baru
         isValid = _validDummyOtps.contains(otp);
       } else {
+        // Step 3 ganti email: OTP 6 digit dikirim ke email baru
         isValid = await _verifyEmailOtp(otp) || _validDummyOtps.contains(otp);
       }
     }
@@ -255,10 +326,8 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
 
     // OTP valid — move to next step
     if (_step == 1) {
-      // Verified current identity → go to input new value
       _goToStep(2);
     } else if (_step == 3) {
-      // Verified new value → save and show success
       await _saveContact();
     }
   }
@@ -274,7 +343,6 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
       _otpCtr.clear();
       if (step == 1 || step == 3) _startCountdown();
     });
-    // Auto-focus appropriate field after frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (step == 1 || step == 3) {
@@ -289,19 +357,8 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     final val = _inputCtr.text.trim();
     if (val.isEmpty) return;
 
-    // Step 0: Verifikasi silang!
-    // Jika ganti Nomor HP (_isPhone) -> minta Email akun saat ini
-    // Jika ganti Email (!_isPhone) -> minta Nomor HP akun saat ini
     if (_isPhone) {
-      if (!_isValidEmail(val)) {
-        setState(() {
-          _isError = true;
-          _errorMsg = t(context, 'validEmailError');
-        });
-        return;
-      }
-      _currentValue = val;
-    } else {
+      // Input nomor telepon sebelumnya
       if (!PhoneValidator.isValidIndonesianPhone(val)) {
         setState(() {
           _isError = true;
@@ -310,9 +367,18 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         return;
       }
       _currentValue = PhoneValidator.normalizePhoneNumber(val);
+    } else {
+      // Input email sebelumnya
+      if (!_isValidEmail(val)) {
+        setState(() {
+          _isError = true;
+          _errorMsg = t(context, 'validEmailError');
+        });
+        return;
+      }
+      _currentValue = val;
     }
 
-    // Verify that entered current value matches DB
     setState(() => _isLoading = true);
     try {
       final svc = SupabaseAuthService();
@@ -321,29 +387,19 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
 
       final profile = await svc.client
           .from('profiles')
-          .select('phone, email')
+          .select('phone, email, email_verified')
           .eq('id', user.id)
           .maybeSingle();
 
       if (profile == null) throw Exception('Profile not found');
 
       if (_isPhone) {
-        // Cek kecocokan Email terdaftar
-        final dbEmail = profile['email']?.toString().trim() ?? '';
-        if (dbEmail.toLowerCase() != _currentValue.toLowerCase()) {
-          if (!mounted) return;
-          setState(() {
-            _isLoading = false;
-            _isError = true;
-            _errorMsg = t(context, 'emailNotMatch');
-          });
-          return;
-        }
-      } else {
-        // Cek kecocokan Nomor HP terdaftar
+        // Cek kecocokan Nomor Telepon terdaftar
         final dbPhone = profile['phone']?.toString().trim() ?? '';
         final normalizedDb = PhoneValidator.normalizePhoneNumber(dbPhone);
-        final normalizedCurrent = PhoneValidator.normalizePhoneNumber(_currentValue);
+        final normalizedCurrent = PhoneValidator.normalizePhoneNumber(
+          _currentValue,
+        );
         if (normalizedDb != normalizedCurrent) {
           if (!mounted) return;
           setState(() {
@@ -353,6 +409,57 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
           });
           return;
         }
+
+        // Cek apakah email akun sudah terdaftar dan terverifikasi
+        final dbEmail = profile['email']?.toString().trim() ?? '';
+        final isEmailVerified = profile['email_verified'] == true;
+        if (dbEmail.isEmpty || !isEmailVerified) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _isError = true;
+            _errorMsg = t(context, 'emailRequiredToChangePhone');
+          });
+          return;
+        }
+        _verifiedEmail = dbEmail;
+      } else {
+        // Cek kecocokan Email terdaftar
+        final dbEmail = profile['email']?.toString().trim() ?? '';
+        final isEmailVerified = profile['email_verified'] == true;
+        if (dbEmail.toLowerCase() != _currentValue.toLowerCase()) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _isError = true;
+            _errorMsg = t(context, 'emailNotMatch');
+          });
+          return;
+        }
+
+        // Cek apakah email saat ini sudah terverifikasi
+        if (!isEmailVerified) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _isError = true;
+            _errorMsg = t(context, 'emailMustVerifyFirst');
+          });
+          return;
+        }
+
+        // Cek apakah nomor telepon terdaftar untuk menerima OTP
+        final dbPhone = profile['phone']?.toString().trim() ?? '';
+        if (dbPhone.isEmpty) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _isError = true;
+            _errorMsg = t(context, 'phoneRequiredToChangeEmail');
+          });
+          return;
+        }
+        _verifiedPhone = PhoneValidator.normalizePhoneNumber(dbPhone);
       }
 
       // Check OTP send limit
@@ -366,13 +473,12 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         return;
       }
 
-      // Kirim OTP verifikasi data lama (silang):
-      // Ganti HP -> kirim OTP ke Email saat ini
-      // Ganti Email -> kirim OTP ke Nomor HP saat ini
+      // Kirim OTP verifikasi data lama:
+      // Ganti HP -> kirim OTP (6 digit) ke Email saat ini
+      // Ganti Email -> kirim OTP (4 digit) ke Nomor HP saat ini
       if (_isPhone) {
-        await _sendEmailOtp(_currentValue);
+        await _sendEmailOtp(_verifiedEmail!);
       } else {
-        // Phone SMS dummy
         _otpSendCount++;
         _lastOtpSendDate = DateTime.now().toUtc();
       }
@@ -409,16 +515,16 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     }
     _newValue = _isPhone ? PhoneValidator.normalizePhoneNumber(val) : val;
 
-    // Check if new phone/email is already taken by another user
     setState(() => _isLoading = true);
     try {
       final svc = SupabaseAuthService();
       final user = svc.client.auth.currentUser;
       if (user == null) throw Exception('Not logged in');
 
-      // Jika ubah email, cek apakah nomor telepon sudah diubah hari ini
-      // Jika ubah phone, cek apakah phone atau email sudah diubah hari ini
-      final todayStr = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+      final todayStr = DateTime.now()
+          .toUtc()
+          .toIso8601String()
+          .substring(0, 10);
       final profileCheck = await svc.client
           .from('profiles')
           .select('phone_changed_at, email_changed_at')
@@ -426,11 +532,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
           .maybeSingle();
 
       if (!_isPhone) {
-        // Cek: email tidak boleh diubah kalau phone sudah diubah hari ini
         final phoneChangedAt = profileCheck?['phone_changed_at']?.toString();
         if (phoneChangedAt != null) {
           final d = DateTime.tryParse(phoneChangedAt);
-          if (d != null && d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+          if (d != null &&
+              d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
             if (!mounted) return;
             setState(() {
               _isLoading = false;
@@ -440,11 +546,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
             return;
           }
         }
-        // Cek: email hanya bisa diubah 1x sehari
         final emailChangedAt = profileCheck?['email_changed_at']?.toString();
         if (emailChangedAt != null) {
           final d = DateTime.tryParse(emailChangedAt);
-          if (d != null && d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+          if (d != null &&
+              d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
             if (!mounted) return;
             setState(() {
               _isLoading = false;
@@ -455,11 +561,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
           }
         }
       } else {
-        // Cek: phone hanya bisa diubah 1x sehari
         final phoneChangedAt = profileCheck?['phone_changed_at']?.toString();
         if (phoneChangedAt != null) {
           final d = DateTime.tryParse(phoneChangedAt);
-          if (d != null && d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+          if (d != null &&
+              d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
             if (!mounted) return;
             setState(() {
               _isLoading = false;
@@ -469,11 +575,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
             return;
           }
         }
-        // Cek: phone tidak boleh diubah kalau email sudah diubah hari ini
         final emailChangedAt = profileCheck?['email_changed_at']?.toString();
         if (emailChangedAt != null) {
           final d = DateTime.tryParse(emailChangedAt);
-          if (d != null && d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
+          if (d != null &&
+              d.toUtc().toIso8601String().substring(0, 10) == todayStr) {
             if (!mounted) return;
             setState(() {
               _isLoading = false;
@@ -485,43 +591,43 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         }
       }
 
-      // Cek apakah nomor/email baru sudah dipakai akun lain
-      // Untuk phone: gunakan multi-variant matching karena format bisa berbeda
-      dynamic existing;
+      // Check uniqueness
       if (_isPhone) {
-        final digits = _newValue.replaceAll(RegExp(r'\D'), '');
-        final variants = [
-          '+$digits',                                          // +6282...
-          digits,                                             // 6282...
-          '0${digits.substring(2)}',                         // 082...
-          digits.substring(2),                               // 82...
-        ];
-        existing = await svc.client
+        final existing = await svc.client
             .from('profiles')
             .select('id')
-            .inFilter('phone', variants)
+            .eq('phone', _newValue)
+            .neq('id', user.id)
             .maybeSingle();
+
+        if (existing != null) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _isError = true;
+            _errorMsg = t(context, 'phoneAlreadyRegistered');
+          });
+          return;
+        }
       } else {
-        existing = await svc.client
+        final existing = await svc.client
             .from('profiles')
             .select('id')
             .eq('email', _newValue)
+            .neq('id', user.id)
             .maybeSingle();
+
+        if (existing != null) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _isError = true;
+            _errorMsg = t(context, 'emailAlreadyRegistered');
+          });
+          return;
+        }
       }
 
-      if (existing != null && existing['id'] != user.id) {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _isError = true;
-          _errorMsg = _isPhone
-              ? t(context, 'phoneAlreadyUsed')
-              : t(context, 'emailAlreadyUsed');
-        });
-        return;
-      }
-
-      // Check OTP send limit
       if (!_canSendOtp()) {
         if (!mounted) return;
         setState(() {
@@ -532,13 +638,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         return;
       }
 
-      // Send OTP to new value (real for email, dummy for phone)
+      // Step 3 OTP to new contact:
       if (_isPhone) {
-        // Phone SMS not implemented yet - use dummy system
         _otpSendCount++;
         _lastOtpSendDate = DateTime.now().toUtc();
       } else {
-        // Email - use Supabase Auth OTP
         await _sendEmailOtp(_newValue);
       }
 
@@ -555,24 +659,20 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     }
   }
 
-  // ── Email OTP via Supabase Auth ───────────────────────────────────────────
-
-  /// Sends a real OTP to [email] via Supabase Auth (signInWithOtp).
-  /// Supabase sends a 6-digit code by email automatically.
   Future<void> _sendEmailOtp(String email) async {
     final svc = SupabaseAuthService();
     await svc.client.auth.signInWithOtp(
       email: email,
-      shouldCreateUser: false, // don't register new users
+      shouldCreateUser: false,
     );
     _otpSendCount++;
     _lastOtpSendDate = DateTime.now().toUtc();
   }
 
-  /// Verifies the 6-digit [otp] code for [email] using Supabase Auth verifyOTP.
-  /// Returns true if valid, false otherwise.
   Future<bool> _verifyEmailOtp(String otp) async {
-    final email = _step == 1 ? _currentValue : _newValue;
+    final email = (_step == 1 && _isPhone)
+        ? (_verifiedEmail ?? _currentValue)
+        : _newValue;
     try {
       final svc = SupabaseAuthService();
       final response = await svc.client.auth.verifyOTP(
@@ -617,15 +717,18 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
         _isLoading = false;
         _step = 4;
       });
+      NotificationService().showSecurityAlertNotification(
+        title: t(context, 'securityAlertContactChangedTitle'),
+        body: t(context, 'securityAlertContactChangedBody'),
+      );
       _startSuccessCountdown();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      showAppSnackBar(
-        context,
-        e.toString(),
-        type: AppSnackBarType.error,
-      );
+      setState(() {
+        _isLoading = false;
+        _isError = true;
+        _errorMsg = e.toString();
+      });
     }
   }
 
@@ -656,14 +759,20 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   bool _isValidEmail(String v) =>
       RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v);
 
-  // ── OTP send target string ────────────────────────────────────────────────
-
-  /// The masked destination shown in OTP screen subtitle.
   String get _otpTarget {
     if (_step == 1) {
-      return _isPhone ? _maskEmail(_currentValue) : _maskPhone(_currentValue);
+      if (_isPhone) {
+        return _maskEmail(_verifiedEmail ?? widget.currentEmail ?? '');
+      } else {
+        return _maskPhone(_verifiedPhone ?? widget.currentPhone ?? '');
+      }
+    } else {
+      if (_isPhone) {
+        return _maskPhone(_newValue);
+      } else {
+        return _maskEmail(_newValue);
+      }
     }
-    return _isPhone ? _maskPhone(_newValue) : _maskEmail(_newValue);
   }
 
   String _maskPhone(String phone) {
@@ -674,10 +783,11 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   String _maskEmail(String email) {
     final at = email.indexOf('@');
     if (at <= 0) return email;
-    return '${email[0]}****${email.substring(at)}';
+    final name = email.substring(0, at);
+    final domain = email.substring(at);
+    if (name.length <= 2) return '${name[0]}*$domain';
+    return '${name[0]}*****${name[name.length - 1]}$domain';
   }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -692,8 +802,8 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     final isNewValue = _step == 2;
     final title = _isPhone ? t(context, 'changePhone') : t(context, 'changeEmail');
     final sectionLabel = _isPhone
-        ? (isNewValue ? t(context, 'newPhoneLabel') : t(context, 'currentEmailLabel'))
-        : (isNewValue ? t(context, 'newEmailLabel') : t(context, 'currentPhoneLabel'));
+        ? (isNewValue ? t(context, 'newPhoneLabel') : t(context, 'currentPhoneLabel'))
+        : (isNewValue ? t(context, 'newEmailLabel') : t(context, 'currentEmailLabel'));
     final warning = _isPhone
         ? (isNewValue ? t(context, 'contactChangeWarning') : t(context, 'changePhoneSecurityNotice'))
         : (isNewValue ? t(context, 'emailChangeWarning') : t(context, 'changeEmailSecurityNotice'));
@@ -813,11 +923,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   }
 
   Widget _buildInputField() {
-    if (_step == 0) {
-      return _isPhone ? _buildEmailField() : _buildPhoneField();
-    } else {
-      return _isPhone ? _buildPhoneField() : _buildEmailField();
-    }
+    return _isPhone ? _buildPhoneField() : _buildEmailField();
   }
 
   Widget _buildPhoneField() {
@@ -952,7 +1058,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   // ── OTP step (1 & 3) ─────────────────────────────────────────────────────
 
   Widget _buildOtpStep() {
-    final isEmailTarget = (_step == 1 && _isPhone) || (_step == 3 && !_isPhone);
+    final isEmailTarget = _isCurrentOtpEmail;
     final subtitle = isEmailTarget
         ? t(context, 'otpSentToEmail').replaceFirst('{email}', _otpTarget)
         : t(context, 'otpSentToPhone').replaceFirst('{phone}', _otpTarget);
@@ -992,6 +1098,29 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
             ),
             const SizedBox(height: 40),
             _buildOtpBoxes(),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _checkClipboardForOtp,
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.content_paste_rounded, size: 16, color: _c500),
+                    SizedBox(width: 6),
+                    Text(
+                      'Tempel OTP',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _c500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             if (_isError) ...[
               const SizedBox(height: 12),
               Text(
@@ -1022,12 +1151,10 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                         });
                         return;
                       }
-                      final isEmailTarget =
-                          (_step == 1 && _isPhone) || (_step == 3 && !_isPhone);
-                      if (isEmailTarget) {
-                        // Resend email OTP
-                        final email =
-                            (_step == 1 && _isPhone) ? _currentValue : _newValue;
+                      if (_isCurrentOtpEmail) {
+                        final email = (_step == 1 && _isPhone)
+                            ? (_verifiedEmail ?? _currentValue)
+                            : _newValue;
                         try {
                           await _sendEmailOtp(email);
                         } catch (e) {
@@ -1069,7 +1196,7 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(4),
+                  LengthLimitingTextInputFormatter(_expectedOtpLength),
                 ],
               ),
             ),
@@ -1080,53 +1207,64 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
   }
 
   Widget _buildOtpBoxes() {
+    final count = _expectedOtpLength;
     return GestureDetector(
       onTap: () => _otpFocus.requestFocus(),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(4, (index) {
-          final filled = index < _otpCtr.text.length;
-          final active = index == _otpCtr.text.length;
-          final char = filled ? _otpCtr.text[index] : '';
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableWidth = constraints.maxWidth;
+          final gap = count == 6 ? 6.0 : 10.0;
+          final boxWidth = ((availableWidth - ((count - 1) * gap) - 16) / count)
+              .clamp(38.0, 52.0);
+          final boxHeight = boxWidth * 1.15;
 
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 5),
-            width: 44,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isError
-                    ? const Color(0xFFD94F45)
-                    : active
-                    ? _c500
-                    : filled
-                    ? _c500.withValues(alpha: 0.5)
-                    : const Color(0xFFDDE4E3),
-                width: active || _isError ? 1.8 : 1,
-              ),
-              boxShadow: active
-                  ? [
-                      BoxShadow(
-                        color: _c500.withValues(alpha: 0.15),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : null,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              char,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: _ink,
-              ),
-            ),
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(count, (index) {
+              final filled = index < _otpCtr.text.length;
+              final active = index == _otpCtr.text.length;
+              final char = filled ? _otpCtr.text[index] : '';
+
+              return Container(
+                margin: EdgeInsets.symmetric(horizontal: gap / 2),
+                width: boxWidth,
+                height: boxHeight,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _isError
+                        ? const Color(0xFFD94F45)
+                        : active
+                        ? _c500
+                        : filled
+                        ? _c500.withValues(alpha: 0.5)
+                        : const Color(0xFFDDE4E3),
+                    width: active || _isError ? 1.8 : 1,
+                  ),
+                  boxShadow: active
+                      ? [
+                          BoxShadow(
+                            color: _c500.withValues(alpha: 0.15),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  char,
+                  style: TextStyle(
+                    fontSize: boxWidth * 0.45,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
+                ),
+              );
+            }),
           );
-        }),
+        },
       ),
     );
   }
@@ -1137,54 +1275,94 @@ class _ChangeContactScreenState extends State<ChangeContactScreen> {
     final msg = _isPhone
         ? t(context, 'phoneChangedSuccess')
         : t(context, 'emailChangedSuccess');
-    final redirectMsg = t(context, 'redirectLoginIn')
-        .replaceFirst('{n}', '$_successCountdown');
 
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: Colors.white,
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    color: _c100,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _c500, width: 3),
-                  ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    size: 52,
-                    color: _c700,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Spacer(),
+              // Animated checkmark badge
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00A79D).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF22C55E),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 44,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 28),
-                Text(
-                  msg,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: _c700,
-                  ),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                msg,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: _ink,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  redirectMsg,
-                  textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
                   style: const TextStyle(
                     fontSize: 13,
                     color: _ink2,
                     height: 1.5,
                   ),
+                  children: [
+                    TextSpan(text: t(context, 'redirectingToLoginIn')),
+                    TextSpan(
+                      text: ' $_successCountdown ',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: _c500,
+                      ),
+                    ),
+                    TextSpan(text: t(context, 'seconds')),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  onPressed: _redirectToLogin,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _c700,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  child: Text(t(context, 'loginNow')),
+                ),
+              ),
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),

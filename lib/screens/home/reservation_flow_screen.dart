@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:convert';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
@@ -13,6 +14,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_language.dart';
@@ -451,6 +453,9 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       if (profileGender == 'male' || profileGender == 'female') {
         _gender = profileGender!;
       }
+      if (!_isReschedule) {
+        await _restoreDraft();
+      }
     } catch (error) {
       debugPrint('Reservation profile load failed: $error');
     } finally {
@@ -538,8 +543,136 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     throw StateError('Unable to generate a unique medical code.');
   }
 
+  static const _kDraftKey = 'appointment_draft_v1';
+
+  Future<void> _saveDraft() async {
+    if (_isReschedule || _step == 6) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final draft = {
+        'step': _step,
+        'forSelf': _forSelf,
+        'serviceType': _serviceType,
+        'name': _nameController.text,
+        'phone': _phoneController.text,
+        'nik': _nikController.text,
+        'complaint': _complaintController.text,
+        'address': _addressController.text,
+        'selectedCity': _selectedCity,
+        'clinic': _clinic,
+        'gender': _gender,
+        'birthDate': _birthDate?.toIso8601String(),
+        'appointmentDate': _appointmentDate?.toIso8601String(),
+        'appointmentTimeHour': _appointmentTime?.hour,
+        'appointmentTimeMinute': _appointmentTime?.minute,
+        'sessionCount': _sessionCount,
+        'mapLat': _mapCenter.latitude,
+        'mapLng': _mapCenter.longitude,
+        'paymentPlan': _paymentPlan,
+        'paymentMethod': _paymentMethod,
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      await prefs.setString(_kDraftKey, jsonEncode(draft));
+    } catch (e) {
+      debugPrint('Error saving appointment draft: $e');
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kDraftKey);
+    } catch (_) {}
+  }
+
+  Future<void> _restoreDraft() async {
+    if (_isReschedule) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kDraftKey);
+      if (raw == null || raw.isEmpty) return;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+
+      if (data['updatedAt'] != null) {
+        final updatedAt = DateTime.tryParse(data['updatedAt'] as String);
+        if (updatedAt != null && DateTime.now().difference(updatedAt).inDays > 7) {
+          await prefs.remove(_kDraftKey);
+          return;
+        }
+      }
+
+      if (data['serviceType'] != null && (data['serviceType'] as String).isNotEmpty) {
+        _serviceType = data['serviceType'] as String;
+      }
+      if (data['forSelf'] != null) _forSelf = data['forSelf'] as bool;
+      if (data['name'] != null && (data['name'] as String).isNotEmpty) {
+        _nameController.text = data['name'] as String;
+      }
+      if (data['phone'] != null && (data['phone'] as String).isNotEmpty) {
+        _phoneController.text = data['phone'] as String;
+      }
+      if (data['nik'] != null && (data['nik'] as String).isNotEmpty) {
+        _nikController.text = data['nik'] as String;
+      }
+      if (data['complaint'] != null && (data['complaint'] as String).isNotEmpty) {
+        _complaintController.text = data['complaint'] as String;
+      }
+      if (data['address'] != null && (data['address'] as String).isNotEmpty) {
+        _addressController.text = data['address'] as String;
+      }
+      if (data['selectedCity'] != null && (data['selectedCity'] as String).isNotEmpty) {
+        _selectedCity = data['selectedCity'] as String;
+      }
+      if (data['clinic'] != null && (data['clinic'] as String).isNotEmpty) {
+        _clinic = data['clinic'] as String;
+      }
+      if (data['gender'] != null && (data['gender'] as String).isNotEmpty) {
+        _gender = data['gender'] as String;
+      }
+      if (data['birthDate'] != null) {
+        _birthDate = DateTime.tryParse(data['birthDate'] as String);
+      }
+      if (data['appointmentDate'] != null) {
+        final dt = DateTime.tryParse(data['appointmentDate'] as String);
+        if (dt != null && !dt.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+          _appointmentDate = dt;
+        }
+      }
+      if (data['appointmentTimeHour'] != null && data['appointmentTimeMinute'] != null) {
+        _appointmentTime = TimeOfDay(
+          hour: data['appointmentTimeHour'] as int,
+          minute: data['appointmentTimeMinute'] as int,
+        );
+      }
+      if (data['sessionCount'] != null) {
+        _sessionCount = data['sessionCount'] as int;
+      }
+      if (data['mapLat'] != null && data['mapLng'] != null) {
+        final lat = (data['mapLat'] as num).toDouble();
+        final lng = (data['mapLng'] as num).toDouble();
+        _mapCenter = LatLng(lat, lng);
+        _mapPointNotifier.value = _mapCenter;
+      }
+      if (data['paymentPlan'] != null) {
+        _paymentPlan = data['paymentPlan'] as String;
+      }
+      if (data['paymentMethod'] != null) {
+        _paymentMethod = data['paymentMethod'] as String;
+      }
+      if (data['step'] != null) {
+        final savedStep = data['step'] as int;
+        _step = savedStep.clamp(0, 4);
+      }
+    } catch (e) {
+      debugPrint('Error restoring appointment draft: $e');
+    }
+  }
+
   @override
   void dispose() {
+    if (!_isReschedule && _step < 6) {
+      _saveDraft();
+    }
     _successTimer?.cancel();
     _geocodeDebounce?.cancel();
     _paymentDeadlineTimer?.cancel();
@@ -612,6 +745,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
     if (_step == 4) {
       if (_paymentDeadlineUtc == null) _startPaymentDeadline();
       setState(() => _step++);
+      _saveDraft();
       _stageEntranceController.forward(from: 0);
       return;
     }
@@ -625,6 +759,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       return;
     }
     setState(() => _step++);
+    _saveDraft();
     _stageEntranceController.forward(from: 0);
   }
 
@@ -634,6 +769,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
       return;
     }
     setState(() => _step--);
+    _saveDraft();
     _stageEntranceController.forward(from: 0);
   }
 
@@ -802,6 +938,7 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           _cardExpiryController.clear();
           _cardCvvController.clear();
         }
+        await _clearDraft();
         setState(() => _step = 6);
         _startSuccessRedirect();
       }
@@ -1270,13 +1407,11 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
           type: BottomSheetType.error,
           title: t(context, 'infoTitle'),
           subtitle: t(context, 'locationBatterySaverWarning'),
-          primaryButtonText: t(context, 'openSettings'),
-          onPrimaryPressed: () async {
+          singleButtonText: t(context, 'openSettings'),
+          onSinglePressed: () async {
             Navigator.of(context).pop();
             await Geolocator.openLocationSettings();
           },
-          secondaryButtonText: t(context, 'closeBtn'),
-          onSecondaryPressed: () => Navigator.of(context).pop(),
         );
       }
     } catch (error) {
@@ -1796,74 +1931,81 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _background,
-      appBar: _step == 6
-          ? null
-          : AppBar(
-              backgroundColor: _background,
-              elevation: 0,
-              centerTitle: true,
-              title: Text(
-                t(context, 'reservationTitle'),
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
+    return PopScope<Object?>(
+      canPop: _step == 0 || _step == 6,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _back();
+      },
+      child: Scaffold(
+        backgroundColor: _background,
+        appBar: _step == 6
+            ? null
+            : AppBar(
+                backgroundColor: _background,
+                elevation: 0,
+                centerTitle: true,
+                title: Text(
+                  t(context, 'reservationTitle'),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: _back,
                 ),
               ),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: _back,
-              ),
-            ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _teal))
-          : _step == 6
-          ? SafeArea(child: _buildSuccess())
-          : Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  _buildProgress(),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 320),
-                      reverseDuration: const Duration(milliseconds: 240),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      layoutBuilder: (currentChild, previousChildren) =>
-                          Stack(
-                            alignment: Alignment.topCenter,
-                            fit: StackFit.expand,
-                            children: [
-                              ...previousChildren,
-                              if (currentChild != null) currentChild,
-                            ],
-                          ),
-                      transitionBuilder: (child, animation) {
-                        final slide = Tween<Offset>(
-                          begin: const Offset(0, 0.035),
-                          end: Offset.zero,
-                        ).animate(animation);
-                        return FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: slide,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: SingleChildScrollView(
-                        key: ValueKey<int>(_step),
-                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-                        child: _animateStageTree(_buildStep()),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator(color: _teal))
+            : _step == 6
+            ? SafeArea(child: _buildSuccess())
+            : Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    _buildProgress(),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 320),
+                        reverseDuration: const Duration(milliseconds: 240),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        layoutBuilder: (currentChild, previousChildren) =>
+                            Stack(
+                              alignment: Alignment.topCenter,
+                              fit: StackFit.expand,
+                              children: [
+                                ...previousChildren,
+                                if (currentChild != null) currentChild,
+                              ],
+                            ),
+                        transitionBuilder: (child, animation) {
+                          final slide = Tween<Offset>(
+                            begin: const Offset(0, 0.035),
+                            end: Offset.zero,
+                          ).animate(animation);
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: slide,
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: SingleChildScrollView(
+                          key: ValueKey<int>(_step),
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                          child: _animateStageTree(_buildStep()),
+                        ),
                       ),
                     ),
-                  ),
-                  _buildBottomAction(),
-                ],
+                    _buildBottomAction(),
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 
@@ -3284,14 +3426,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(width: 10),
-              Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                color: selected ? _teal : const Color(0xFFBFCFCF),
-                size: 20,
-              ),
             ],
           ),
         ),
@@ -3355,14 +3489,6 @@ class _ReservationFlowScreenState extends State<ReservationFlowScreen>
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
-              ),
-              const SizedBox(width: 10),
-              Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                color: selected ? _teal : const Color(0xFFBFCFCF),
-                size: 20,
               ),
             ],
           ),

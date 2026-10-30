@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'network_status_service.dart';
+
 class ClientErrorLogService {
   const ClientErrorLogService();
 
@@ -15,6 +17,11 @@ class ClientErrorLogService {
     required int statusCode,
     String? message,
   }) async {
+    // Laporkan server down ke network guard UI
+    if (statusCode >= 500) {
+      NetworkStatusService.reportServerDown();
+    }
+
     try {
       await Supabase.instance.client.functions.invoke(
         'client-error-log',

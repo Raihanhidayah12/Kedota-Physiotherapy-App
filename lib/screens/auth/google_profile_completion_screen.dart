@@ -6,7 +6,6 @@ import '../../services/supabase_auth_service.dart';
 import '../../widgets/custom_bottom_sheet.dart';
 import '../../widgets/custom_date_picker.dart';
 import 'google_create_pin_screen.dart';
-import 'otp_verification_screen.dart';
 
 class DateInputFormatter extends TextInputFormatter {
   @override
@@ -54,16 +53,14 @@ class GoogleProfileCompletionScreen extends StatefulWidget {
 class _GoogleProfileCompletionScreenState
     extends State<GoogleProfileCompletionScreen> {
   late final TextEditingController _nameController;
-  late final TextEditingController _phoneController;
   final _dobController = TextEditingController();
 
   DateTime? _selectedBirthDate;
   String? _gender = 'Laki-Laki';
+  bool _agreeTerms = false;
   bool _isLoading = false;
 
   bool _isNameError = false;
-  bool _isPhoneError = false;
-  String? _phoneCustomError;
   bool _isDobError = false;
   bool _isGenderError = false;
 
@@ -71,7 +68,6 @@ class _GoogleProfileCompletionScreenState
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.initialFullName);
-    _phoneController = TextEditingController(text: widget.initialPhone);
 
     if (widget.initialBirthDateStr.isNotEmpty) {
       _selectedBirthDate = DateTime.tryParse(widget.initialBirthDateStr);
@@ -86,14 +82,6 @@ class _GoogleProfileCompletionScreenState
         setState(() => _isNameError = false);
       }
     });
-    _phoneController.addListener(() {
-      if (_isPhoneError && _phoneController.text.isNotEmpty) {
-        setState(() {
-          _isPhoneError = false;
-          _phoneCustomError = null;
-        });
-      }
-    });
     _dobController.addListener(() {
       if (_isDobError && _dobController.text.isNotEmpty) {
         setState(() => _isDobError = false);
@@ -102,23 +90,7 @@ class _GoogleProfileCompletionScreenState
     });
   }
 
-  Widget _buildIndonesianFlag() {
-    return ClipOval(
-      child: Container(
-        width: 20,
-        height: 20,
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
-        ),
-        child: Column(
-          children: [
-            Expanded(child: Container(color: const Color(0xFFCE1126))),
-            Expanded(child: Container(color: Colors.white)),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   void _parseTypedDate(String input) {
     final parts = input.split('/');
@@ -143,33 +115,11 @@ class _GoogleProfileCompletionScreenState
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
     _dobController.dispose();
     super.dispose();
   }
 
-  String _normalizePhoneNumber(String input) {
-    final digits = input.replaceAll(RegExp(r'\D'), '');
-    if (digits.startsWith('62')) return '+$digits';
-    if (digits.startsWith('0')) return '+62${digits.substring(1)}';
-    if (digits.startsWith('8')) return '+62$digits';
-    return '+62$digits';
-  }
 
-  bool _isValidIndonesianPhone(String input) {
-    final digits = input.replaceAll(RegExp(r'\D'), '');
-    if (digits.isEmpty) return false;
-    if (digits.startsWith('628')) {
-      return digits.length >= 12 && digits.length <= 14;
-    }
-    if (digits.startsWith('08')) {
-      return digits.length >= 11 && digits.length <= 13;
-    }
-    if (digits.startsWith('8')) {
-      return digits.length >= 10 && digits.length <= 12;
-    }
-    return false;
-  }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -195,70 +145,45 @@ class _GoogleProfileCompletionScreenState
 
   Future<void> _submitProfile() async {
     final name = _nameController.text.trim();
-    final phoneInput = _phoneController.text.trim();
 
     setState(() {
       _isNameError = name.isEmpty;
-      _isPhoneError =
-          phoneInput.isEmpty || !_isValidIndonesianPhone(phoneInput);
-      _phoneCustomError = phoneInput.isEmpty
-          ? null
-          : (!_isValidIndonesianPhone(phoneInput)
-              ? t(context, 'validPhoneError')
-              : null);
       _isDobError = _selectedBirthDate == null;
       _isGenderError = _gender == null;
     });
 
-    if (_isNameError || _isPhoneError || _isDobError || _isGenderError) {
+    if (_isNameError || _isDobError || _isGenderError) {
       return;
     }
 
-    final normalizedPhone = _normalizePhoneNumber(phoneInput);
+    if (!_agreeTerms) {
+      CustomBottomSheet.show(
+        context,
+        type: BottomSheetType.error,
+        title: t(context, 'infoTitle'),
+        subtitle: t(context, 'termsRequired'),
+        singleButtonText: t(context, 'closeBtn'),
+        onSinglePressed: () => Navigator.of(context).pop(),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      final phoneExists = await SupabaseAuthService().checkPhoneExists(
-        normalizedPhone,
-      );
-
-      if (!mounted) return;
-
-      if (phoneExists) {
-        setState(() {
-          _isLoading = false;
-          _isPhoneError = true;
-          _phoneCustomError = t(context, 'phoneAlreadyRegistered');
-        });
-        return;
-      }
-
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => OtpVerificationScreen(
-            phoneNumber: normalizedPhone,
-            onVerified: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => GoogleCreatePinScreen(
-                    phone: normalizedPhone,
-                    fullName: name,
-                    email: widget.email,
-                    birthDate: _selectedBirthDate!,
-                    gender: _gender!,
-                  ),
-                ),
-              );
-            },
+          builder: (_) => GoogleCreatePinScreen(
+            phone: '',
+            fullName: name,
+            email: widget.email,
+            birthDate: _selectedBirthDate!,
+            gender: _gender!,
           ),
         ),
       );
     } catch (_) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
       CustomBottomSheet.show(
         context,
         type: BottomSheetType.error,
@@ -267,6 +192,8 @@ class _GoogleProfileCompletionScreenState
         singleButtonText: t(context, 'closeBtn'),
         onSinglePressed: () => Navigator.of(context).pop(),
       );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -425,68 +352,7 @@ class _GoogleProfileCompletionScreenState
     );
   }
 
-  Widget _buildPhoneInput() {
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _isPhoneError ? const Color(0xFFEF4444) : Colors.transparent,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          _buildIndonesianFlag(),
-          const SizedBox(width: 8),
-          const Text(
-            '+62',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1E293B),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            width: 1,
-            height: 18,
-            color: const Color(0xFFE2E8E8),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(13),
-              ],
-              style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
-              decoration: InputDecoration(
-                hintText: t(context, 'phoneHint'),
-                hintStyle: const TextStyle(
-                  color: Color(0xFFA0ACAE),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 13),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Future<void> _handleBack() async {
     final shouldExit = await CustomBottomSheet.show<bool>(
@@ -647,15 +513,6 @@ class _GoogleProfileCompletionScreenState
                     ),
                     const SizedBox(height: 16),
                     _buildFieldLabel(
-                      'Nomor Telepon',
-                      isError: _isPhoneError,
-                      errorMessage: _phoneCustomError,
-                      required: false,
-                    ),
-                    const SizedBox(height: 6),
-                    _buildPhoneInput(),
-                    const SizedBox(height: 16),
-                    _buildFieldLabel(
                       'Email',
                       required: false,
                     ),
@@ -677,6 +534,41 @@ class _GoogleProfileCompletionScreenState
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _agreeTerms,
+                            activeColor: const Color(0xFF00A79D),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            side: const BorderSide(
+                              color: Color(0xFFCBD5E1),
+                              width: 1.5,
+                            ),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _agreeTerms = val);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Saya setuju dengan syarat dan ketentuan yang berlaku.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
