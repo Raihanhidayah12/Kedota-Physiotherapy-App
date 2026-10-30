@@ -33,7 +33,7 @@ Kedota adalah aplikasi pasien untuk mengelola akun, membuat janji terapi, memant
 | 🔑 Ganti PIN (Settings) | 🟢 Selesai | Verifikasi PIN Lama → Input PIN Baru → Konfirmasi PIN Baru (Rate limit 3x) |
 | 👤 Edit Profil | 🟢 Selesai | Ubah Nama, TTL, Gender, Upload/Hapus Foto Profil Supabase Storage |
 | 👁️ Privasi Nomor HP | 🟢 Selesai | Default hidden (`+628••••9436`) + Eye Icon toggle di Settings & Edit Profile |
-| 🔔 Preferensi & Push Notifikasi | 🟢 Selesai | 13 trigger push notifikasi komprehensif (jadwal, pembayaran, pelacakan terapis, ulasan, keamanan akun, follow-up, tips) + deep-link |
+| 🔔 Preferensi & Push Notifikasi | 🟢 Selesai | 14 skenario push notifikasi komprehensif (jadwal, pembayaran, pelacakan terapis, ulasan, keamanan akun, follow-up, rotasi 7 tips edukasi) + deep-link |
 | 🕒 Urutan & Waktu Notifikasi | 🟢 Selesai | Notifikasi terbaru tampil paling atas dengan waktu relatif |
 | ⚙️ Settings & Akun | 🟢 Selesai | Pengaturan profil, preferensi, keamanan, dukungan, dan logout |
 | 🛡️ Rate Limiting | 🟢 Selesai | PIN salah 3x → kunci 5 menit + push alert keamanan, OTP salah 3x → cooldown 30 detik |
@@ -336,7 +336,7 @@ Aplikasi memiliki sistem notifikasi lokal dan push yang komprehensif (`Notificat
 - Indikator unread disinkronkan otomatis dengan interaksi pengguna.
 - Tersedia dalam Bahasa Indonesia dan English.
 
-#### B. 13 Skenario Push Notification ke Smartphone Pengguna
+#### B. 14 Skenario Push Notification ke Smartphone Pengguna
 Dikelola oleh `NotificationService` dan didukung alarm background exact/inexact serta deep-link routing langsung:
 
 | No | Tipe Notifikasi | Kapan Dikirim | Payload / Deep-link |
@@ -354,7 +354,17 @@ Dikelola oleh `NotificationService` dan didukung alarm background exact/inexact 
 | 11 | **Panduan Latihan Pemulihan** | Terapis mengunggah panduan latihan mandiri pasca terapi | `exercise:<id>` → Catatan Klinis |
 | 12 | **Pengingat Kontrol Lanjutan** | 3–14 hari setelah sesi selesai tanpa ada jadwal aktif berikutnya | `follow_up:` → Buka Alur Reservasi |
 | 13 | **Peringatan Keamanan Akun** | Terdeteksi 3x salah PIN (rate limit) atau kontak (HP/Email) diubah | `security:` → Layar Keamanan / Akun |
-| 14 | **Tips Postur Tubuh Berkala** | Terjadwal berkala jam 14.00 WIB untuk edukasi peregangan leher/bahu | `health_tip:` → Informasi Edukasi |
+| 14 | **Tips Edukasi Fisioterapi Bergilir** | Terjadwal berkala jam 14.00 WIB dengan sistem rotasi dinamis 7 topik | `health_tip:` → Informasi Edukasi |
+
+##### 🔄 Sistem Rotasi 7 Topik Edukasi Fisioterapi (`scheduleRotatingHealthTip`)
+Notifikasi nomor 14 tidak lagi menggunakan satu pesan statis, melainkan berganti-ganti secara berurutan (*sequential round-robin*) melalui penyimpanan state di `SharedPreferences` (`last_health_tip_index`):
+1. **Cek Postur Leher & Bahu:** Peregangan 3 menit untuk meredakan kram leher dan bahu akibat duduk lama.
+2. **Redakan Pinggang Kaku:** Latihan panggul dan peregangan punggung bawah untuk mencegah saraf terjepit.
+3. **Tips Posisi Tidur Sehat:** Menyelipkan bantal di antara kedua lutut saat tidur menyamping agar tulang belakang tetap sejajar.
+4. **Ergonomi Kerja 20-20-20:** Istirahat 20 detik memandang objek jauh dan menarik bahu ke belakang setiap 20 menit di depan layar.
+5. **Cara Aman Angkat Beban:** Menekuk lutut saat mengangkat barang dari lantai untuk melindungi tulang belakang.
+6. **Pencegahan Carpal Tunnel (CTS):** Peregangan telapak dan pergelangan tangan bagi yang sering mengetik atau bermain HP.
+7. **Hidrasi & Kelenturan Sendi:** Pentingnya cairan untuk menjaga bantalan sendi (kartilago) tetap elastis dan berfungsi optimal.
 
 > **Pengaturan Pengguna:** Seluruh push notifikasi dapat diaktifkan atau dinonaktifkan sesuai preferensi pengguna melalui menu **Pengaturan Notifikasi** (`Notifikasi Push`, `Pengingat Terapi`, `Promo & Penawaran`, dan `Berita Email`).
 

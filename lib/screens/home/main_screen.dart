@@ -116,8 +116,6 @@ class _MainScreenState extends State<MainScreen> {
       final arrivedBodyTemplate = t(context, 'therapistArrivedBody');
       final followUpTitle = t(context, 'followUpReminderTitle');
       final followUpBody = t(context, 'followUpReminderBody');
-      final weeklyTipTitle = t(context, 'weeklyHealthTipTitle');
-      final weeklyTipBody = t(context, 'weeklyHealthTipBody');
       final rotatingTips = List.generate(
         7,
         (i) => {
