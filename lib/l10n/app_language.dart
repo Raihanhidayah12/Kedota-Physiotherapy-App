@@ -311,6 +311,27 @@ const _translations = {
     'weeklyHealthTipTitle': 'Kedota Care: Posture Check',
     'weeklyHealthTipBody':
         'Taking a break? Do a 3-minute neck and shoulder stretch to prevent stiffness and strain.',
+    'weeklyHealthTipTitle_0': 'Kedota Care: Posture Check',
+    'weeklyHealthTipBody_0':
+        'Taking a break? Do a 3-minute neck and shoulder stretch to prevent stiffness and strain.',
+    'weeklyHealthTipTitle_1': 'Kedota Care: Lower Back Relief',
+    'weeklyHealthTipBody_1':
+        'Avoid slouching. Stand up, place your hands on your hips, and gently arch back to ease spine pressure.',
+    'weeklyHealthTipTitle_2': 'Kedota Care: Sleep Posture Tip',
+    'weeklyHealthTipBody_2':
+        'Sleeping on your side? Place a pillow between your knees to keep your spine and pelvis properly aligned.',
+    'weeklyHealthTipTitle_3': 'Kedota Care: Desk Ergonomics',
+    'weeklyHealthTipBody_3':
+        'Every 20 minutes, look at an object 20 feet away for 20 seconds and roll your shoulders backwards.',
+    'weeklyHealthTipTitle_4': 'Kedota Care: Safe Lifting Habit',
+    'weeklyHealthTipBody_4':
+        'Lifting something heavy? Bend your knees and keep your chest upright to protect your lower back.',
+    'weeklyHealthTipTitle_5': 'Kedota Care: Wrist & Hand Stretch',
+    'weeklyHealthTipBody_5':
+        'Typing or scrolling a lot? Extend your arm and gently pull your fingers upward & downward for 15 seconds.',
+    'weeklyHealthTipTitle_6': 'Kedota Care: Joint Hydration',
+    'weeklyHealthTipBody_6':
+        'Drink enough water today! Staying hydrated keeps joint cartilage elastic, lubricated, and moving freely.',
     'otpLimitTitle': 'OTP Request Limit!',
     'otpLimitSubtitle':
         'Please wait {seconds} seconds before requesting another OTP code.',
@@ -1260,6 +1281,27 @@ Device information, application activity logs, and usage data for security and s
     'weeklyHealthTipTitle': 'Kedota Care: Cek Postur Tubuh',
     'weeklyHealthTipBody':
         'Sudah duduk lama? Lakukan peregangan leher dan bahu selama 3 menit untuk cegah kram dan pegal.',
+    'weeklyHealthTipTitle_0': 'Kedota Care: Cek Postur Tubuh',
+    'weeklyHealthTipBody_0':
+        'Sudah duduk lama? Lakukan peregangan leher dan bahu selama 3 menit untuk cegah kram dan pegal.',
+    'weeklyHealthTipTitle_1': 'Kedota Care: Redakan Pinggang Kaku',
+    'weeklyHealthTipBody_1':
+        'Hindari duduk membungkuk. Berdirilah sejenak, letakkan tangan di pinggang dan dorong panggul perlahan ke depan.',
+    'weeklyHealthTipTitle_2': 'Kedota Care: Posisi Tidur Nyaman',
+    'weeklyHealthTipBody_2':
+        'Jika tidur menyamping, selipkan bantal di antara kedua lutut agar posisi tulang belakang dan pinggul tetap lurus.',
+    'weeklyHealthTipTitle_3': 'Kedota Care: Istirahatkan Tubuh & Mata',
+    'weeklyHealthTipBody_3':
+        'Setiap 20 menit bekerja di depan layar, pandang objek berjarak 6 meter selama 20 detik dan tarik bahu ke belakang.',
+    'weeklyHealthTipTitle_4': 'Kedota Care: Cara Angkat Beban Aman',
+    'weeklyHealthTipBody_4':
+        'Saat mengambil barang berat dari lantai, tekuk lutut Anda dan jaga punggung tetap tegak untuk hindari cedera saraf.',
+    'weeklyHealthTipTitle_5': 'Kedota Care: Regangkan Pergelangan Tangan',
+    'weeklyHealthTipBody_5':
+        'Sering mengetik atau scroll HP? Luruskan tangan ke depan dan tekuk telapak tangan ke atas & bawah selama 15 detik.',
+    'weeklyHealthTipTitle_6': 'Kedota Care: Jaga Kelenturan Sendi',
+    'weeklyHealthTipBody_6':
+        'Jangan lupa cukup minum air putih! Hidrasi yang cukup menjaga bantalan sendi (kartilago) tetap lentur dan sehat.',
     'otpLimitTitle': 'Batas Permintaan OTP!',
     'otpLimitSubtitle':
         'Mohon tunggu {seconds} detik sebelum meminta kode OTP kembali.',

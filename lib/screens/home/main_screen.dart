@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -118,6 +118,13 @@ class _MainScreenState extends State<MainScreen> {
       final followUpBody = t(context, 'followUpReminderBody');
       final weeklyTipTitle = t(context, 'weeklyHealthTipTitle');
       final weeklyTipBody = t(context, 'weeklyHealthTipBody');
+      final rotatingTips = List.generate(
+        7,
+        (i) => {
+          'title': t(context, 'weeklyHealthTipTitle_$i'),
+          'body': t(context, 'weeklyHealthTipBody_$i'),
+        },
+      );
       final now = DateTime.now();
       final rowsBeforeExpire = await service.client
           .from('appointments')
@@ -294,10 +301,9 @@ class _MainScreenState extends State<MainScreen> {
         }
       }
 
-      // 4. Jadwalkan Tips Edukasi Fisioterapi Mingguan
-      await NotificationService().scheduleWeeklyHealthTip(
-        title: weeklyTipTitle,
-        body: weeklyTipBody,
+      // 4. Jadwalkan Tips Edukasi Fisioterapi Berkala (Rotasi 7 topik tips berbeda)
+      await NotificationService().scheduleRotatingHealthTip(
+        tips: rotatingTips,
       );
     } catch (error, stackTrace) {
       debugPrint('Startup appointment reminder sync failed: $error');

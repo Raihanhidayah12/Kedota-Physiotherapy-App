@@ -492,11 +492,11 @@ class NotificationService {
     );
   }
 
-  Future<void> scheduleWeeklyHealthTip({
-    required String title,
-    required String body,
+  /// Jadwalkan tips kesehatan berkala dengan rotasi tips yang berganti-ganti secara berurutan
+  Future<void> scheduleRotatingHealthTip({
+    required List<Map<String, String>> tips,
   }) async {
-    if (kIsWeb) return;
+    if (kIsWeb || tips.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool('pref_notif_push') ?? true) ||
         !(prefs.getBool('pref_notif_promo') ?? true)) {
@@ -507,10 +507,16 @@ class NotificationService {
     final now = DateTime.now();
     if (lastScheduled != null) {
       final lastDate = DateTime.tryParse(lastScheduled);
-      if (lastDate != null && now.difference(lastDate).inDays < 4) {
+      if (lastDate != null && now.difference(lastDate).inDays < 3) {
         return;
       }
     }
+
+    final lastIndex = prefs.getInt('last_health_tip_index') ?? -1;
+    final nextIndex = (lastIndex + 1) % tips.length;
+    final tip = tips[nextIndex];
+    final title = tip['title'] ?? 'Kedota Care';
+    final body = tip['body'] ?? '';
 
     final targetDate = now.add(const Duration(days: 3));
     final scheduledDate = tz.TZDateTime(
@@ -548,7 +554,17 @@ class NotificationService {
         payload: 'health_tip:',
       );
       await prefs.setString('last_weekly_tip_scheduled', now.toIso8601String());
+      await prefs.setInt('last_health_tip_index', nextIndex);
     } catch (_) {}
+  }
+
+  Future<void> scheduleWeeklyHealthTip({
+    required String title,
+    required String body,
+  }) async {
+    return scheduleRotatingHealthTip(tips: [
+      {'title': title, 'body': body}
+    ]);
   }
 
   AppointmentItem _appointmentFromRow(
