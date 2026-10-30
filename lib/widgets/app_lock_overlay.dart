@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+﻿import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -362,7 +362,7 @@ class _AppLockScreenState extends State<AppLockScreen>
                           _numpadBtn('0', btnSize),
                           _iconBtn(Icons.backspace_outlined,
                               () => _onNumpadTap('backspace'), btnSize,
-                              iconColor: const Color(0xFF64748B)),
+                              iconColor: const Color(0xFF00A79D)),
                         ],
                       ),
                       const SizedBox(height: 24),
@@ -382,13 +382,23 @@ class _AppLockScreenState extends State<AppLockScreen>
 );
   }
 
-  Widget _numpadBtn(String digit, double size) => SizedBox(
-    width: size, height: size,
-    child: Material(
+  Widget _numpadBtn(String digit, double size) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
       color: Colors.white,
+      shape: BoxShape.circle,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.05),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Material(
+      color: Colors.transparent,
       shape: const CircleBorder(),
-      elevation: 1,
-      shadowColor: Colors.black12,
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: () => _onNumpadTap(digit),
@@ -396,8 +406,8 @@ class _AppLockScreenState extends State<AppLockScreen>
           child: Text(
             digit,
             style: TextStyle(
-              fontSize: size * 0.38,
-              fontWeight: FontWeight.w700,
+              fontSize: size * 0.36,
+              fontWeight: FontWeight.bold,
               color: const Color(0xFF1E293B),
             ),
           ),
@@ -417,7 +427,7 @@ class _AppLockScreenState extends State<AppLockScreen>
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Center(
-          child: Icon(icon, size: size * 0.44, color: iconColor),
+          child: Icon(icon, size: size * 0.40, color: iconColor),
         ),
       ),
     ),

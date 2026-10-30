@@ -32,7 +32,6 @@ class _NotificationPreferencesScreenState
   bool _pushEnabled = true;
   bool _promoEnabled = true;
   bool _reminderEnabled = true;
-  bool _emailEnabled = false;
 
   @override
   void initState() {
@@ -106,7 +105,6 @@ class _NotificationPreferencesScreenState
         _pushEnabled = prefs.getBool('pref_notif_push') ?? true;
         _promoEnabled = prefs.getBool('pref_notif_promo') ?? true;
         _reminderEnabled = prefs.getBool('pref_notif_reminder') ?? true;
-        _emailEnabled = prefs.getBool('pref_notif_email') ?? false;
       });
     }
   }
@@ -426,26 +424,6 @@ class _NotificationPreferencesScreenState
                     onChanged: (val) {
                       setState(() => _promoEnabled = val);
                       _savePreference('pref_notif_promo', val);
-                    },
-                  ),
-
-                  const SizedBox(height: 24),
-                  Text(
-                    t(context, 'notifSectionEmail'),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: _c700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildSwitchItem(
-                    title: t(context, 'notifEmailTitle'),
-                    subtitle: t(context, 'notifEmailSubtitle'),
-                    value: _emailEnabled,
-                    onChanged: (val) {
-                      setState(() => _emailEnabled = val);
-                      _savePreference('pref_notif_email', val);
                     },
                   ),
                 ],

@@ -695,16 +695,17 @@ class _ChangePinScreenState extends State<ChangePinScreen>
 
     if (val == 'back') {
       return GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => _onKey('back'),
-        child: Container(
+        child: SizedBox(
           width: sz,
           height: sz,
-          decoration: const BoxDecoration(
-            color: Colors.transparent,
-            shape: BoxShape.circle,
-          ),
           child: Center(
-            child: Icon(Icons.backspace_rounded, color: _c700, size: sz * 0.4),
+            child: Icon(
+              Icons.backspace_outlined,
+              color: const Color(0xFF00A79D),
+              size: sz * 0.40,
+            ),
           ),
         ),
       );
@@ -718,17 +719,13 @@ class _ChangePinScreenState extends State<ChangePinScreen>
         decoration: BoxDecoration(
           color: _isLocked ? _bg : Colors.white,
           shape: BoxShape.circle,
-          border: Border.all(
-            color: _isLocked ? Colors.transparent : const Color(0xFFF0F4F4),
-            width: 1.5,
-          ),
           boxShadow: _isLocked
               ? null
               : [
                   BoxShadow(
-                    color: _ink.withValues(alpha: 0.05),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ],
         ),
@@ -737,8 +734,8 @@ class _ChangePinScreenState extends State<ChangePinScreen>
             val,
             style: TextStyle(
               fontSize: sz * 0.36,
-              fontWeight: FontWeight.w600,
-              color: _isLocked ? _ink3 : _ink,
+              fontWeight: FontWeight.bold,
+              color: _isLocked ? _ink3 : const Color(0xFF1E293B),
             ),
           ),
         ),

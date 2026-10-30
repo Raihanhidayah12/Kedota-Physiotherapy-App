@@ -128,7 +128,7 @@ Sign In → Continue with Google → PIN Verification → Home Screen
 - **Edit Profil**: Nama, TTL, Gender, Upload/Hapus Foto ke Supabase Storage.
 - **Privasi Nomor HP**: Toggle hide/show nomor HP di Settings & Edit Profile.
 - **Ganti PIN**: Verifikasi lama → PIN baru → Konfirmasi (Rate limit 3x).
-- **Preferensi Notifikasi**: Push, reminder jadwal, promo, berita email.
+- **Preferensi Notifikasi**: Push, reminder jadwal, dan promo penawaran.
 - **Logout dan biometric**: Preferensi biometric dan PIN lokal akun yang logout dihapus dari device. Penguncian ketika aplikasi masuk background tidak menghapus preferensi.
 - **Hapus akun**: Tidak tersedia sebagai fitur/menu di versi aplikasi saat ini.
 
@@ -366,7 +366,7 @@ Notifikasi nomor 14 tidak lagi menggunakan satu pesan statis, melainkan berganti
 6. **Pencegahan Carpal Tunnel (CTS):** Peregangan telapak dan pergelangan tangan bagi yang sering mengetik atau bermain HP.
 7. **Hidrasi & Kelenturan Sendi:** Pentingnya cairan untuk menjaga bantalan sendi (kartilago) tetap elastis dan berfungsi optimal.
 
-> **Pengaturan Pengguna:** Seluruh push notifikasi dapat diaktifkan atau dinonaktifkan sesuai preferensi pengguna melalui menu **Pengaturan Notifikasi** (`Notifikasi Push`, `Pengingat Terapi`, `Promo & Penawaran`, dan `Berita Email`).
+> **Pengaturan Pengguna:** Seluruh push notifikasi dapat diaktifkan atau dinonaktifkan sesuai preferensi pengguna melalui menu **Pengaturan Notifikasi** (`Notifikasi Push`, `Pengingat Terapi`, dan `Promo & Penawaran`).
 
 ### 13. 📑 Syarat, Ketentuan & Kebijakan Privasi
 
